@@ -1,0 +1,17 @@
+[package]
+name = "oag-crypto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+serde_jcs.workspace = true
+thiserror.workspace = true
+ed25519-dalek.workspace = true
+blake3.workspace = true
+sha2.workspace = true
+data-encoding.workspace = true
+hex.workspace = true
+rand = "0.10"

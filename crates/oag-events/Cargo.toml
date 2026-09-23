@@ -1,0 +1,20 @@
+[package]
+name = "oag-events"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oag-core.workspace = true
+oag-crypto.workspace = true
+oag-storage.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_jcs.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+sqlx.workspace = true
+tracing.workspace = true
+hex.workspace = true
+blake3.workspace = true
+tokio.workspace = true
