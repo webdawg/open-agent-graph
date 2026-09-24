@@ -1,7 +1,7 @@
-use oag_core::{AssertionId, Permission};
+use oag_core::{AliasType, AssertionId, ExtractionMethod, NodeId, Permission};
 use oag_events::payload::{
-    AddEvidencePayload, AssertRelationPayload, DisputeAssertionPayload, RetractAssertionPayload,
-    SupersedeAssertionPayload, VerifyAssertionPayload,
+    AddEvidencePayload, AssertRelationPayload, DisputeAssertionPayload, NodeAliasPayload,
+    RetractAssertionPayload, SupersedeAssertionPayload, VerifyAssertionPayload,
 };
 use oag_events::{commit_local_event, EventPayload};
 
@@ -24,6 +24,7 @@ const MAX_EXCERPT_LEN: usize = 4096;
 const MAX_CONTENT_HASH_LEN: usize = 128;
 const MAX_REASON_LEN: usize = 2048;
 const MAX_EVIDENCE_PER_ASSERTION: usize = 20;
+const MAX_ALIAS_LEN: usize = 512;
 
 fn check_len(field: &'static str, value: &str, max: usize) -> Result<(), GraphError> {
     if value.len() > max {
@@ -74,6 +75,10 @@ pub struct AssertInput {
     pub evidence: Vec<EvidenceInput>,
     pub actor_confidence: Option<f32>,
     pub observed_at: Option<i64>,
+    /// `None` means `ExtractionMethod::Direct` — the original behavior, for
+    /// every human/agent caller via REST or MCP. The crawler is the first
+    /// caller to pass `Some(ExtractionMethod::StructuredExtraction)`.
+    pub extraction_method: Option<ExtractionMethod>,
 }
 
 impl AssertInput {
@@ -128,7 +133,11 @@ impl GraphService {
                 actor_id: auth.actor_id.to_hex(),
                 actor_confidence: input.actor_confidence,
                 observed_at: input.observed_at,
-                extraction_method: "direct".to_string(),
+                extraction_method: input
+                    .extraction_method
+                    .unwrap_or(ExtractionMethod::Direct)
+                    .as_str()
+                    .to_string(),
             }),
             now,
         )
@@ -172,6 +181,36 @@ impl GraphService {
                 content_hash: evidence.content_hash,
                 observed_at: evidence.observed_at,
                 retrieved_at: evidence.retrieved_at,
+            }),
+            self.now(),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Record an alias for an already-existing node — a discovered name,
+    /// canonical URL variant, etc (spec section 17). Requires
+    /// `graph:assert` (enriching the graph sits in the same bucket as
+    /// adding evidence). The node must already exist; callers building it
+    /// from scratch (e.g. the crawler) should assert something about it
+    /// first, which creates the node as a side effect.
+    pub async fn declare_alias(
+        &self,
+        auth: &AuthContext,
+        node_id: NodeId,
+        alias: String,
+        alias_type: AliasType,
+    ) -> Result<(), GraphError> {
+        auth.require(Permission::GraphAssert)?;
+        check_len("alias", &alias, MAX_ALIAS_LEN)?;
+
+        commit_local_event(
+            self.pool(),
+            self.identity(),
+            EventPayload::NodeAlias(NodeAliasPayload {
+                node_id: node_id.to_hex(),
+                alias,
+                alias_type: alias_type.as_str().to_string(),
             }),
             self.now(),
         )

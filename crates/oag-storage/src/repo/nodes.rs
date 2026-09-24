@@ -3,7 +3,34 @@ use serde_json::Value as JsonValue;
 use sqlx::SqliteConnection;
 
 use crate::error::{bytes_to_array, StorageError};
-use crate::models::NodeRow;
+use crate::models::{NodeAliasRow, NodeRow};
+
+fn parse_alias_type(s: &str) -> Result<oag_core::AliasType, StorageError> {
+    Ok(match s {
+        "name" => oag_core::AliasType::Name,
+        "url" => oag_core::AliasType::Url,
+        "urn" => oag_core::AliasType::Urn,
+        "package" => oag_core::AliasType::Package,
+        "external_id" => oag_core::AliasType::ExternalId,
+        "acronym" => oag_core::AliasType::Acronym,
+        other => return Err(StorageError::UnknownEnumValue("alias_type", other.to_string())),
+    })
+}
+
+fn row_to_alias(row: NodeAliasRow) -> Result<NodeAlias, StorageError> {
+    Ok(NodeAlias {
+        node_id: NodeId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.node_id)?)),
+        alias: row.alias,
+        alias_type: parse_alias_type(&row.alias_type)?,
+        source_assertion: row
+            .source_assertion
+            .map(|bytes| {
+                bytes_to_array(&bytes)
+                    .map(|arr| oag_core::AssertionId::from_hash(oag_core::Hash32::from_bytes(arr)))
+            })
+            .transpose()?,
+    })
+}
 
 fn row_to_node(row: NodeRow) -> Result<oag_core::Node, StorageError> {
     Ok(oag_core::Node {
@@ -88,6 +115,17 @@ pub async fn insert_alias(
     .execute(&mut *conn)
     .await?;
     Ok(())
+}
+
+pub async fn list_aliases(
+    conn: &mut SqliteConnection,
+    node_id: NodeId,
+) -> Result<Vec<NodeAlias>, StorageError> {
+    let rows: Vec<NodeAliasRow> = sqlx::query_as("SELECT * FROM node_aliases WHERE node_id = ?")
+        .bind(node_id.as_hash().as_bytes().to_vec())
+        .fetch_all(&mut *conn)
+        .await?;
+    rows.into_iter().map(row_to_alias).collect()
 }
 
 /// Simple relevance search over node name/description via FTS5 (spec

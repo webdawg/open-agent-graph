@@ -64,6 +64,20 @@ enum Command {
         #[command(subcommand)]
         command: PeerCommand,
     },
+    /// Crawl one URL: fetch it safely, extract structured facts (JSON-LD,
+    /// llms.txt, ARD, A2A), and assert them as evidence-backed claims.
+    Crawl {
+        url: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// Overrides config.toml's [crawler].allow_private_networks — off
+        /// by default (spec section 72); only enable this for a trusted,
+        /// deliberately-internal target.
+        #[arg(long)]
+        allow_private_networks: bool,
+    },
     /// Run local health checks.
     Doctor {
         #[arg(long, default_value = "./data")]
@@ -186,6 +200,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Peer { command: PeerCommand::Sync { peer_id_or_url, data_dir } } => {
             commands::peer_sync(&data_dir, &peer_id_or_url).await
+        }
+        Command::Crawl { url, data_dir, config, allow_private_networks } => {
+            commands::crawl(&data_dir, &url, config, allow_private_networks).await
         }
         Command::Doctor { data_dir } => commands::doctor(&data_dir).await,
     }

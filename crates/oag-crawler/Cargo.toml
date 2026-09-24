@@ -1,12 +1,8 @@
 [package]
-name = "oag-cli"
+name = "oag-crawler"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-
-[[bin]]
-name = "oag"
-path = "src/main.rs"
 
 [dependencies]
 oag-core.workspace = true
@@ -14,19 +10,15 @@ oag-crypto.workspace = true
 oag-storage.workspace = true
 oag-events.workspace = true
 oag-graph.workspace = true
-oag-api.workspace = true
-oag-mcp.workspace = true
-oag-sync.workspace = true
-oag-crawler.workspace = true
-url.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-anyhow.workspace = true
 tokio.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
-clap.workspace = true
-figment.workspace = true
-sqlx.workspace = true
+url.workspace = true
+scraper.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
+futures-util = "0.3"
+
+[dev-dependencies]
 axum.workspace = true

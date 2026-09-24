@@ -67,6 +67,18 @@ impl GraphService {
         Ok(oag_storage::repo::edges::get_by_id(&mut conn, id).await?)
     }
 
+    pub async fn list_aliases(
+        &self,
+        node_id: oag_core::NodeId,
+    ) -> Result<Vec<oag_core::NodeAlias>, GraphError> {
+        let mut conn = self
+            .pool()
+            .acquire()
+            .await
+            .map_err(oag_storage::StorageError::from)?;
+        Ok(nodes::list_aliases(&mut conn, node_id).await?)
+    }
+
     /// All assertions made on any edge touching `node` (backs
     /// `GET /nodes/{id}/assertions`).
     pub async fn list_assertions_for_node(

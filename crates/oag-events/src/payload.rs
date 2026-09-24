@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
 
 /// The typed body of every distributed mutation (spec section 31, trimmed to
-/// the event types this milestone's REST/MCP surface actually emits).
-/// `NODE_DECLARE`/`NODE_ALIAS` aren't included: subject/object nodes are
+/// the event types this milestone's REST/MCP/crawler surfaces actually
+/// emit). `NODE_DECLARE` isn't included: subject/object nodes are
 /// resolved-or-created as a side effect of `AssertRelation` (spec section
-/// 32), so there's no caller that would ever construct them standalone yet.
+/// 32), so there's still no caller that would construct one standalone.
+/// `NODE_ALIAS` *is* included as of the crawler milestone — a crawled
+/// page's `<title>` or an A2A Agent Card's declared name is node-enrichment
+/// metadata, not a relationship-with-evidence (spec section 17).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event_type", rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum EventPayload {
@@ -16,6 +19,7 @@ pub enum EventPayload {
     SupersedeAssertion(SupersedeAssertionPayload),
     ActorDeclare(ActorDeclarePayload),
     ActorKeyAdd(ActorKeyAddPayload),
+    NodeAlias(NodeAliasPayload),
 }
 
 impl EventPayload {
@@ -29,6 +33,7 @@ impl EventPayload {
             EventPayload::SupersedeAssertion(_) => "SUPERSEDE_ASSERTION",
             EventPayload::ActorDeclare(_) => "ACTOR_DECLARE",
             EventPayload::ActorKeyAdd(_) => "ACTOR_KEY_ADD",
+            EventPayload::NodeAlias(_) => "NODE_ALIAS",
         }
     }
 }
@@ -105,4 +110,15 @@ pub struct ActorKeyAddPayload {
     pub actor_id: String,
     pub key_hash: String,
     pub permissions: Vec<String>,
+}
+
+/// `node_id` is the hex-encoded id of an *already-existing* node (the
+/// `node_aliases` table's FK enforces this — see the crawler's "baseline
+/// assertion" pattern, which guarantees a page's own node exists before any
+/// alias for it is declared).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeAliasPayload {
+    pub node_id: String,
+    pub alias: String,
+    pub alias_type: String,
 }

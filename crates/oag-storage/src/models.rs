@@ -38,6 +38,14 @@ pub struct NodeRow {
 }
 
 #[derive(Debug, FromRow)]
+pub struct NodeAliasRow {
+    pub node_id: Vec<u8>,
+    pub alias: String,
+    pub alias_type: String,
+    pub source_assertion: Option<Vec<u8>>,
+}
+
+#[derive(Debug, FromRow)]
 pub struct EdgeRow {
     pub edge_id: Vec<u8>,
     pub subject_node_id: Vec<u8>,

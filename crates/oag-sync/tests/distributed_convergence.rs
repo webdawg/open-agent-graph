@@ -235,6 +235,7 @@ async fn fifty_peers_converge_after_chaos() {
                                 evidence: vec![],
                                 actor_confidence: Some(0.8),
                                 observed_at: None,
+                                extraction_method: None,
                             },
                         )
                         .await

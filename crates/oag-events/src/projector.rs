@@ -1,6 +1,6 @@
 use oag_core::{
-    Actor, ActorId, ActorType, Assertion, AssertionId, AssertionStatus, Edge, Evidence,
-    EvidenceType, ExtractionMethod, Node, NodeId, NodeType, Permission, Predicate,
+    Actor, ActorId, ActorType, AliasType, Assertion, AssertionId, AssertionStatus, Edge, Evidence,
+    EvidenceType, ExtractionMethod, Node, NodeAlias, NodeId, NodeType, Permission, Predicate,
 };
 use oag_storage::repo::{actors, assertions, edges, events, nodes};
 use oag_storage::SqliteConnection;
@@ -62,6 +62,10 @@ pub async fn project(
         }
         EventPayload::ActorKeyAdd(p) => {
             project_actor_key_add(conn, created_at, p).await?;
+            Ok(ProjectionOutcome::Unit)
+        }
+        EventPayload::NodeAlias(p) => {
+            project_node_alias(conn, p).await?;
             Ok(ProjectionOutcome::Unit)
         }
     }
@@ -318,6 +322,40 @@ async fn project_actor_declare(
     };
     actors::insert(conn, &actor).await?;
     Ok(actor_id)
+}
+
+fn parse_alias_type(s: &str) -> Result<AliasType, EventsError> {
+    Ok(match s {
+        "name" => AliasType::Name,
+        "url" => AliasType::Url,
+        "urn" => AliasType::Urn,
+        "package" => AliasType::Package,
+        "external_id" => AliasType::ExternalId,
+        "acronym" => AliasType::Acronym,
+        other => return Err(EventsError::UnknownExtractionMethod(other.to_string())),
+    })
+}
+
+async fn project_node_alias(
+    conn: &mut SqliteConnection,
+    p: &crate::payload::NodeAliasPayload,
+) -> Result<(), EventsError> {
+    let node_id: NodeId = p.node_id.parse()?;
+    if nodes::get_by_id(conn, node_id).await?.is_none() {
+        return Err(EventsError::NotFound(format!("node {}", p.node_id)));
+    }
+    let alias_type = parse_alias_type(&p.alias_type)?;
+    nodes::insert_alias(
+        conn,
+        &NodeAlias {
+            node_id,
+            alias: p.alias.clone(),
+            alias_type,
+            source_assertion: None,
+        },
+    )
+    .await?;
+    Ok(())
 }
 
 async fn project_actor_key_add(

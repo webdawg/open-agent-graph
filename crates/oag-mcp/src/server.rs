@@ -113,7 +113,8 @@ impl OagMcpServer {
         self.authenticate_read(&parts).await?;
         let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
         let node = self.graph.get_node(node_id).await.map_err(map_err)?;
-        Ok(Json(json!({ "node": node })))
+        let aliases = self.graph.list_aliases(node_id).await.map_err(map_err)?;
+        Ok(Json(json!({ "node": node, "aliases": aliases })))
     }
 
     #[tool(description = "List all edges touching a node, in either direction.")]
@@ -174,6 +175,7 @@ impl OagMcpServer {
             evidence: p.evidence.into_iter().map(evidence_input).collect(),
             actor_confidence: p.confidence,
             observed_at: None,
+            extraction_method: None,
         };
         let assertion_id = self.graph.assert(&auth, input).await.map_err(map_err)?;
         Ok(Json(json!({

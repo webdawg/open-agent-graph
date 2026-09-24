@@ -130,3 +130,28 @@ pub enum AliasType {
     ExternalId,
     Acronym,
 }
+
+impl AliasType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AliasType::Name => "name",
+            AliasType::Url => "url",
+            AliasType::Urn => "urn",
+            AliasType::Package => "package",
+            AliasType::ExternalId => "external_id",
+            AliasType::Acronym => "acronym",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "name" => AliasType::Name,
+            "url" => AliasType::Url,
+            "urn" => AliasType::Urn,
+            "package" => AliasType::Package,
+            "external_id" => AliasType::ExternalId,
+            "acronym" => AliasType::Acronym,
+            _ => return None,
+        })
+    }
+}

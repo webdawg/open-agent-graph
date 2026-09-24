@@ -52,6 +52,25 @@ pub async fn get_by_id(
     row.map(row_to_actor).transpose()
 }
 
+/// Find an actor by its exact `name` and `actor_type`. Used to reuse a
+/// stable local actor (e.g. "the crawler actor") across separate process
+/// invocations, where `declare_actor`'s normal id-from-event-id derivation
+/// would otherwise mint a fresh, unrelated identity every single time (spec
+/// section 26 — one peer, one crawler actor, not one per crawl).
+pub async fn find_by_name_and_type(
+    conn: &mut SqliteConnection,
+    name: &str,
+    actor_type: ActorType,
+) -> Result<Option<Actor>, StorageError> {
+    let row: Option<ActorRow> =
+        sqlx::query_as("SELECT * FROM actors WHERE name = ? AND actor_type = ?")
+            .bind(name)
+            .bind(actor_type.as_str())
+            .fetch_optional(&mut *conn)
+            .await?;
+    row.map(row_to_actor).transpose()
+}
+
 pub async fn any_actor_exists(conn: &mut SqliteConnection) -> Result<bool, StorageError> {
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM actors")
         .fetch_one(&mut *conn)

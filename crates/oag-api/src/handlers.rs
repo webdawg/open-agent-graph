@@ -26,7 +26,7 @@ pub async fn get_node(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
-) -> ApiResult<Json<oag_core::Node>> {
+) -> ApiResult<Json<serde_json::Value>> {
     authenticate_read(&headers, &state.graph).await?;
     let node_id = parse_node_id(&id)?;
     let node = state
@@ -34,7 +34,8 @@ pub async fn get_node(
         .get_node(node_id)
         .await?
         .ok_or_else(|| ApiError(oag_graph::GraphError::NotFound(format!("node {id}"))))?;
-    Ok(Json(node))
+    let aliases = state.graph.list_aliases(node_id).await?;
+    Ok(Json(json!({ "node": node, "aliases": aliases })))
 }
 
 pub async fn get_node_edges(

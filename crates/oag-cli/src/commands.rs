@@ -238,3 +238,29 @@ pub async fn doctor(data_dir: &Path) -> anyhow::Result<()> {
         anyhow::bail!("one or more checks failed")
     }
 }
+
+pub async fn crawl(
+    data_dir: &Path,
+    url: &str,
+    config_path: Option<std::path::PathBuf>,
+    allow_private_networks_flag: bool,
+) -> anyhow::Result<()> {
+    let url = url::Url::parse(url).map_err(|e| anyhow::anyhow!("invalid URL '{url}': {e}"))?;
+    let crawler_config = crate::config::resolve_crawler_config(config_path, allow_private_networks_flag)?;
+
+    let graph = std::sync::Arc::new(open_graph(data_dir).await?);
+    let crawler = oag_crawler::CrawlerService::new(graph, crawler_config);
+
+    let summary = crawler.crawl(&url).await?;
+
+    println!("crawled: {}", summary.page_url);
+    println!("facts asserted: {}", summary.facts_asserted);
+    if summary.facts_skipped > 0 {
+        println!("facts skipped (failed validation): {}", summary.facts_skipped);
+    }
+    println!("aliases declared: {}", summary.aliases_declared);
+    println!("llms.txt found: {}", summary.llms_txt_found);
+    println!("ARD found: {}", summary.ard_found);
+    println!("A2A agent card found: {}", summary.a2a_found);
+    Ok(())
+}

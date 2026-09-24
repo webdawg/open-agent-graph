@@ -9,6 +9,7 @@ members = [
     "crates/oag-api",
     "crates/oag-mcp",
     "crates/oag-sync",
+    "crates/oag-crawler",
     "crates/oag-cli",
 ]
 
@@ -26,6 +27,7 @@ oag-graph = { path = "crates/oag-graph" }
 oag-api = { path = "crates/oag-api" }
 oag-mcp = { path = "crates/oag-mcp" }
 oag-sync = { path = "crates/oag-sync" }
+oag-crawler = { path = "crates/oag-crawler" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -53,3 +55,5 @@ hex = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 http = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+scraper = "0.27"
+url = "2"

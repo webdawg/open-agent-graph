@@ -81,6 +81,18 @@ impl GraphService {
         Ok(actors::any_actor_exists(&mut conn).await?)
     }
 
+    /// Find an actor by exact `name` + `actor_type` — used to reuse a
+    /// stable local actor (e.g. "the crawler actor") across separate
+    /// process invocations instead of minting a fresh one each time.
+    pub async fn find_actor_by_name(
+        &self,
+        name: &str,
+        actor_type: ActorType,
+    ) -> Result<Option<Actor>, GraphError> {
+        let mut conn = self.pool.acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(actors::find_by_name_and_type(&mut conn, name, actor_type).await?)
+    }
+
     /// Declare a new actor (spec section 25). Returns its (deterministic,
     /// possibly-deduplicated) id.
     pub async fn declare_actor(

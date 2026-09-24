@@ -69,6 +69,7 @@ async fn end_to_end_assert_search_subgraph_history() {
                 }],
                 actor_confidence: Some(0.9),
                 observed_at: None,
+                extraction_method: None,
             },
         )
         .await
@@ -125,6 +126,7 @@ fn sample_input(subject: &str) -> AssertInput {
         evidence: vec![],
         actor_confidence: None,
         observed_at: None,
+        extraction_method: None,
     }
 }
 
@@ -204,6 +206,7 @@ async fn oversized_subject_is_rejected_before_any_write() {
                 evidence: vec![],
                 actor_confidence: None,
                 observed_at: None,
+                extraction_method: None,
             },
         )
         .await;
@@ -235,6 +238,7 @@ async fn too_many_evidence_items_is_rejected() {
                 evidence,
                 actor_confidence: None,
                 observed_at: None,
+                extraction_method: None,
             },
         )
         .await;
@@ -256,6 +260,7 @@ async fn oversized_evidence_excerpt_is_rejected() {
                 evidence: vec![],
                 actor_confidence: None,
                 observed_at: None,
+                extraction_method: None,
             },
         )
         .await
@@ -289,6 +294,7 @@ async fn oversized_dispute_reason_is_rejected() {
                 evidence: vec![],
                 actor_confidence: None,
                 observed_at: None,
+                extraction_method: None,
             },
         )
         .await
@@ -336,8 +342,58 @@ async fn unauthenticated_actor_cannot_assert() {
                 evidence: vec![],
                 actor_confidence: None,
                 observed_at: None,
+                extraction_method: None,
             },
         )
         .await;
     assert!(matches!(result, Err(crate::error::GraphError::PermissionDenied(_))));
+}
+
+#[tokio::test]
+async fn declare_alias_attaches_and_lists() {
+    let (service, auth) = service_with_admin("declare-alias").await;
+
+    service
+        .assert(
+            &auth,
+            AssertInput {
+                subject: "https://example.com/crawled-page".into(),
+                subject_type: Some("document".into()),
+                predicate: "instance_of".into(),
+                object: "concept:document".into(),
+                object_type: None,
+                evidence: vec![],
+                actor_confidence: Some(1.0),
+                observed_at: None,
+                extraction_method: Some(oag_core::ExtractionMethod::StructuredExtraction),
+            },
+        )
+        .await
+        .unwrap();
+
+    let resolved = service.resolve("https://example.com/crawled-page").await.unwrap();
+    let ResolveOutcome::Found { node, .. } = resolved else {
+        panic!("expected exact resolve match");
+    };
+
+    service
+        .declare_alias(&auth, node.id, "Example Crawled Page".into(), oag_core::AliasType::Name)
+        .await
+        .unwrap();
+
+    let aliases = service.list_aliases(node.id).await.unwrap();
+    assert_eq!(aliases.len(), 1);
+    assert_eq!(aliases[0].alias, "Example Crawled Page");
+    assert_eq!(aliases[0].alias_type, oag_core::AliasType::Name);
+}
+
+#[tokio::test]
+async fn declare_alias_rejects_oversized_alias() {
+    let (service, auth) = service_with_admin("declare-alias-oversized").await;
+    let bogus_node_id = oag_core::NodeId::from_canonical_identifier("url:https://never-asserted.example.com");
+
+    let result = service
+        .declare_alias(&auth, bogus_node_id, "x".repeat(1000), oag_core::AliasType::Name)
+        .await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
 }

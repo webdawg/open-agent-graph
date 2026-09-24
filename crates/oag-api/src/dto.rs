@@ -65,6 +65,7 @@ impl AssertRequest {
             evidence,
             actor_confidence: self.actor_confidence,
             observed_at: self.observed_at.as_deref().map(parse_timestamp).transpose()?,
+            extraction_method: None,
         })
     }
 }

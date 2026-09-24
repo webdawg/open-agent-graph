@@ -68,6 +68,7 @@ fn sample_assertion(subject: &str, object: &str) -> AssertInput {
         evidence: vec![],
         actor_confidence: Some(0.9),
         observed_at: None,
+        extraction_method: None,
     }
 }
 

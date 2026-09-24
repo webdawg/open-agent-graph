@@ -29,6 +29,8 @@ pub struct FileConfig {
     pub network: NetworkSection,
     #[serde(default)]
     pub federation: FederationSection,
+    #[serde(default)]
+    pub crawler: CrawlerSection,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -141,6 +143,54 @@ impl FederationSection {
     }
 }
 
+/// `[crawler]` (spec section 94, section 72's SSRF defaults). `enabled` is
+/// parsed for forward-compatibility with a future background-crawl-job
+/// milestone; `oag crawl` (a synchronous one-shot command, v1's scope) runs
+/// regardless of it — this only gates whatever automatic crawling a later
+/// milestone adds to `oag serve` itself.
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct CrawlerSection {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub allow_private_networks: bool,
+    #[serde(default = "default_max_response_bytes")]
+    pub max_response_bytes: usize,
+    #[serde(default = "default_crawler_timeout_seconds")]
+    pub request_timeout_seconds: u64,
+}
+
+fn default_max_response_bytes() -> usize {
+    10 * 1024 * 1024
+}
+
+fn default_crawler_timeout_seconds() -> u64 {
+    30
+}
+
+impl Default for CrawlerSection {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            allow_private_networks: false,
+            max_response_bytes: default_max_response_bytes(),
+            request_timeout_seconds: default_crawler_timeout_seconds(),
+        }
+    }
+}
+
+impl CrawlerSection {
+    pub fn to_crawler_config(&self, allow_private_networks_override: bool) -> oag_crawler::CrawlerConfig {
+        oag_crawler::CrawlerConfig {
+            allow_private_networks: self.allow_private_networks || allow_private_networks_override,
+            max_response_bytes: self.max_response_bytes,
+            request_timeout: std::time::Duration::from_secs(self.request_timeout_seconds),
+            ..oag_crawler::CrawlerConfig::default()
+        }
+    }
+}
+
 impl Default for FileConfig {
     fn default() -> Self {
         Self {
@@ -150,6 +200,7 @@ impl Default for FileConfig {
             mcp: McpSection::default(),
             network: NetworkSection::default(),
             federation: FederationSection::default(),
+            crawler: CrawlerSection::default(),
         }
     }
 }
@@ -199,4 +250,26 @@ pub fn resolve(
         sync_interval: std::time::Duration::from_secs(file.network.sync_interval_seconds),
         federation,
     })
+}
+
+/// Lightweight resolver for `oag crawl`, which — like `oag peer *` — is a
+/// one-shot command that doesn't need `serve`'s full `ResolvedConfig`
+/// (data dir is passed separately, network/federation are irrelevant here).
+pub fn resolve_crawler_config(
+    config_path: Option<PathBuf>,
+    allow_private_networks_flag: bool,
+) -> anyhow::Result<oag_crawler::CrawlerConfig> {
+    let mut figment = Figment::new();
+    if let Some(path) = &config_path {
+        figment = figment.merge(Toml::file(path));
+    }
+    figment = figment.merge(figment::providers::Env::prefixed("OAG_").split("_"));
+
+    let file: FileConfig = if config_path.is_some() {
+        figment.extract()?
+    } else {
+        FileConfig::default()
+    };
+
+    Ok(file.crawler.to_crawler_config(allow_private_networks_flag))
 }

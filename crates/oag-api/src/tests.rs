@@ -123,6 +123,22 @@ async fn full_rest_vertical_slice() {
     let node_id = body["node_id"].as_str().unwrap().to_string();
     assert_eq!(body["confidence"], 1.0);
 
+    // get_node includes an (empty, for now) aliases list alongside the node.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/nodes/{node_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    assert_eq!(body["node"]["id"], node_id);
+    assert_eq!(body["aliases"].as_array().unwrap().len(), 0);
+
     // subgraph around that node.
     let response = app
         .clone()
