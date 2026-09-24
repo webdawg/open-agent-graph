@@ -17,3 +17,9 @@ rmcp.workspace = true
 schemars.workspace = true
 axum.workspace = true
 http.workspace = true
+
+[dev-dependencies]
+oag-crypto.workspace = true
+rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
+tokio = { workspace = true, features = ["full", "test-util"] }

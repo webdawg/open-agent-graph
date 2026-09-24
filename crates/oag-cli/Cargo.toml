@@ -26,3 +26,4 @@ tracing-subscriber.workspace = true
 clap.workspace = true
 figment.workspace = true
 sqlx.workspace = true
+axum.workspace = true
