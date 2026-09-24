@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use oag_crypto::{PeerId, VerifyingKey};
 use oag_events::{ingest_remote_event, IngestOutcome};
@@ -7,6 +8,7 @@ use oag_storage::SqlitePool;
 
 use crate::client::{SyncClient, SyncClientError};
 use crate::federation::FederationPolicy;
+use crate::rate_limit::SyncRateLimiter;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
@@ -51,6 +53,7 @@ pub struct SyncService {
     self_public_key: [u8; 32],
     federation: FederationPolicy,
     client: SyncClient,
+    rate_limiter: Arc<SyncRateLimiter>,
 }
 
 impl SyncService {
@@ -66,6 +69,7 @@ impl SyncService {
             self_public_key,
             federation,
             client: SyncClient::new(),
+            rate_limiter: Arc::new(SyncRateLimiter::default()),
         }
     }
 
@@ -79,6 +83,10 @@ impl SyncService {
 
     pub fn self_public_key(&self) -> [u8; 32] {
         self.self_public_key
+    }
+
+    pub(crate) fn rate_limiter(&self) -> &SyncRateLimiter {
+        &self.rate_limiter
     }
 
     pub fn federation_allows(&self, peer_id: &PeerId) -> bool {
@@ -188,10 +196,19 @@ impl SyncService {
     }
 
     async fn discover_peers(&self, addr: &str) {
+        // Spec section 61 ("peer Sybil attacks" / "disk exhaustion"): a
+        // single malicious `/peers` response could otherwise claim an
+        // unbounded number of fabricated peer identities, each getting a
+        // row in our `peers`/`peer_addresses` tables for free — cap how
+        // much of one response we act on, and how many addresses we'll
+        // record per claimed peer.
+        const MAX_PEERS_PER_RESPONSE: usize = 200;
+        const MAX_ADDRESSES_PER_PEER: usize = 5;
+
         let Ok(peers) = self.client.fetch_peers(addr).await else { return };
         let Ok(mut conn) = self.pool.acquire().await else { return };
         let now = now_ts();
-        for p in peers.peers {
+        for p in peers.peers.into_iter().take(MAX_PEERS_PER_RESPONSE) {
             let (Ok(pid), Some(pk)) = (p.peer_id.parse::<PeerId>(), decode_hex32(&p.public_key)) else {
                 continue;
             };
@@ -201,7 +218,7 @@ impl SyncService {
             if peers_repo::upsert_peer(&mut conn, pid.as_bytes(), &pk, None, now).await.is_err() {
                 continue;
             }
-            for a in p.addresses {
+            for a in p.addresses.into_iter().take(MAX_ADDRESSES_PER_PEER) {
                 let _ = peers_repo::add_address(&mut conn, pid.as_bytes(), &a).await;
             }
         }

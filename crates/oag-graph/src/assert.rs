@@ -9,6 +9,40 @@ use crate::error::GraphError;
 use crate::identifier::canonicalize_value;
 use crate::service::{AuthContext, GraphService};
 
+// Spec section 61 (Public-Network Abuse): "gigantic evidence payloads" and
+// "event flooding" are guarded here, at the one service layer both REST and
+// MCP call through — an HTTP-level body-size cap (see oag-api/oag-sync)
+// bounds total request size, but a single field within an otherwise-small
+// request could still be absurd, and evidence count isn't bounded by bytes
+// at all (many tiny evidence entries still cost one signed event each).
+const MAX_IDENTIFIER_LEN: usize = 2048;
+const MAX_TYPE_LEN: usize = 64;
+const MAX_PREDICATE_LEN: usize = 128;
+const MAX_URI_LEN: usize = 2048;
+const MAX_TITLE_LEN: usize = 512;
+const MAX_EXCERPT_LEN: usize = 4096;
+const MAX_CONTENT_HASH_LEN: usize = 128;
+const MAX_REASON_LEN: usize = 2048;
+const MAX_EVIDENCE_PER_ASSERTION: usize = 20;
+
+fn check_len(field: &'static str, value: &str, max: usize) -> Result<(), GraphError> {
+    if value.len() > max {
+        Err(GraphError::InvalidInput(format!(
+            "{field} is {} bytes, exceeds the {max}-byte limit",
+            value.len()
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+fn check_opt_len(field: &'static str, value: &Option<String>, max: usize) -> Result<(), GraphError> {
+    match value {
+        Some(v) => check_len(field, v, max),
+        None => Ok(()),
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct EvidenceInput {
     pub evidence_type: Option<String>,
@@ -18,6 +52,16 @@ pub struct EvidenceInput {
     pub content_hash: Option<String>,
     pub observed_at: Option<i64>,
     pub retrieved_at: Option<i64>,
+}
+
+impl EvidenceInput {
+    fn validate(&self) -> Result<(), GraphError> {
+        check_opt_len("evidence.uri", &self.uri, MAX_URI_LEN)?;
+        check_opt_len("evidence.title", &self.title, MAX_TITLE_LEN)?;
+        check_opt_len("evidence.excerpt", &self.excerpt, MAX_EXCERPT_LEN)?;
+        check_opt_len("evidence.content_hash", &self.content_hash, MAX_CONTENT_HASH_LEN)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -32,12 +76,33 @@ pub struct AssertInput {
     pub observed_at: Option<i64>,
 }
 
+impl AssertInput {
+    fn validate(&self) -> Result<(), GraphError> {
+        check_len("subject", &self.subject, MAX_IDENTIFIER_LEN)?;
+        check_len("object", &self.object, MAX_IDENTIFIER_LEN)?;
+        check_len("predicate", &self.predicate, MAX_PREDICATE_LEN)?;
+        check_opt_len("subject_type", &self.subject_type, MAX_TYPE_LEN)?;
+        check_opt_len("object_type", &self.object_type, MAX_TYPE_LEN)?;
+        if self.evidence.len() > MAX_EVIDENCE_PER_ASSERTION {
+            return Err(GraphError::InvalidInput(format!(
+                "{} evidence items exceeds the {MAX_EVIDENCE_PER_ASSERTION}-item limit per assertion",
+                self.evidence.len()
+            )));
+        }
+        for e in &self.evidence {
+            e.validate()?;
+        }
+        Ok(())
+    }
+}
+
 impl GraphService {
     /// Assert a relationship, then attach its evidence as separate
     /// `ADD_EVIDENCE` events (spec section 33: evidence is added
     /// separately). Requires `graph:assert`.
     pub async fn assert(&self, auth: &AuthContext, input: AssertInput) -> Result<AssertionId, GraphError> {
         auth.require(Permission::GraphAssert)?;
+        input.validate()?;
 
         let (subject_identifier, subject_kind) = canonicalize_value(&input.subject);
         let (object_identifier, object_kind) = canonicalize_value(&input.object);
@@ -86,6 +151,7 @@ impl GraphService {
         evidence: EvidenceInput,
     ) -> Result<(), GraphError> {
         auth.require(Permission::GraphAssert)?;
+        evidence.validate()?;
         self.add_evidence_internal(assertion_id, evidence).await
     }
 
@@ -145,6 +211,7 @@ impl GraphService {
         reason: Option<String>,
     ) -> Result<(), GraphError> {
         auth.require(Permission::GraphAssert)?;
+        check_opt_len("reason", &reason, MAX_REASON_LEN)?;
         commit_local_event(
             self.pool(),
             self.identity(),
@@ -169,6 +236,7 @@ impl GraphService {
         reason: Option<String>,
     ) -> Result<(), GraphError> {
         auth.require(Permission::GraphRetractOwn)?;
+        check_opt_len("reason", &reason, MAX_REASON_LEN)?;
 
         let assertion = self
             .get_assertion(retracted_assertion_id)

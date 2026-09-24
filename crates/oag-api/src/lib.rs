@@ -13,7 +13,13 @@ pub use state::AppState;
 use axum::middleware;
 use axum::routing::{get, post};
 use axum::Router;
+use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
+
+/// Spec section 61 (Public-Network Abuse — "gigantic evidence payloads"):
+/// reject oversized bodies before they're buffered/parsed at all, matching
+/// the same limit `oag-sync`'s replication endpoints already enforce.
+const MAX_REQUEST_BODY_BYTES: usize = 4 * 1024 * 1024;
 
 /// Build the full `/api/v1` REST router (spec section 66, minus `/peers` —
 /// no replication in this milestone). MCP (`oag-mcp`) is mounted separately
@@ -55,5 +61,6 @@ pub fn build_router(state: AppState) -> Router {
             rate_limit::rate_limit_middleware,
         ))
         .layer(TraceLayer::new_for_http())
+        .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_BYTES))
         .with_state(state)
 }

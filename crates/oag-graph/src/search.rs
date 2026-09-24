@@ -7,7 +7,7 @@ use crate::service::GraphService;
 /// Sanitize free text into an FTS5 `MATCH` query: strip characters that are
 /// syntax in FTS5's query language so arbitrary user input can't produce a
 /// syntax error (or, worse, an unintended column-filter/operator query).
-fn sanitize_fts_query(raw: &str) -> String {
+pub(crate) fn sanitize_fts_query(raw: &str) -> String {
     let cleaned: String = raw
         .chars()
         .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })

@@ -210,6 +210,34 @@ async fn missing_auth_header_is_rejected() {
 }
 
 #[tokio::test]
+async fn oversized_request_body_is_rejected() {
+    let (app, key) = test_app("oversized-body").await;
+    let auth_header = format!("Bearer {key}");
+
+    // A single evidence excerpt field well past both the per-field
+    // (oag-graph) and whole-body (4 MiB, this layer) limits.
+    let huge = "x".repeat(6 * 1024 * 1024);
+    let body = json!({
+        "subject": "https://example.com/oversized",
+        "predicate": "implements",
+        "object": "concept:oversized",
+        "evidence": [{"excerpt": huge}]
+    });
+
+    let response = app
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test]
 async fn status_endpoint_needs_no_auth() {
     let (app, _key) = test_app("status").await;
     let response = app

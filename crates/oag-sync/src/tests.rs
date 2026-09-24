@@ -160,3 +160,58 @@ async fn relay_without_origin_dependency() {
     assert!(fetched.is_some(), "C should have A's original assertion via relay through B");
     assert_eq!(fetched.unwrap().status, AssertionStatus::Active);
 }
+
+fn one_signed_event_json() -> serde_json::Value {
+    let identity = PeerIdentity::generate();
+    let (signed, _id) = oag_events::build_and_sign(
+        &identity,
+        1,
+        None,
+        1_700_000_000,
+        oag_events::EventPayload::ActorDeclare(oag_events::ActorDeclarePayload {
+            actor_type: "agent".into(),
+            name: None,
+            public_key: None,
+            identity_uri: None,
+        }),
+    )
+    .unwrap();
+    serde_json::to_value(&signed).unwrap()
+}
+
+/// Spec section 61 ("event flooding"): the global sync rate limiter must
+/// eventually reject a caller that keeps hammering the same endpoint.
+#[tokio::test]
+async fn rate_limiter_rejects_after_threshold() {
+    let peer = spawn_peer("rate-limit").await;
+    let client = reqwest::Client::new();
+    let url = format!("{}/oag/sync/v1/hello", peer.addr);
+
+    let mut saw_429 = false;
+    for _ in 0..650 {
+        let resp = client.get(&url).send().await.unwrap();
+        if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            saw_429 = true;
+            break;
+        }
+    }
+    assert!(saw_429, "expected a 429 within 650 requests against a 600/window limit");
+}
+
+/// Spec section 61 ("event flooding" / "signature spam"): a push batch over
+/// the per-request event-count cap is rejected before any per-event work.
+#[tokio::test]
+async fn push_event_count_over_limit_is_rejected() {
+    let peer = spawn_peer("push-count-limit").await;
+    let event = one_signed_event_json();
+    let events: Vec<serde_json::Value> = (0..1001).map(|_| event.clone()).collect();
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(format!("{}/oag/sync/v1/events", peer.addr))
+        .json(&serde_json::json!({ "events": events }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), reqwest::StatusCode::PAYLOAD_TOO_LARGE);
+}

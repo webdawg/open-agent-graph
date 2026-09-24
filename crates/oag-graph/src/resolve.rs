@@ -28,7 +28,11 @@ impl GraphService {
             return Ok(ResolveOutcome::Found { node, confidence: 1.0 });
         }
 
-        let candidates = nodes::search(&mut conn, value, 10).await?;
+        let sanitized = crate::search::sanitize_fts_query(value);
+        if sanitized.is_empty() {
+            return Ok(ResolveOutcome::NotFound);
+        }
+        let candidates = nodes::search(&mut conn, &sanitized, 10).await?;
         if candidates.is_empty() {
             Ok(ResolveOutcome::NotFound)
         } else {

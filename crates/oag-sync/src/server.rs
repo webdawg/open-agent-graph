@@ -1,5 +1,6 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::middleware;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use oag_crypto::{PeerId, VerifyingKey};
@@ -7,20 +8,23 @@ use oag_events::{ingest_remote_event, IngestOutcome};
 use oag_storage::repo::{events as events_repo, peers as peers_repo};
 use serde::Deserialize;
 
+use crate::rate_limit;
 use crate::service::SyncService;
 use crate::wire::{EventsResponse, HeadsResponse, HelloResponse, PeerRecord, PeersResponse, SYNC_PROTOCOL, SYNC_VERSION};
 
 /// Maximum a single POST /events body may be, to bound memory/CPU spent on
 /// an unsolicited push before any semantic validation happens (spec section
-/// 61 — a basic guard; the fuller abuse-hardening list is out of scope for
-/// this milestone).
+/// 61 — "gigantic evidence payloads" / "disk exhaustion").
 const MAX_PUSH_BODY_BYTES: usize = 4 * 1024 * 1024;
 
 /// The `/oag/sync/v1/*` replication API (spec section 67). Deliberately
 /// unauthenticated at the HTTP layer — every event is self-authenticating
 /// via its own signature (spec section 60), so there is nothing a session-
 /// level credential would protect here that the signature checks don't
-/// already cover (see plan's "Trust model simplification").
+/// already cover (see plan's "Trust model simplification"). Hardened per
+/// spec section 61: a global request-rate cap (`rate_limit`), a whole-body
+/// size cap below, and per-handler event-count caps (`get_events`,
+/// `post_events`) and peer-record caps (`SyncService::discover_peers`).
 pub fn router(service: SyncService) -> Router {
     Router::new()
         .route("/oag/sync/v1/hello", get(hello))
@@ -28,6 +32,10 @@ pub fn router(service: SyncService) -> Router {
         .route("/oag/sync/v1/events/{origin}", get(get_events))
         .route("/oag/sync/v1/events", post(post_events))
         .route("/oag/sync/v1/peers", get(peers))
+        .layer(middleware::from_fn_with_state(
+            service.clone(),
+            rate_limit::rate_limit_middleware,
+        ))
         .layer(tower_http::limit::RequestBodyLimitLayer::new(MAX_PUSH_BODY_BYTES))
         .with_state(service)
 }
@@ -55,6 +63,14 @@ struct RangeQuery {
     to: u64,
 }
 
+/// Spec section 61 ("event flooding"): even though a query's actual DB cost
+/// is bounded by real matching rows (not the requested range width), a
+/// single call returning tens of thousands of events in one response is
+/// still an unbounded-memory/response-size vector. A well-behaved peer
+/// paginates by re-requesting with an advanced `from`; this just forces
+/// that rather than trusting the caller to ask for sane ranges.
+const MAX_EVENTS_PER_FETCH: i64 = 1000;
+
 async fn get_events(
     State(service): State<SyncService>,
     Path(origin_hex): Path<String>,
@@ -64,12 +80,14 @@ async fn get_events(
     if range.to < range.from {
         return Err(StatusCode::BAD_REQUEST);
     }
+    let from = range.from as i64;
+    let to = std::cmp::min(range.to as i64, from + MAX_EVENTS_PER_FETCH - 1);
     let mut conn = service
         .pool()
         .acquire()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let rows = events_repo::list_range(&mut conn, &origin_bytes, range.from as i64, range.to as i64)
+    let rows = events_repo::list_range(&mut conn, &origin_bytes, from, to)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let events = rows
@@ -80,6 +98,13 @@ async fn get_events(
     Ok(Json(EventsResponse { events }))
 }
 
+/// Spec section 61 ("event flooding" / "signature spam"): `MAX_PUSH_BODY_BYTES`
+/// already bounds total request size, but many small events could still add
+/// up to an enormous batch of individually-cheap-looking transactions in one
+/// call. Cap the count directly too; a legitimate pusher just sends another
+/// request for the rest.
+const MAX_EVENTS_PER_PUSH: usize = 1000;
+
 /// Accepts a push of events (spec section 67). Kept for protocol
 /// completeness — the gossip loop and this milestone's tests use pull as
 /// primary (matching the spec's own description of B *receiving* by
@@ -89,7 +114,10 @@ async fn get_events(
 async fn post_events(
     State(service): State<SyncService>,
     Json(body): Json<EventsResponse>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if body.events.len() > MAX_EVENTS_PER_PUSH {
+        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+    }
     let mut applied = 0u64;
     let mut skipped = 0u64;
     for signed in body.events {
@@ -129,7 +157,7 @@ async fn post_events(
             Err(_) => skipped += 1,
         }
     }
-    Json(serde_json::json!({ "applied": applied, "skipped": skipped }))
+    Ok(Json(serde_json::json!({ "applied": applied, "skipped": skipped })))
 }
 
 async fn peers(State(service): State<SyncService>) -> Json<PeersResponse> {

@@ -189,6 +189,135 @@ async fn retract_of_missing_assertion_is_not_found() {
 }
 
 #[tokio::test]
+async fn oversized_subject_is_rejected_before_any_write() {
+    let (service, auth) = service_with_admin("validate-oversized-subject").await;
+    let huge_subject = "a".repeat(3000);
+    let result = service
+        .assert(
+            &auth,
+            AssertInput {
+                subject: huge_subject,
+                subject_type: None,
+                predicate: "related_to".into(),
+                object: "https://example.com".into(),
+                object_type: None,
+                evidence: vec![],
+                actor_confidence: None,
+                observed_at: None,
+            },
+        )
+        .await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+
+    // Nothing should have been written — this node must not exist.
+    let resolved = service.resolve("https://example.com").await.unwrap();
+    assert!(matches!(resolved, crate::resolve::ResolveOutcome::NotFound | crate::resolve::ResolveOutcome::Candidates(_)));
+}
+
+#[tokio::test]
+async fn too_many_evidence_items_is_rejected() {
+    let (service, auth) = service_with_admin("validate-evidence-count").await;
+    let evidence = (0..25)
+        .map(|i| EvidenceInput {
+            uri: Some(format!("https://example.com/e{i}")),
+            ..Default::default()
+        })
+        .collect();
+    let result = service
+        .assert(
+            &auth,
+            AssertInput {
+                subject: "https://example.com/subject".into(),
+                subject_type: None,
+                predicate: "related_to".into(),
+                object: "https://example.com/object".into(),
+                object_type: None,
+                evidence,
+                actor_confidence: None,
+                observed_at: None,
+            },
+        )
+        .await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn oversized_evidence_excerpt_is_rejected() {
+    let (service, auth) = service_with_admin("validate-excerpt").await;
+    let assertion_id = service
+        .assert(
+            &auth,
+            AssertInput {
+                subject: "https://example.com/subject2".into(),
+                subject_type: None,
+                predicate: "related_to".into(),
+                object: "https://example.com/object2".into(),
+                object_type: None,
+                evidence: vec![],
+                actor_confidence: None,
+                observed_at: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let result = service
+        .add_evidence(
+            &auth,
+            assertion_id,
+            EvidenceInput {
+                excerpt: Some("x".repeat(5000)),
+                ..Default::default()
+            },
+        )
+        .await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn oversized_dispute_reason_is_rejected() {
+    let (service, auth) = service_with_admin("validate-reason").await;
+    let assertion_id = service
+        .assert(
+            &auth,
+            AssertInput {
+                subject: "https://example.com/subject3".into(),
+                subject_type: None,
+                predicate: "related_to".into(),
+                object: "https://example.com/object3".into(),
+                object_type: None,
+                evidence: vec![],
+                actor_confidence: None,
+                observed_at: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let result = service.dispute_assertion(&auth, assertion_id, Some("r".repeat(3000))).await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn resolve_with_fts_special_characters_does_not_error() {
+    let (service, _auth) = service_with_admin("resolve-fts-safety").await;
+    // No exact node exists for any of these, so each falls through to the
+    // FTS5 search fallback — colons, quotes, and NEAR/AND-shaped input are
+    // all FTS5 query-syntax characters/keywords that previously crashed
+    // resolve() with a SQL error instead of returning NotFound.
+    for value in [
+        "https://example.com/weird:path",
+        "\"unterminated quote",
+        "NEAR(foo, bar)",
+        "col: value",
+        "***",
+    ] {
+        let result = service.resolve(value).await;
+        assert!(result.is_ok(), "resolve({value:?}) should not error, got {result:?}");
+    }
+}
+
+#[tokio::test]
 async fn unauthenticated_actor_cannot_assert() {
     let (service, _) = service_with_admin("permission-check").await;
     let no_permissions = crate::service::AuthContext {
