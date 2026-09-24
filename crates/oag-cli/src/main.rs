@@ -59,6 +59,11 @@ enum Command {
         #[command(subcommand)]
         command: KeyCommand,
     },
+    /// Peer replication commands.
+    Peer {
+        #[command(subcommand)]
+        command: PeerCommand,
+    },
     /// Run local health checks.
     Doctor {
         #[arg(long, default_value = "./data")]
@@ -113,6 +118,33 @@ enum KeyCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum PeerCommand {
+    /// Sync with a peer at URL immediately and remember it for `peer sync`.
+    Add {
+        url: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// List known peers, their addresses, and fork status.
+    List {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// Forget a peer (does not affect already-replicated events).
+    Remove {
+        peer_id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// Sync with a previously-known peer (by id) or a fresh URL.
+    Sync {
+        peer_id_or_url: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -144,6 +176,16 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Key { command: KeyCommand::Create { data_dir, actor_type, name, permissions } } => {
             commands::key_create(&data_dir, &actor_type, name, permissions).await
+        }
+        Command::Peer { command: PeerCommand::Add { url, data_dir } } => {
+            commands::peer_add(&data_dir, &url).await
+        }
+        Command::Peer { command: PeerCommand::List { data_dir } } => commands::peer_list(&data_dir).await,
+        Command::Peer { command: PeerCommand::Remove { peer_id, data_dir } } => {
+            commands::peer_remove(&data_dir, &peer_id).await
+        }
+        Command::Peer { command: PeerCommand::Sync { peer_id_or_url, data_dir } } => {
+            commands::peer_sync(&data_dir, &peer_id_or_url).await
         }
         Command::Doctor { data_dir } => commands::doctor(&data_dir).await,
     }

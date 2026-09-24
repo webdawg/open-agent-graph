@@ -1455,6 +1455,7 @@ dependencies = [
  "oag-graph",
  "oag-mcp",
  "oag-storage",
+ "oag-sync",
  "serde",
  "serde_json",
  "sqlx",

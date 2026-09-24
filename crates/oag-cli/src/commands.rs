@@ -3,6 +3,7 @@ use std::path::Path;
 use oag_core::{ActorType, Permission};
 use oag_crypto::PeerIdentity;
 use oag_graph::GraphService;
+use oag_sync::{FederationPolicy, SyncService};
 
 async fn open_graph(data_dir: &Path) -> anyhow::Result<GraphService> {
     std::fs::create_dir_all(data_dir)?;
@@ -11,11 +12,98 @@ async fn open_graph(data_dir: &Path) -> anyhow::Result<GraphService> {
     Ok(GraphService::new(pool, identity))
 }
 
+/// One-shot `SyncService` for the `oag peer *` commands — these operate
+/// directly on the local SQLite file (WAL mode makes this safe alongside a
+/// running `oag serve`, same as `status`/`search`/`key create` already do)
+/// and don't need the federation policy from `config.toml`, since a
+/// human explicitly running `oag peer add/sync` is itself the authorization
+/// to talk to that address.
+async fn open_sync(data_dir: &Path) -> anyhow::Result<SyncService> {
+    std::fs::create_dir_all(data_dir)?;
+    let identity = PeerIdentity::load_or_generate(&data_dir.join("identity.key"))?;
+    let peer_id = identity.peer_id();
+    let public_key = identity.verifying_key().to_bytes();
+    let pool = oag_storage::open_pool(&data_dir.join("oag.sqlite")).await?;
+    Ok(SyncService::new(pool, peer_id, public_key, FederationPolicy::Open))
+}
+
+pub async fn peer_add(data_dir: &Path, url: &str) -> anyhow::Result<()> {
+    let sync = open_sync(data_dir).await?;
+    let summary = sync.sync_with_peer(url).await?;
+    println!("synced with {url}");
+    println!(
+        "applied: {}, already_known: {}, forks: {}",
+        summary.applied, summary.already_known, summary.forks
+    );
+    for err in &summary.errors {
+        println!("warning: {err}");
+    }
+    Ok(())
+}
+
+pub async fn peer_sync(data_dir: &Path, peer_id_or_url: &str) -> anyhow::Result<()> {
+    let sync = open_sync(data_dir).await?;
+
+    let url = if let Ok(peer_id) = peer_id_or_url.parse::<oag_crypto::PeerId>() {
+        let mut conn = sync.pool().acquire().await?;
+        let addrs = oag_storage::repo::peers::list_addresses(&mut conn, peer_id.as_bytes()).await?;
+        addrs
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("no known address for peer {peer_id} — use `oag peer add <URL>` first"))?
+    } else {
+        peer_id_or_url.to_string()
+    };
+
+    let summary = sync.sync_with_peer(&url).await?;
+    println!("synced with {url}");
+    println!(
+        "applied: {}, already_known: {}, forks: {}",
+        summary.applied, summary.already_known, summary.forks
+    );
+    for err in &summary.errors {
+        println!("warning: {err}");
+    }
+    Ok(())
+}
+
+pub async fn peer_list(data_dir: &Path) -> anyhow::Result<()> {
+    let sync = open_sync(data_dir).await?;
+    let mut conn = sync.pool().acquire().await?;
+    let peers = oag_storage::repo::peers::list_peers(&mut conn).await?;
+    if peers.is_empty() {
+        println!("no known peers");
+        return Ok(());
+    }
+    for info in peers {
+        let peer_id = oag_crypto::PeerId::from_bytes(info.peer_id);
+        let addrs = oag_storage::repo::peers::list_addresses(&mut conn, peer_id.as_bytes()).await?;
+        println!(
+            "{peer_id}  forked={}  last_seen={:?}  addresses={:?}",
+            info.forked, info.last_seen, addrs
+        );
+    }
+    Ok(())
+}
+
+pub async fn peer_remove(data_dir: &Path, peer_id: &str) -> anyhow::Result<()> {
+    let sync = open_sync(data_dir).await?;
+    let peer_id: oag_crypto::PeerId = peer_id
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid peer id '{peer_id}'"))?;
+    let mut conn = sync.pool().acquire().await?;
+    oag_storage::repo::peers::remove_peer(&mut conn, peer_id.as_bytes()).await?;
+    println!("removed {peer_id}");
+    Ok(())
+}
+
 pub async fn status(data_dir: &Path) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
     println!("peer_id: {}", graph.identity().peer_id());
     println!("data_dir: {}", data_dir.display());
-    println!("replication: none (single-peer milestone)");
+    let mut conn = graph.pool().acquire().await?;
+    let peer_count = oag_storage::repo::peers::list_peers(&mut conn).await?.len();
+    println!("known_peers: {peer_count} (see `oag peer list`)");
     Ok(())
 }
 
