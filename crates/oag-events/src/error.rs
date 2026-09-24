@@ -23,4 +23,8 @@ pub enum EventsError {
     Storage(#[from] oag_storage::StorageError),
     #[error("referenced object not found: {0}")]
     NotFound(String),
+    #[error("invalid origin_peer field: {0}")]
+    OriginPeerId(#[from] oag_crypto::PeerIdParseError),
+    #[error("verifying key does not belong to claimed origin peer {claimed} (derives to {derived})")]
+    OriginKeyMismatch { claimed: String, derived: String },
 }

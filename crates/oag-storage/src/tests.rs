@@ -44,9 +44,51 @@ async fn migrations_create_expected_tables() {
         "assertion_disputes",
         "assertion_retractions",
         "assertion_supersessions",
+        "peers",
+        "peer_addresses",
+        "peer_forks",
     ] {
         assert!(names.contains(&expected), "missing table {expected}");
     }
+}
+
+#[tokio::test]
+async fn peer_repo_round_trip_and_fork_recording() {
+    let path = temp_db_path("peers");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    let peer_id = [7u8; 32];
+    let public_key = [9u8; 32];
+
+    repo::peers::upsert_peer(&mut conn, &peer_id, &public_key, Some("peer-a"), 100)
+        .await
+        .unwrap();
+    repo::peers::add_address(&mut conn, &peer_id, "http://127.0.0.1:7443").await.unwrap();
+
+    let info = repo::peers::get_peer(&mut conn, &peer_id).await.unwrap().unwrap();
+    assert_eq!(info.public_key, public_key);
+    assert_eq!(info.name.as_deref(), Some("peer-a"));
+    assert!(!info.forked);
+
+    let addrs = repo::peers::list_addresses(&mut conn, &peer_id).await.unwrap();
+    assert_eq!(addrs, vec!["http://127.0.0.1:7443".to_string()]);
+
+    // re-upsert with no name shouldn't clobber the existing name, but should bump last_seen
+    repo::peers::upsert_peer(&mut conn, &peer_id, &public_key, None, 200).await.unwrap();
+    let info = repo::peers::get_peer(&mut conn, &peer_id).await.unwrap().unwrap();
+    assert_eq!(info.name.as_deref(), Some("peer-a"));
+    assert_eq!(info.last_seen, Some(200));
+
+    repo::peers::record_fork(&mut conn, &peer_id, 5, &[1u8; 32], &[2u8; 32], 300)
+        .await
+        .unwrap();
+    repo::peers::mark_forked(&mut conn, &peer_id).await.unwrap();
+
+    let info = repo::peers::get_peer(&mut conn, &peer_id).await.unwrap().unwrap();
+    assert!(info.forked);
+    let forks = repo::peers::list_forks(&mut conn, &peer_id).await.unwrap();
+    assert_eq!(forks.len(), 1);
 }
 
 #[tokio::test]

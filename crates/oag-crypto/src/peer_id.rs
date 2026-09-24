@@ -24,6 +24,14 @@ impl PeerId {
         Self(*blake3::hash(&key.to_bytes()).as_bytes())
     }
 
+    /// Construct directly from raw bytes, e.g. a peer id already stored on
+    /// disk or decoded from the wire. Does not verify these bytes actually
+    /// derive from any particular public key — callers that need that
+    /// guarantee should compare against `PeerId::from_public_key`.
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }

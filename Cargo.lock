@@ -1565,6 +1565,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "oag-sync"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "hex",
+ "oag-core",
+ "oag-crypto",
+ "oag-events",
+ "oag-graph",
+ "oag-storage",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tower-http 0.7.1",
+ "tracing",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2790,6 +2810,7 @@ dependencies = [
  "bytes",
  "http",
  "http-body",
+ "http-body-util",
  "percent-encoding",
  "pin-project-lite",
  "tower-layer",

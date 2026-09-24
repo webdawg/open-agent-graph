@@ -132,3 +132,52 @@ pub fn event_row_to_id(row: &EventRow) -> Result<EventId, StorageError> {
         &row.event_id,
     )?)))
 }
+
+/// The event id already stored at (origin, sequence), if any — the fork
+/// check (spec section 55): if an incoming event claims the same origin and
+/// sequence as one we already have, but a different id, that's a fork.
+pub async fn find_event_id_at(
+    conn: &mut SqliteConnection,
+    origin_peer_id: &[u8; 32],
+    sequence: i64,
+) -> Result<Option<EventId>, StorageError> {
+    let row: Option<(Vec<u8>,)> = sqlx::query_as(
+        "SELECT event_id FROM events WHERE origin_peer_id = ? AND sequence = ?",
+    )
+    .bind(origin_peer_id.to_vec())
+    .bind(sequence)
+    .fetch_optional(&mut *conn)
+    .await?;
+    row.map(|(bytes,)| {
+        Ok(EventId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&bytes)?)))
+    })
+    .transpose()
+}
+
+/// Every origin this peer has any events from, including itself — backs the
+/// `/oag/sync/v1/hello` and `/heads` responses.
+pub async fn list_all_origins(
+    conn: &mut SqliteConnection,
+) -> Result<Vec<EventOriginRow>, StorageError> {
+    let rows: Vec<EventOriginRow> = sqlx::query_as("SELECT * FROM event_origins").fetch_all(&mut *conn).await?;
+    Ok(rows)
+}
+
+/// One origin's events, oldest first, `sequence` in `[from, to]` inclusive —
+/// backs `GET /oag/sync/v1/events/{origin}?from=&to=`.
+pub async fn list_range(
+    conn: &mut SqliteConnection,
+    origin_peer_id: &[u8; 32],
+    from: i64,
+    to: i64,
+) -> Result<Vec<EventRow>, StorageError> {
+    let rows: Vec<EventRow> = sqlx::query_as(
+        "SELECT * FROM events WHERE origin_peer_id = ? AND sequence BETWEEN ? AND ? ORDER BY sequence",
+    )
+    .bind(origin_peer_id.to_vec())
+    .bind(from)
+    .bind(to)
+    .fetch_all(&mut *conn)
+    .await?;
+    Ok(rows)
+}

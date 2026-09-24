@@ -2,6 +2,7 @@ pub mod builder;
 pub mod commit;
 pub mod envelope;
 pub mod error;
+pub mod ingest;
 pub mod payload;
 pub mod projector;
 #[cfg(test)]
@@ -12,6 +13,7 @@ pub use builder::build_and_sign;
 pub use commit::commit_local_event;
 pub use envelope::{SignedEvent, UnsignedEvent};
 pub use error::EventsError;
+pub use ingest::{ingest_remote_event, IngestOutcome};
 pub use payload::*;
 pub use projector::ProjectionOutcome;
 pub use validate::{validate_chain, verify_and_derive_id};

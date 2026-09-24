@@ -128,3 +128,28 @@ pub struct SupersessionRow {
     pub actor_id: Vec<u8>,
     pub created_at: i64,
 }
+
+#[derive(Debug, FromRow)]
+pub struct PeerRow {
+    pub peer_id: Vec<u8>,
+    pub public_key: Vec<u8>,
+    pub name: Option<String>,
+    pub first_seen: i64,
+    pub last_seen: Option<i64>,
+    pub forked: bool,
+}
+
+#[derive(Debug, FromRow)]
+pub struct PeerAddressRow {
+    pub peer_id: Vec<u8>,
+    pub address: String,
+}
+
+#[derive(Debug, FromRow)]
+pub struct PeerForkRow {
+    pub peer_id: Vec<u8>,
+    pub sequence: i64,
+    pub event_id_a: Vec<u8>,
+    pub event_id_b: Vec<u8>,
+    pub detected_at: i64,
+}

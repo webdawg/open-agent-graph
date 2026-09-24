@@ -10,6 +10,7 @@ use crate::peer_id::PeerId;
 /// first startup and stored at `identity.key` in the data directory. The
 /// private key never leaves the node except through an explicit
 /// `identity backup`.
+#[derive(Clone)]
 pub struct PeerIdentity {
     signing_key: SigningKey,
 }
