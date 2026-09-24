@@ -159,11 +159,9 @@ impl GraphService {
         Ok(())
     }
 
-    /// Requires `graph:retract-own`. This milestone doesn't yet check that
-    /// the caller is the original asserting actor — ownership enforcement
-    /// needs the assertion's actor looked up and compared, which is a small
-    /// addition for the next pass once there's a real multi-actor scenario
-    /// to test it against.
+    /// Requires `graph:retract-own`, and the caller must be the assertion's
+    /// original asserting actor — "own" is enforced, not just checked for
+    /// presence. Callers holding `admin` may retract any assertion.
     pub async fn retract_assertion(
         &self,
         auth: &AuthContext,
@@ -171,6 +169,17 @@ impl GraphService {
         reason: Option<String>,
     ) -> Result<(), GraphError> {
         auth.require(Permission::GraphRetractOwn)?;
+
+        let assertion = self
+            .get_assertion(retracted_assertion_id)
+            .await?
+            .ok_or_else(|| GraphError::NotFound(format!("assertion {retracted_assertion_id}")))?;
+        if assertion.actor_id != auth.actor_id && !auth.permissions.contains(&Permission::Admin) {
+            return Err(GraphError::PermissionDenied(
+                "graph:retract-own requires being the original asserting actor (or admin)",
+            ));
+        }
+
         commit_local_event(
             self.pool(),
             self.identity(),

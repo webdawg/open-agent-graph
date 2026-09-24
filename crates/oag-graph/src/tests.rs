@@ -115,6 +115,79 @@ async fn end_to_end_assert_search_subgraph_history() {
     assert_eq!(refetched.status, oag_core::AssertionStatus::Retracted);
 }
 
+fn sample_input(subject: &str) -> AssertInput {
+    AssertInput {
+        subject: subject.to_string(),
+        subject_type: None,
+        predicate: "related_to".into(),
+        object: "https://example.org".into(),
+        object_type: None,
+        evidence: vec![],
+        actor_confidence: None,
+        observed_at: None,
+    }
+}
+
+async fn declare_actor_with_perms(
+    service: &GraphService,
+    name: &str,
+    permissions: Vec<Permission>,
+) -> crate::service::AuthContext {
+    let actor_id = service
+        .declare_actor(ActorType::Agent, Some(name.into()), None)
+        .await
+        .unwrap();
+    crate::service::AuthContext { actor_id, permissions }
+}
+
+#[tokio::test]
+async fn non_owner_without_admin_cannot_retract() {
+    let (service, owner_auth) = service_with_admin("retract-nonowner").await;
+    let assertion_id = service.assert(&owner_auth, sample_input("https://example.com/owned-by-a")).await.unwrap();
+
+    let other = declare_actor_with_perms(&service, "other-actor", vec![Permission::GraphRetractOwn]).await;
+    let result = service.retract_assertion(&other, assertion_id, None).await;
+    assert!(
+        matches!(result, Err(crate::error::GraphError::PermissionDenied(_))),
+        "expected PermissionDenied, got {result:?}"
+    );
+
+    // The rejected attempt must not have mutated anything.
+    let assertion = service.get_assertion(assertion_id).await.unwrap().unwrap();
+    assert_eq!(assertion.status, oag_core::AssertionStatus::Active);
+}
+
+#[tokio::test]
+async fn admin_can_retract_someone_elses_assertion() {
+    let (service, owner_auth) = service_with_admin("retract-admin").await;
+    let assertion_id = service.assert(&owner_auth, sample_input("https://example.com/owned-by-b")).await.unwrap();
+
+    let admin = declare_actor_with_perms(&service, "root", vec![Permission::Admin]).await;
+    service.retract_assertion(&admin, assertion_id, None).await.unwrap();
+
+    let assertion = service.get_assertion(assertion_id).await.unwrap().unwrap();
+    assert_eq!(assertion.status, oag_core::AssertionStatus::Retracted);
+}
+
+#[tokio::test]
+async fn owner_can_retract_own_assertion() {
+    let (service, auth) = service_with_admin("retract-owner").await;
+    let assertion_id = service.assert(&auth, sample_input("https://example.com/owned-by-self")).await.unwrap();
+
+    service.retract_assertion(&auth, assertion_id, None).await.unwrap();
+
+    let assertion = service.get_assertion(assertion_id).await.unwrap().unwrap();
+    assert_eq!(assertion.status, oag_core::AssertionStatus::Retracted);
+}
+
+#[tokio::test]
+async fn retract_of_missing_assertion_is_not_found() {
+    let (service, auth) = service_with_admin("retract-missing").await;
+    let bogus_id = oag_core::EventId::derive(b"never-asserted");
+    let result = service.retract_assertion(&auth, bogus_id, None).await;
+    assert!(matches!(result, Err(crate::error::GraphError::NotFound(_))), "got {result:?}");
+}
+
 #[tokio::test]
 async fn unauthenticated_actor_cannot_assert() {
     let (service, _) = service_with_admin("permission-check").await;
