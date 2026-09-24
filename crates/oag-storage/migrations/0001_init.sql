@@ -162,32 +162,37 @@ CREATE TABLE assertion_supersessions (
 
 CREATE INDEX idx_supersessions_old ON assertion_supersessions (old_assertion_id);
 
--- Full-text search (spec section 63): node name/description and evidence
--- title/excerpt/uri. `content='nodes'`/`content='evidence'` makes these
--- external-content tables so we don't duplicate the data; triggers below
--- keep them in sync.
+-- Full-text search (spec section 63): node name/description/canonical
+-- identifier and evidence title/excerpt/uri. `canonical_identifier` is
+-- included because most nodes created as an assertion's subject/object have
+-- no name/description yet (spec section 44's crawler/enrichment milestone
+-- is what fills those in) — without it, a node created from
+-- "url:https://github.com/example/foo" would be unfindable by any search
+-- term at all. `content='nodes'` makes this an external-content table so we
+-- don't duplicate the data; triggers below keep it in sync.
 CREATE VIRTUAL TABLE nodes_fts USING fts5(
     name,
     description,
+    canonical_identifier,
     content = 'nodes',
     content_rowid = 'rowid'
 );
 
 CREATE TRIGGER nodes_fts_ai AFTER INSERT ON nodes BEGIN
-    INSERT INTO nodes_fts (rowid, name, description)
-    VALUES (new.rowid, new.name, new.description);
+    INSERT INTO nodes_fts (rowid, name, description, canonical_identifier)
+    VALUES (new.rowid, new.name, new.description, new.canonical_identifier);
 END;
 
 CREATE TRIGGER nodes_fts_ad AFTER DELETE ON nodes BEGIN
-    INSERT INTO nodes_fts (nodes_fts, rowid, name, description)
-    VALUES ('delete', old.rowid, old.name, old.description);
+    INSERT INTO nodes_fts (nodes_fts, rowid, name, description, canonical_identifier)
+    VALUES ('delete', old.rowid, old.name, old.description, old.canonical_identifier);
 END;
 
 CREATE TRIGGER nodes_fts_au AFTER UPDATE ON nodes BEGIN
-    INSERT INTO nodes_fts (nodes_fts, rowid, name, description)
-    VALUES ('delete', old.rowid, old.name, old.description);
-    INSERT INTO nodes_fts (rowid, name, description)
-    VALUES (new.rowid, new.name, new.description);
+    INSERT INTO nodes_fts (nodes_fts, rowid, name, description, canonical_identifier)
+    VALUES ('delete', old.rowid, old.name, old.description, old.canonical_identifier);
+    INSERT INTO nodes_fts (rowid, name, description, canonical_identifier)
+    VALUES (new.rowid, new.name, new.description, new.canonical_identifier);
 END;
 
 CREATE VIRTUAL TABLE evidence_fts USING fts5(
