@@ -604,3 +604,47 @@ async fn contradicted_observation_lowers_agreement() {
     let c = service.get_edge_corroboration(edge_id).await.unwrap();
     assert!((c.agreement - 0.5).abs() < 1e-6, "got {}", c.agreement);
 }
+
+#[tokio::test]
+async fn recent_assertion_is_nearly_fully_fresh() {
+    let (service, auth) = service_with_admin("corroboration-fresh").await;
+    let assertion_id = service.assert(&auth, sample_input("https://example.com/fresh-edge")).await.unwrap();
+    let edge_id = edge_id_of(&service, assertion_id).await;
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert!(c.freshness > 0.999, "got {}", c.freshness);
+}
+
+#[tokio::test]
+async fn old_observed_at_decays_freshness() {
+    let (service, auth) = service_with_admin("corroboration-stale").await;
+    let year_ago = service.now() - 365 * 86_400;
+    let assertion_id = service
+        .assert(
+            &auth,
+            AssertInput {
+                observed_at: Some(year_ago),
+                ..sample_input("https://example.com/stale-edge")
+            },
+        )
+        .await
+        .unwrap();
+    let edge_id = edge_id_of(&service, assertion_id).await;
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    // One year is roughly two half-lives (180 days each) out.
+    assert!(c.freshness < 0.3, "got {}", c.freshness);
+    assert!(c.freshness > 0.0);
+}
+
+#[tokio::test]
+async fn no_active_assertions_gives_zero_freshness() {
+    let (service, auth) = service_with_admin("corroboration-no-active-freshness").await;
+    let assertion_id = service.assert(&auth, sample_input("https://example.com/retracted-edge")).await.unwrap();
+    let edge_id = edge_id_of(&service, assertion_id).await;
+    service.retract_assertion(&auth, assertion_id, None).await.unwrap();
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(c.active_assertions, 0);
+    assert_eq!(c.freshness, 0.0);
+}

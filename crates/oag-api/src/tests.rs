@@ -173,6 +173,7 @@ async fn full_rest_vertical_slice() {
     assert_eq!(body["active_assertions"], 1);
     assert_eq!(body["source_groups"].as_array().unwrap().len(), 1);
     assert_eq!(body["agreement"], 1.0);
+    assert!(body["freshness"].as_f64().unwrap() > 0.999);
 
     // verify the assertion; observations should now surface on GET assertion.
     let response = app

@@ -105,6 +105,25 @@ fn verify_result_weight(result: &str) -> f32 {
     }
 }
 
+/// Half-life for the `freshness` signal: how long until a claim's recency
+/// contribution decays to half strength. Spec section 65 requires the
+/// signal to exist, not a specific decay curve — six months is a reasonable
+/// default for a knowledge graph about software/agents (fast-moving enough
+/// that a year-old claim shouldn't read as current, slow enough that a
+/// two-week-old claim isn't penalized). Exponential decay rather than a
+/// hard cutoff, so there's no arbitrary cliff where a claim flips from
+/// "fresh" to "stale" overnight.
+const FRESHNESS_HALF_LIFE_SECONDS: f64 = 180.0 * 86_400.0;
+
+/// Exponential recency decay from a single timestamp: 1.0 at `age == 0`,
+/// 0.5 at one half-life, approaching 0.0 as the claim ages further. Negative
+/// age (clock skew, or a caller-supplied `observed_at` in the future) is
+/// clamped to 0 rather than yielding a freshness above 1.0.
+fn freshness_from_age(now: i64, timestamp: i64) -> f32 {
+    let age_seconds = (now - timestamp).max(0) as f64;
+    2.0f64.powf(-age_seconds / FRESHNESS_HALF_LIFE_SECONDS) as f32
+}
+
 /// Per-signal corroboration breakdown for one edge (spec sections 62, 65) —
 /// deliberately not collapsed into one reputation number (section 65: "Do
 /// not collapse everything into one global reputation number").
@@ -121,6 +140,10 @@ pub struct EdgeCorroboration {
     pub agreement: f32,
     pub evidence_strength: f32,
     pub source_independence: f32,
+    /// Exponential recency decay (half-life above) from the most recently
+    /// observed-or-asserted active assertion. 0.0 when there are no active
+    /// assertions — nothing current backs the edge at all.
+    pub freshness: f32,
 }
 
 impl GraphService {
@@ -212,6 +235,13 @@ impl GraphService {
             (base_agreement + obs_agreement) / 2.0
         };
 
+        let freshness = active
+            .iter()
+            .map(|a| a.observed_at.unwrap_or(a.asserted_at))
+            .max()
+            .map(|ts| freshness_from_age(self.now(), ts))
+            .unwrap_or(0.0);
+
         Ok(EdgeCorroboration {
             edge_id,
             total_assertions: all_assertions.len(),
@@ -222,6 +252,7 @@ impl GraphService {
             agreement,
             evidence_strength,
             source_independence,
+            freshness,
         })
     }
 }
@@ -229,6 +260,24 @@ impl GraphService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn freshness_is_one_at_zero_age() {
+        assert_eq!(freshness_from_age(1_000, 1_000), 1.0);
+    }
+
+    #[test]
+    fn freshness_is_half_at_one_half_life() {
+        let now = 1_000_000_000;
+        let half_life = FRESHNESS_HALF_LIFE_SECONDS as i64;
+        let got = freshness_from_age(now, now - half_life);
+        assert!((got - 0.5).abs() < 1e-4, "got {got}");
+    }
+
+    #[test]
+    fn freshness_clamps_future_timestamps_to_full_strength() {
+        assert_eq!(freshness_from_age(1_000, 5_000), 1.0);
+    }
 
     #[test]
     fn same_github_owner_collapses_to_one_group() {
