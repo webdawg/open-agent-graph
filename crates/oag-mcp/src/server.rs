@@ -9,8 +9,8 @@ use rmcp::{tool, tool_router, ErrorData, ServerHandler};
 use serde_json::json;
 
 use crate::params::{
-    AddEvidenceParams, AssertParams, DisputeParams, EvidenceParam, HistoryParams, NodeIdParams,
-    ResolveParams, RetractParams, SearchParams, SubgraphParams, VerifyParams,
+    AddEvidenceParams, AssertParams, DisputeParams, EdgeIdParams, EvidenceParam, HistoryParams,
+    NodeIdParams, ResolveParams, RetractParams, SearchParams, SubgraphParams, VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -129,6 +129,20 @@ impl OagMcpServer {
         Ok(Json(json!({ "edges": edges })))
     }
 
+    #[tool(description = "Get corroboration signals for one edge: how many independent sources (not just how many assertions) back it, how strong the evidence is, and how much verification/dispute agreement it has. Never collapsed into one score — inspect each signal.")]
+    async fn graph_get_corroboration(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<EdgeIdParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.authenticate_read(&parts).await?;
+        let edge_id = p.edge_id.parse().map_err(|_| ErrorData::invalid_params("invalid edge_id", None))?;
+        let corroboration = self.graph.get_edge_corroboration(edge_id).await.map_err(map_err)?;
+        let value = serde_json::to_value(&corroboration)
+            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+        Ok(Json(value))
+    }
+
     #[tool(description = "Get a compact semantic neighborhood (nodes, edges, assertions) around a node, out to a given depth.")]
     async fn graph_get_subgraph(
         &self,
@@ -217,8 +231,10 @@ impl OagMcpServer {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs() as i64;
+        let result = oag_core::VerifyResult::parse(&p.result)
+            .ok_or_else(|| ErrorData::invalid_params("unknown verify result, expected one of confirmed/not_confirmed/changed/contradicted/unreachable/unknown", None))?;
         self.graph
-            .verify_assertion(&auth, assertion_id, p.result, observed_at)
+            .verify_assertion(&auth, assertion_id, result, observed_at)
             .await
             .map_err(map_err)?;
         Ok(Json(json!({ "status": "accepted" })))

@@ -17,3 +17,4 @@ tracing.workspace = true
 blake3.workspace = true
 hex.workspace = true
 tokio.workspace = true
+url.workspace = true

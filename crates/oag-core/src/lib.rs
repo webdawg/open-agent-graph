@@ -8,7 +8,7 @@ pub mod node;
 pub mod predicate;
 
 pub use actor::{Actor, ActorType, Permission};
-pub use assertion::{Assertion, AssertionStatus, ExtractionMethod};
+pub use assertion::{Assertion, AssertionStatus, ExtractionMethod, VerifyResult};
 pub use canonicalize::{canonical_identifier, canonicalize_url, generate_uuid_identifier};
 pub use edge::Edge;
 pub use evidence::{Evidence, EvidenceType};

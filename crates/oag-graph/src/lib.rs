@@ -1,4 +1,5 @@
 pub mod assert;
+pub mod corroboration;
 pub mod error;
 pub mod history;
 pub mod identifier;
@@ -11,6 +12,7 @@ pub mod subgraph;
 mod tests;
 
 pub use assert::{AssertInput, EvidenceInput};
+pub use corroboration::EdgeCorroboration;
 pub use error::GraphError;
 pub use history::HistoryEntry;
 pub use resolve::ResolveOutcome;

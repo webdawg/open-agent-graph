@@ -1,4 +1,4 @@
-use oag_core::{AliasType, AssertionId, ExtractionMethod, NodeId, Permission};
+use oag_core::{AliasType, AssertionId, ExtractionMethod, NodeId, Permission, VerifyResult};
 use oag_events::payload::{
     AddEvidencePayload, AssertRelationPayload, DisputeAssertionPayload, NodeAliasPayload,
     RetractAssertionPayload, SupersedeAssertionPayload, VerifyAssertionPayload,
@@ -218,12 +218,15 @@ impl GraphService {
         Ok(())
     }
 
-    /// Requires `graph:verify`.
+    /// Requires `graph:verify`. `result` is validated against spec section
+    /// 37's fixed vocabulary here, at the trust boundary — everything
+    /// downstream (storage, corroboration's `agreement` signal) can then
+    /// trust the string in the `observations` table without re-checking it.
     pub async fn verify_assertion(
         &self,
         auth: &AuthContext,
         assertion_id: AssertionId,
-        result: String,
+        result: VerifyResult,
         observed_at: i64,
     ) -> Result<(), GraphError> {
         auth.require(Permission::GraphVerify)?;
@@ -233,7 +236,7 @@ impl GraphService {
             EventPayload::VerifyAssertion(VerifyAssertionPayload {
                 assertion_id: assertion_id.to_hex(),
                 observer_actor_id: auth.actor_id.to_hex(),
-                result,
+                result: result.as_str().to_string(),
                 observed_at,
             }),
             self.now(),
@@ -345,5 +348,32 @@ impl GraphService {
             .await
             .map_err(oag_storage::StorageError::from)?;
         Ok(oag_storage::repo::assertions::list_evidence(&mut conn, assertion_id).await?)
+    }
+
+    /// All verification observations recorded against an assertion (spec
+    /// section 37/81 — the explainability chain's last unsurfaced hop).
+    pub async fn list_observations(
+        &self,
+        assertion_id: AssertionId,
+    ) -> Result<Vec<oag_storage::repo::assertions::Observation>, GraphError> {
+        let mut conn = self
+            .pool()
+            .acquire()
+            .await
+            .map_err(oag_storage::StorageError::from)?;
+        Ok(oag_storage::repo::assertions::list_observations(&mut conn, assertion_id).await?)
+    }
+
+    /// All disputes filed against an assertion (spec section 35/81).
+    pub async fn list_disputes(
+        &self,
+        assertion_id: AssertionId,
+    ) -> Result<Vec<oag_storage::repo::assertions::Dispute>, GraphError> {
+        let mut conn = self
+            .pool()
+            .acquire()
+            .await
+            .map_err(oag_storage::StorageError::from)?;
+        Ok(oag_storage::repo::assertions::list_disputes(&mut conn, assertion_id).await?)
     }
 }

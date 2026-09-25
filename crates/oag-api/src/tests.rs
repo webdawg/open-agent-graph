@@ -154,6 +154,39 @@ async fn full_rest_vertical_slice() {
     let body = body_json(response).await;
     assert_eq!(body["nodes"].as_array().unwrap().len(), 2);
     assert_eq!(body["edges"].as_array().unwrap().len(), 1);
+    let edge_id = body["edges"][0]["id"].as_str().unwrap().to_string();
+
+    // corroboration for that edge: one assertion, one evidence-backed source
+    // group, no disputes/observations yet.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/edges/{edge_id}/corroboration"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    assert_eq!(body["active_assertions"], 1);
+    assert_eq!(body["source_groups"].as_array().unwrap().len(), 1);
+    assert_eq!(body["agreement"], 1.0);
+
+    // verify the assertion; observations should now surface on GET assertion.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/assertions/{assertion_id}/verify"))
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "result": "confirmed" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
 
     // dispute then retract.
     let response = app
@@ -195,7 +228,7 @@ async fn full_rest_vertical_slice() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     let body = body_json(response).await;
-    assert_eq!(body["history"].as_array().unwrap().len(), 4);
+    assert_eq!(body["history"].as_array().unwrap().len(), 5); // assert, evidence, verify, dispute, retract
 
     let response = app
         .clone()
@@ -209,6 +242,10 @@ async fn full_rest_vertical_slice() {
         .unwrap();
     let body = body_json(response).await;
     assert_eq!(body["assertion"]["status"], "retracted");
+    assert_eq!(body["observations"].as_array().unwrap().len(), 1);
+    assert_eq!(body["observations"][0]["result"], "confirmed");
+    assert_eq!(body["disputes"].as_array().unwrap().len(), 1);
+    assert_eq!(body["disputes"][0]["reason"], "outdated");
 }
 
 #[tokio::test]

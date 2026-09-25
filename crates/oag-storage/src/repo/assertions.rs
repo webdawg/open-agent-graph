@@ -136,12 +136,27 @@ pub async fn list_evidence(
     rows.into_iter().map(row_to_evidence).collect()
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Dispute {
     pub id: oag_core::EventId,
     pub disputed_assertion_id: AssertionId,
     pub disputing_actor_id: ActorId,
     pub reason: Option<String>,
     pub created_at: i64,
+}
+
+fn row_to_dispute(row: DisputeRow) -> Result<Dispute, StorageError> {
+    Ok(Dispute {
+        id: oag_core::EventId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.id)?)),
+        disputed_assertion_id: AssertionId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(
+            &row.disputed_assertion_id,
+        )?)),
+        disputing_actor_id: ActorId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(
+            &row.disputing_actor_id,
+        )?)),
+        reason: row.reason,
+        created_at: row.created_at,
+    })
 }
 
 pub async fn insert_dispute(conn: &mut SqliteConnection, d: &Dispute) -> Result<(), StorageError> {
@@ -162,13 +177,13 @@ pub async fn insert_dispute(conn: &mut SqliteConnection, d: &Dispute) -> Result<
 pub async fn list_disputes(
     conn: &mut SqliteConnection,
     assertion_id: AssertionId,
-) -> Result<Vec<DisputeRow>, StorageError> {
+) -> Result<Vec<Dispute>, StorageError> {
     let rows: Vec<DisputeRow> =
         sqlx::query_as("SELECT * FROM assertion_disputes WHERE disputed_assertion_id = ?")
             .bind(assertion_id.as_hash().as_bytes().to_vec())
             .fetch_all(&mut *conn)
             .await?;
-    Ok(rows)
+    rows.into_iter().map(row_to_dispute).collect()
 }
 
 pub struct Retraction {
@@ -235,6 +250,7 @@ pub async fn insert_supersession(
     Ok(())
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Observation {
     pub id: oag_core::EventId,
     pub assertion_id: AssertionId,
@@ -242,6 +258,21 @@ pub struct Observation {
     pub result: String,
     pub observed_at: i64,
     pub created_at: i64,
+}
+
+fn row_to_observation(row: ObservationRow) -> Result<Observation, StorageError> {
+    Ok(Observation {
+        id: oag_core::EventId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.id)?)),
+        assertion_id: AssertionId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(
+            &row.assertion_id,
+        )?)),
+        observer_actor_id: ActorId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(
+            &row.observer_actor_id,
+        )?)),
+        result: row.result,
+        observed_at: row.observed_at,
+        created_at: row.created_at,
+    })
 }
 
 pub async fn insert_observation(
@@ -266,11 +297,11 @@ pub async fn insert_observation(
 pub async fn list_observations(
     conn: &mut SqliteConnection,
     assertion_id: AssertionId,
-) -> Result<Vec<ObservationRow>, StorageError> {
+) -> Result<Vec<Observation>, StorageError> {
     let rows: Vec<ObservationRow> =
         sqlx::query_as("SELECT * FROM observations WHERE assertion_id = ?")
             .bind(assertion_id.as_hash().as_bytes().to_vec())
             .fetch_all(&mut *conn)
             .await?;
-    Ok(rows)
+    rows.into_iter().map(row_to_observation).collect()
 }

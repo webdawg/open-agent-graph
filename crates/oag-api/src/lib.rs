@@ -52,6 +52,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/assertions/{id}/retract",
             post(handlers::retract_assertion),
         )
+        .route(
+            "/api/v1/edges/{id}/corroboration",
+            get(handlers::get_edge_corroboration),
+        )
         .route("/api/v1/resolve", post(handlers::resolve))
         .route("/api/v1/subgraph", get(handlers::subgraph))
         .route("/api/v1/history/{object_type}/{id}", get(handlers::history))

@@ -143,6 +143,14 @@ pub async fn assertion_get(data_dir: &Path, id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn edge_corroboration(data_dir: &Path, id: &str) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let edge_id = id.parse().map_err(|_| anyhow::anyhow!("invalid edge id '{id}'"))?;
+    let corroboration = graph.get_edge_corroboration(edge_id).await?;
+    println!("{}", serde_json::to_string_pretty(&corroboration)?);
+    Ok(())
+}
+
 pub async fn identity_show(data_dir: &Path) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
     println!("peer_id: {}", graph.identity().peer_id());

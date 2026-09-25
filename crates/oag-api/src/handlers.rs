@@ -1,7 +1,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use oag_core::{AssertionId, NodeId};
+use oag_core::{AssertionId, EdgeId, NodeId};
 use serde_json::json;
 
 use crate::dto::{
@@ -73,7 +73,25 @@ pub async fn get_assertion(
         .await?
         .ok_or_else(|| ApiError(oag_graph::GraphError::NotFound(format!("assertion {id}"))))?;
     let evidence = state.graph.list_evidence(assertion_id).await?;
-    Ok(Json(json!({ "assertion": assertion, "evidence": evidence })))
+    let observations = state.graph.list_observations(assertion_id).await?;
+    let disputes = state.graph.list_disputes(assertion_id).await?;
+    Ok(Json(json!({
+        "assertion": assertion,
+        "evidence": evidence,
+        "observations": observations,
+        "disputes": disputes,
+    })))
+}
+
+pub async fn get_edge_corroboration(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Json<oag_graph::EdgeCorroboration>> {
+    authenticate_read(&headers, &state.graph).await?;
+    let edge_id = parse_edge_id(&id)?;
+    let corroboration = state.graph.get_edge_corroboration(edge_id).await?;
+    Ok(Json(corroboration))
 }
 
 pub async fn create_assertion(
@@ -111,9 +129,15 @@ pub async fn verify_assertion(
     let auth = authenticate(&headers, &state.graph).await?;
     let assertion_id = parse_assertion_id(&id)?;
     let observed_at = now_or(body.observed_at)?;
+    let result = oag_core::VerifyResult::parse(&body.result).ok_or_else(|| {
+        ApiError(oag_graph::GraphError::InvalidInput(format!(
+            "unknown verify result '{}', expected one of confirmed/not_confirmed/changed/contradicted/unreachable/unknown",
+            body.result
+        )))
+    })?;
     state
         .graph
-        .verify_assertion(&auth, assertion_id, body.result, observed_at)
+        .verify_assertion(&auth, assertion_id, result, observed_at)
         .await?;
     Ok(Json(json!({ "status": "accepted" })))
 }
@@ -206,4 +230,9 @@ fn parse_node_id(s: &str) -> Result<NodeId, ApiError> {
 fn parse_assertion_id(s: &str) -> Result<AssertionId, ApiError> {
     s.parse()
         .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid assertion id '{s}'"))))
+}
+
+fn parse_edge_id(s: &str) -> Result<EdgeId, ApiError> {
+    s.parse()
+        .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid edge id '{s}'"))))
 }

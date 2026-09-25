@@ -397,3 +397,210 @@ async fn declare_alias_rejects_oversized_alias() {
         .await;
     assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
 }
+
+async fn edge_id_of(service: &GraphService, assertion_id: oag_core::AssertionId) -> oag_core::EdgeId {
+    service.get_assertion(assertion_id).await.unwrap().unwrap().edge_id
+}
+
+#[tokio::test]
+async fn corroboration_on_unknown_edge_is_not_found() {
+    let (service, _auth) = service_with_admin("corroboration-not-found").await;
+    let bogus_edge_id = oag_core::EdgeId::derive(b"never-created");
+    let result = service.get_edge_corroboration(bogus_edge_id).await;
+    assert!(matches!(result, Err(crate::error::GraphError::NotFound(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn single_unevidenced_assertion_gives_baseline_corroboration() {
+    let (service, auth) = service_with_admin("corroboration-baseline").await;
+    let assertion_id = service.assert(&auth, sample_input("https://example.com/solo-claim")).await.unwrap();
+    let edge_id = edge_id_of(&service, assertion_id).await;
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(c.active_assertions, 1);
+    assert_eq!(c.disputed_assertions, 0);
+    assert_eq!(c.distinct_actors, 1);
+    assert_eq!(c.source_groups.len(), 1, "a bare claim still counts as one (weak) source group");
+    assert_eq!(c.source_independence, 0.0, "one source group is not independent corroboration");
+    assert_eq!(c.evidence_strength, 0.0, "no evidence backs the claim");
+    assert_eq!(c.agreement, 1.0, "nothing disputes or contradicts it");
+}
+
+#[tokio::test]
+async fn two_actors_without_evidence_give_two_source_groups() {
+    let (service, auth_a) = service_with_admin("corroboration-two-actors").await;
+    let auth_b = declare_actor_with_perms(&service, "actor-b", vec![Permission::GraphAssert]).await;
+
+    let a1 = service.assert(&auth_a, sample_input("https://example.com/two-actors")).await.unwrap();
+    service.assert(&auth_b, sample_input("https://example.com/two-actors")).await.unwrap();
+    let edge_id = edge_id_of(&service, a1).await;
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(c.active_assertions, 2);
+    assert_eq!(c.distinct_actors, 2);
+    assert_eq!(c.source_groups.len(), 2);
+    assert_eq!(c.source_independence, 0.5);
+}
+
+fn evidenced_input(subject: &str, uri: &str, evidence_type: &str) -> AssertInput {
+    AssertInput {
+        evidence: vec![EvidenceInput {
+            uri: Some(uri.to_string()),
+            evidence_type: Some(evidence_type.to_string()),
+            ..Default::default()
+        }],
+        ..sample_input(subject)
+    }
+}
+
+#[tokio::test]
+async fn common_control_evidence_collapses_source_independence() {
+    // The literal spec section 62 scenario: two actors, two evidence items,
+    // both controlled by the same GitHub repo owner — not two independent
+    // confirmations.
+    let (service, auth_a) = service_with_admin("corroboration-common-control").await;
+    let auth_b = declare_actor_with_perms(&service, "actor-b", vec![Permission::GraphAssert]).await;
+
+    let a1 = service
+        .assert(
+            &auth_a,
+            evidenced_input(
+                "https://example.com/common-control",
+                "https://github.com/same-owner/repo-a",
+                "repository",
+            ),
+        )
+        .await
+        .unwrap();
+    service
+        .assert(
+            &auth_b,
+            evidenced_input(
+                "https://example.com/common-control",
+                "https://github.com/same-owner/repo-b",
+                "repository",
+            ),
+        )
+        .await
+        .unwrap();
+    let edge_id = edge_id_of(&service, a1).await;
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(c.distinct_actors, 2);
+    assert_eq!(c.source_groups, vec!["github.com/same-owner".to_string()]);
+    assert_eq!(c.source_independence, 0.0, "one controller behind both sources");
+}
+
+#[tokio::test]
+async fn independent_evidence_domains_raise_source_independence() {
+    let (service, auth_a) = service_with_admin("corroboration-independent").await;
+    let auth_b = declare_actor_with_perms(&service, "actor-b", vec![Permission::GraphAssert]).await;
+
+    let a1 = service
+        .assert(
+            &auth_a,
+            evidenced_input(
+                "https://example.com/independent",
+                "https://github.com/owner-a/repo",
+                "repository",
+            ),
+        )
+        .await
+        .unwrap();
+    service
+        .assert(
+            &auth_b,
+            evidenced_input("https://example.com/independent", "https://github.com/owner-b/repo", "repository"),
+        )
+        .await
+        .unwrap();
+    let edge_id = edge_id_of(&service, a1).await;
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(c.source_groups.len(), 2);
+    assert_eq!(c.source_independence, 0.5);
+}
+
+#[tokio::test]
+async fn specification_evidence_scores_higher_than_web_page() {
+    let (service, auth_a) = service_with_admin("corroboration-evidence-strength").await;
+    let auth_b = declare_actor_with_perms(&service, "actor-b", vec![Permission::GraphAssert]).await;
+
+    let a1 = service
+        .assert(
+            &auth_a,
+            evidenced_input(
+                "https://example.com/evidence-strength",
+                "https://spec.example.org/doc",
+                "specification",
+            ),
+        )
+        .await
+        .unwrap();
+    service
+        .assert(
+            &auth_b,
+            evidenced_input("https://example.com/evidence-strength", "https://blog.example.net/post", "web_page"),
+        )
+        .await
+        .unwrap();
+    let edge_id = edge_id_of(&service, a1).await;
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    // mean of the Specification (1.0) and WebPage (0.3) weights.
+    assert!((c.evidence_strength - 0.65).abs() < 1e-6, "got {}", c.evidence_strength);
+}
+
+#[tokio::test]
+async fn dispute_lowers_agreement_via_active_disputed_ratio() {
+    let (service, auth_a) = service_with_admin("corroboration-dispute").await;
+    let auth_b = declare_actor_with_perms(&service, "actor-b", vec![Permission::GraphAssert]).await;
+
+    let a1 = service.assert(&auth_a, sample_input("https://example.com/disputed-edge")).await.unwrap();
+    service.assert(&auth_b, sample_input("https://example.com/disputed-edge")).await.unwrap();
+    let edge_id = edge_id_of(&service, a1).await;
+
+    let before = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(before.agreement, 1.0);
+
+    service.dispute_assertion(&auth_b, a1, Some("outdated".into())).await.unwrap();
+
+    let after = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(after.active_assertions, 1);
+    assert_eq!(after.disputed_assertions, 1);
+    assert_eq!(after.agreement, 0.5);
+}
+
+#[tokio::test]
+async fn confirmed_observation_keeps_agreement_high() {
+    let (service, auth) = service_with_admin("corroboration-confirmed").await;
+    let verifier = declare_actor_with_perms(&service, "verifier", vec![Permission::GraphVerify]).await;
+
+    let assertion_id = service.assert(&auth, sample_input("https://example.com/confirmed-edge")).await.unwrap();
+    let edge_id = edge_id_of(&service, assertion_id).await;
+
+    service
+        .verify_assertion(&verifier, assertion_id, oag_core::VerifyResult::Confirmed, 0)
+        .await
+        .unwrap();
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(c.agreement, 1.0);
+}
+
+#[tokio::test]
+async fn contradicted_observation_lowers_agreement() {
+    let (service, auth) = service_with_admin("corroboration-contradicted").await;
+    let verifier = declare_actor_with_perms(&service, "verifier", vec![Permission::GraphVerify]).await;
+
+    let assertion_id = service.assert(&auth, sample_input("https://example.com/contradicted-edge")).await.unwrap();
+    let edge_id = edge_id_of(&service, assertion_id).await;
+
+    service
+        .verify_assertion(&verifier, assertion_id, oag_core::VerifyResult::Contradicted, 0)
+        .await
+        .unwrap();
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert!((c.agreement - 0.5).abs() < 1e-6, "got {}", c.agreement);
+}

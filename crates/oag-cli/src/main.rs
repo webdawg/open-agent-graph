@@ -49,6 +49,11 @@ enum Command {
         #[command(subcommand)]
         command: AssertionCommand,
     },
+    /// Edge inspection commands.
+    Edge {
+        #[command(subcommand)]
+        command: EdgeCommand,
+    },
     /// Peer identity commands.
     Identity {
         #[command(subcommand)]
@@ -97,6 +102,17 @@ enum NodeCommand {
 #[derive(Subcommand)]
 enum AssertionCommand {
     Get {
+        id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum EdgeCommand {
+    /// Corroboration signals for one edge: source independence, evidence
+    /// strength, and agreement — never collapsed into a single score.
+    Corroboration {
         id: String,
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
@@ -181,6 +197,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Assertion { command: AssertionCommand::Get { id, data_dir } } => {
             commands::assertion_get(&data_dir, &id).await
+        }
+        Command::Edge { command: EdgeCommand::Corroboration { id, data_dir } } => {
+            commands::edge_corroboration(&data_dir, &id).await
         }
         Command::Identity { command: IdentityCommand::Show { data_dir } } => {
             commands::identity_show(&data_dir).await

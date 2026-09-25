@@ -75,6 +75,45 @@ impl AssertionStatus {
     }
 }
 
+/// The result of an automated or manual verification pass against an
+/// assertion (spec section 37) — stored per-observation in the `observations`
+/// table, and the raw signal `agreement` (spec section 65) is computed from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VerifyResult {
+    Confirmed,
+    NotConfirmed,
+    Changed,
+    Contradicted,
+    Unreachable,
+    Unknown,
+}
+
+impl VerifyResult {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            VerifyResult::Confirmed => "confirmed",
+            VerifyResult::NotConfirmed => "not_confirmed",
+            VerifyResult::Changed => "changed",
+            VerifyResult::Contradicted => "contradicted",
+            VerifyResult::Unreachable => "unreachable",
+            VerifyResult::Unknown => "unknown",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "confirmed" => VerifyResult::Confirmed,
+            "not_confirmed" => VerifyResult::NotConfirmed,
+            "changed" => VerifyResult::Changed,
+            "contradicted" => VerifyResult::Contradicted,
+            "unreachable" => VerifyResult::Unreachable,
+            "unknown" => VerifyResult::Unknown,
+            _ => return None,
+        })
+    }
+}
+
 /// An Actor claims an Edge is valid (spec section 21). This is the
 /// fundamental knowledge contribution: it means "Actor A states relationship
 /// R", never "Relationship R is globally true" (spec section 22).
@@ -86,11 +125,38 @@ pub struct Assertion {
     pub edge_id: EdgeId,
     pub actor_id: ActorId,
     /// The submitting actor's own confidence in the claim. This is NOT the
-    /// system's confidence (spec section 13/22) — no derived system-wide
-    /// score is computed in this milestone.
+    /// system's confidence (spec section 13/22) — derived ranking signals
+    /// (`agreement`, `evidence_strength`, `source_independence`, ...) live
+    /// separately at the edge level (`oag_graph::EdgeCorroboration`, spec
+    /// section 65), never collapsed into this field.
     pub actor_confidence: Option<f32>,
     pub observed_at: Option<i64>,
     pub asserted_at: i64,
     pub extraction_method: ExtractionMethod,
     pub status: AssertionStatus,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_result_round_trips() {
+        for r in [
+            VerifyResult::Confirmed,
+            VerifyResult::NotConfirmed,
+            VerifyResult::Changed,
+            VerifyResult::Contradicted,
+            VerifyResult::Unreachable,
+            VerifyResult::Unknown,
+        ] {
+            assert_eq!(VerifyResult::parse(r.as_str()), Some(r));
+        }
+    }
+
+    #[test]
+    fn verify_result_rejects_unknown_strings() {
+        assert_eq!(VerifyResult::parse("definitely-true"), None);
+        assert_eq!(VerifyResult::parse(""), None);
+    }
 }
