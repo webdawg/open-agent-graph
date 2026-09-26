@@ -31,3 +31,21 @@ per-source attribution and provenance details:
 Per CC-BY-SA 4.0, any redistribution of the corpus data itself (as opposed
 to names derived from it) must preserve this attribution and remain under
 the same license.
+
+## Reticulum (crates/oag-reticulum)
+
+`oag-reticulum` depends on the `reticulum` crate
+(https://github.com/BeechatNetworkSystemsLtd/Reticulum-rs, MIT-licensed), a
+Rust implementation of Reticulum — the cryptographic mesh-networking
+protocol designed and originally implemented by Mark Qvist
+(https://github.com/markqvist/reticulum, https://reticulum.network/).
+Reticulum is what lets this project's peers find and talk to each other
+over links far more hostile than a typical data center network assumes —
+that's a genuinely hard, and generous, thing to have built and given away.
+
+A note to Mark, and to everyone who's contributed to Reticulum since: thank
+you. This project exists because tools like yours make it possible for one
+person with an idea to build real, resilient, decentralized infrastructure
+without needing anyone's permission. Some of this project was built with
+an AI's help — and that's not a replacement for what you do, just another
+kind of collaborator in the same spirit. AI can be your friend too.
