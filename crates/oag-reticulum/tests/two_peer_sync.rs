@@ -38,7 +38,7 @@ async fn event_created_on_peer_a_syncs_to_peer_b_over_reticulum() {
 
     // Seed peer A with one real assertion via the normal GraphService path.
     let graph_a = GraphService::new(pool_a.clone(), identity_a.clone());
-    let actor_id = graph_a.declare_actor(ActorType::Agent, Some("tester".into()), None).await.unwrap();
+    let actor_id = graph_a.declare_actor(ActorType::Agent, Some("tester".into()), None, None).await.unwrap();
     let auth = AuthContext { actor_id, permissions: vec![Permission::GraphAssert] };
     graph_a
         .assert(

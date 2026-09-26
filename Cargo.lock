@@ -1795,6 +1795,7 @@ dependencies = [
  "axum",
  "clap",
  "figment",
+ "hex",
  "oag-api",
  "oag-core",
  "oag-crawler",

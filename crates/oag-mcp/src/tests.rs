@@ -44,7 +44,7 @@ async fn spawn_mcp_server(name: &str) -> (String, String) {
     let graph = Arc::new(GraphService::new(pool, identity));
 
     let actor_id = graph
-        .declare_actor(ActorType::Agent, Some("mcp-test".into()), None)
+        .declare_actor(ActorType::Agent, Some("mcp-test".into()), None, None)
         .await
         .unwrap();
     let raw_key = graph

@@ -228,6 +228,9 @@ pub async fn key_create(
     actor_type: &str,
     name: Option<String>,
     permissions: Vec<String>,
+    identity_uri: Option<String>,
+    public_key: Option<String>,
+    key_proof: Option<String>,
 ) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
     let actor_type = ActorType::parse(actor_type)
@@ -237,7 +240,23 @@ pub async fn key_create(
         .map(|p| Permission::parse(p).ok_or_else(|| anyhow::anyhow!("unknown permission '{p}'")))
         .collect::<Result<_, _>>()?;
 
-    let actor_id = graph.declare_actor(actor_type, name, None).await?;
+    let public_key_proof = match (public_key, key_proof) {
+        (Some(public_key_hex), Some(key_proof_hex)) => {
+            let public_key: [u8; 32] = hex::decode(&public_key_hex)
+                .map_err(|e| anyhow::anyhow!("invalid --public-key hex: {e}"))?
+                .try_into()
+                .map_err(|v: Vec<u8>| anyhow::anyhow!("--public-key must be 32 bytes, got {}", v.len()))?;
+            let signature: [u8; 64] = hex::decode(&key_proof_hex)
+                .map_err(|e| anyhow::anyhow!("invalid --key-proof hex: {e}"))?
+                .try_into()
+                .map_err(|v: Vec<u8>| anyhow::anyhow!("--key-proof must be 64 bytes, got {}", v.len()))?;
+            Some(oag_graph::PublicKeyProof { public_key, signature })
+        }
+        (None, None) => None,
+        _ => unreachable!("clap's requires= already enforces both-or-neither"),
+    };
+
+    let actor_id = graph.declare_actor(actor_type, name, identity_uri, public_key_proof).await?;
     let raw_key = graph.create_key(actor_id, permissions).await?;
 
     println!("actor_id: {}", actor_id.to_hex());

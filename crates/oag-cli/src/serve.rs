@@ -74,7 +74,7 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
 
 async fn bootstrap_admin(graph: &GraphService) -> anyhow::Result<()> {
     let actor_id = graph
-        .declare_actor(ActorType::Service, Some("admin".to_string()), None)
+        .declare_actor(ActorType::Service, Some("admin".to_string()), None, None)
         .await?;
     let raw_key = graph.create_key(actor_id, vec![Permission::Admin]).await?;
 

@@ -161,6 +161,20 @@ enum KeyCommand {
         /// Repeatable, e.g. --permission graph:read --permission graph:assert
         #[arg(long = "permission")]
         permissions: Vec<String>,
+        /// Hex-encoded Ed25519 public key this actor controls. Requires
+        /// --key-proof. The actor's identity_assurance ranking signal (spec
+        /// section 65) is only raised for actors registered with a verified
+        /// key, not a bare claim.
+        #[arg(long, requires = "key_proof")]
+        public_key: Option<String>,
+        /// Hex-encoded 64-byte signature proving possession of --public-key:
+        /// sign_with_domain(your_signing_key, "OAG:ACTOR_KEY_PROOF:v1:",
+        /// canonical_json_bytes({"actor_type": ..., "name": ..., "identity_uri": ...}))
+        /// using the exact --actor-type/--name/--identity-uri given here.
+        #[arg(long, requires = "public_key")]
+        key_proof: Option<String>,
+        #[arg(long)]
+        identity_uri: Option<String>,
     },
 }
 
@@ -242,8 +256,11 @@ async fn main() -> anyhow::Result<()> {
         Command::Identity { command: IdentityCommand::Backup { data_dir, out } } => {
             commands::identity_backup(&data_dir, &out).await
         }
-        Command::Key { command: KeyCommand::Create { data_dir, actor_type, name, permissions } } => {
-            commands::key_create(&data_dir, &actor_type, name, permissions).await
+        Command::Key {
+            command:
+                KeyCommand::Create { data_dir, actor_type, name, permissions, public_key, key_proof, identity_uri },
+        } => {
+            commands::key_create(&data_dir, &actor_type, name, permissions, identity_uri, public_key, key_proof).await
         }
         Command::Peer { command: PeerCommand::Add { url, data_dir } } => {
             commands::peer_add(&data_dir, &url).await

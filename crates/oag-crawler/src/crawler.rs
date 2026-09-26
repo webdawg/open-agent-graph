@@ -58,7 +58,7 @@ impl CrawlerService {
             Some(actor) => actor.id,
             None => {
                 self.graph
-                    .declare_actor(ActorType::Crawler, Some(CRAWLER_ACTOR_NAME.to_string()), None)
+                    .declare_actor(ActorType::Crawler, Some(CRAWLER_ACTOR_NAME.to_string()), None, None)
                     .await?
             }
         };

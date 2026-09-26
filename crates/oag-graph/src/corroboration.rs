@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 
-use oag_core::{Assertion, AssertionStatus, EdgeId, EvidenceType, VerifyResult};
-use oag_storage::repo::{assertions as assertions_repo, edges};
+use oag_core::{Actor, Assertion, AssertionStatus, EdgeId, EvidenceType, VerifyResult};
+use oag_storage::repo::{actors, assertions as assertions_repo, edges};
 
 use crate::error::GraphError;
 use crate::service::GraphService;
@@ -105,6 +105,21 @@ fn verify_result_weight(result: &str) -> f32 {
     }
 }
 
+/// How strong an actor's identity claim is (spec section 65's
+/// `identity_assurance` signal): a bare local actor (no cryptographic key,
+/// no external reference) proves nothing about who's really behind it; a
+/// verified public key (see `GraphService::declare_actor`'s
+/// `PublicKeyProof`) means the actor has demonstrably controlled the same
+/// keypair the whole time, independent of which peer relays its claims.
+fn identity_assurance_score(actor: &Actor) -> f32 {
+    match (actor.public_key.is_some(), actor.identity_uri.is_some()) {
+        (true, true) => 1.0,
+        (true, false) => 0.7,
+        (false, true) => 0.3,
+        (false, false) => 0.0,
+    }
+}
+
 /// Half-life for the `freshness` signal: how long until a claim's recency
 /// contribution decays to half strength. Spec section 65 requires the
 /// signal to exist, not a specific decay curve — six months is a reasonable
@@ -144,6 +159,12 @@ pub struct EdgeCorroboration {
     /// observed-or-asserted active assertion. 0.0 when there are no active
     /// assertions — nothing current backs the edge at all.
     pub freshness: f32,
+    /// Mean [`identity_assurance_score`] across the edge's distinct actors —
+    /// mean, not max, so one well-identified actor can't fully vouch for a
+    /// chorus of anonymous ones asserting the same edge (same reasoning as
+    /// `evidence_strength` averaging per source group rather than taking
+    /// the single best item).
+    pub identity_assurance: f32,
 }
 
 impl GraphService {
@@ -242,6 +263,20 @@ impl GraphService {
             .map(|ts| freshness_from_age(self.now(), ts))
             .unwrap_or(0.0);
 
+        let identity_assurance = if distinct_actors.is_empty() {
+            0.0
+        } else {
+            let mut total = 0.0f32;
+            for actor_id in &distinct_actors {
+                let score = actors::get_by_id(&mut conn, *actor_id)
+                    .await?
+                    .map(|actor| identity_assurance_score(&actor))
+                    .unwrap_or(0.0);
+                total += score;
+            }
+            total / distinct_actors.len() as f32
+        };
+
         Ok(EdgeCorroboration {
             edge_id,
             total_assertions: all_assertions.len(),
@@ -253,6 +288,7 @@ impl GraphService {
             evidence_strength,
             source_independence,
             freshness,
+            identity_assurance,
         })
     }
 }
@@ -277,6 +313,26 @@ mod tests {
     #[test]
     fn freshness_clamps_future_timestamps_to_full_strength() {
         assert_eq!(freshness_from_age(1_000, 5_000), 1.0);
+    }
+
+    fn actor_with(public_key: Option<[u8; 32]>, identity_uri: Option<&str>) -> Actor {
+        Actor {
+            id: oag_core::ActorId::derive(b"identity-assurance-test-actor"),
+            actor_type: oag_core::ActorType::Agent,
+            name: None,
+            public_key,
+            identity_uri: identity_uri.map(str::to_string),
+            metadata: serde_json::json!({}),
+            created_at: 0,
+        }
+    }
+
+    #[test]
+    fn identity_assurance_tiers() {
+        assert_eq!(identity_assurance_score(&actor_with(None, None)), 0.0);
+        assert_eq!(identity_assurance_score(&actor_with(None, Some("https://example.com/me"))), 0.3);
+        assert_eq!(identity_assurance_score(&actor_with(Some([1u8; 32]), None)), 0.7);
+        assert_eq!(identity_assurance_score(&actor_with(Some([1u8; 32]), Some("https://example.com/me"))), 1.0);
     }
 
     #[test]

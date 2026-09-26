@@ -24,7 +24,7 @@ async fn service_with_admin(name: &str) -> (GraphService, crate::service::AuthCo
     let service = GraphService::new(pool, identity);
 
     let actor_id = service
-        .declare_actor(ActorType::Agent, Some("admin".into()), None)
+        .declare_actor(ActorType::Agent, Some("admin".into()), None, None)
         .await
         .unwrap();
     service
@@ -136,7 +136,7 @@ async fn declare_actor_with_perms(
     permissions: Vec<Permission>,
 ) -> crate::service::AuthContext {
     let actor_id = service
-        .declare_actor(ActorType::Agent, Some(name.into()), None)
+        .declare_actor(ActorType::Agent, Some(name.into()), None, None)
         .await
         .unwrap();
     crate::service::AuthContext { actor_id, permissions }
@@ -647,4 +647,135 @@ async fn no_active_assertions_gives_zero_freshness() {
     let c = service.get_edge_corroboration(edge_id).await.unwrap();
     assert_eq!(c.active_assertions, 0);
     assert_eq!(c.freshness, 0.0);
+}
+
+fn sign_actor_key_proof(
+    signing_key: &oag_crypto::SigningKey,
+    actor_type: oag_core::ActorType,
+    name: Option<&str>,
+    identity_uri: Option<&str>,
+) -> crate::service::PublicKeyProof {
+    let message = crate::service::ActorKeyProofMessage { actor_type: actor_type.as_str(), name, identity_uri };
+    let canonical = oag_core::canonical_json_bytes(&message).unwrap();
+    let signature =
+        oag_crypto::sign_with_domain(signing_key, crate::service::ACTOR_KEY_PROOF_DOMAIN, &canonical);
+    crate::service::PublicKeyProof {
+        public_key: signing_key.verifying_key().to_bytes(),
+        signature: signature.to_bytes(),
+    }
+}
+
+#[tokio::test]
+async fn declare_actor_with_valid_public_key_proof_succeeds() {
+    let (service, _) = service_with_admin("actor-proof-valid").await;
+    let signing_key = oag_crypto::SigningKey::from_bytes(&oag_crypto::random_bytes_32());
+    let proof = sign_actor_key_proof(
+        &signing_key,
+        oag_core::ActorType::Agent,
+        Some("verified-actor"),
+        Some("https://example.com/verified-actor"),
+    );
+    let expected_public_key = signing_key.verifying_key().to_bytes();
+
+    let actor_id = service
+        .declare_actor(
+            oag_core::ActorType::Agent,
+            Some("verified-actor".into()),
+            Some("https://example.com/verified-actor".into()),
+            Some(proof),
+        )
+        .await
+        .unwrap();
+
+    let actor = service.get_actor(actor_id).await.unwrap().unwrap();
+    assert_eq!(actor.public_key, Some(expected_public_key));
+    assert_eq!(actor.identity_uri.as_deref(), Some("https://example.com/verified-actor"));
+}
+
+#[tokio::test]
+async fn declare_actor_rejects_tampered_signature() {
+    let (service, _) = service_with_admin("actor-proof-tampered").await;
+    let signing_key = oag_crypto::SigningKey::from_bytes(&oag_crypto::random_bytes_32());
+    let mut proof = sign_actor_key_proof(&signing_key, oag_core::ActorType::Agent, Some("actor-a"), None);
+    proof.signature[0] ^= 0xFF;
+
+    let result = service
+        .declare_actor(oag_core::ActorType::Agent, Some("actor-a".into()), None, Some(proof))
+        .await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn declare_actor_rejects_proof_signed_for_a_different_label() {
+    let (service, _) = service_with_admin("actor-proof-mismatch").await;
+    let signing_key = oag_crypto::SigningKey::from_bytes(&oag_crypto::random_bytes_32());
+    // Proof is signed for "actor-a"...
+    let proof = sign_actor_key_proof(&signing_key, oag_core::ActorType::Agent, Some("actor-a"), None);
+
+    // ...but the declaration claims a different name -- the signature must
+    // not transfer to a label it was never signed for.
+    let result = service
+        .declare_actor(oag_core::ActorType::Agent, Some("actor-b".into()), None, Some(proof))
+        .await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn declare_actor_rejects_a_public_key_that_did_not_produce_the_signature() {
+    let (service, _) = service_with_admin("actor-proof-wrong-key").await;
+    let signing_key = oag_crypto::SigningKey::from_bytes(&oag_crypto::random_bytes_32());
+    let mut proof = sign_actor_key_proof(&signing_key, oag_core::ActorType::Agent, Some("actor-c"), None);
+    proof.public_key = oag_crypto::random_bytes_32(); // claim someone else's key entirely
+
+    let result = service
+        .declare_actor(oag_core::ActorType::Agent, Some("actor-c".into()), None, Some(proof))
+        .await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn same_public_key_dedups_to_the_same_actor_id() {
+    let (service, _) = service_with_admin("actor-proof-dedup").await;
+    let signing_key = oag_crypto::SigningKey::from_bytes(&oag_crypto::random_bytes_32());
+
+    let first = service
+        .declare_actor(
+            oag_core::ActorType::Agent,
+            Some("dedup-actor".into()),
+            None,
+            Some(sign_actor_key_proof(&signing_key, oag_core::ActorType::Agent, Some("dedup-actor"), None)),
+        )
+        .await
+        .unwrap();
+    let second = service
+        .declare_actor(
+            oag_core::ActorType::Agent,
+            Some("dedup-actor".into()),
+            None,
+            Some(sign_actor_key_proof(&signing_key, oag_core::ActorType::Agent, Some("dedup-actor"), None)),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first, second, "re-declaring with the same key should dedup to the same ActorId");
+}
+
+#[tokio::test]
+async fn identity_assurance_is_the_mean_across_distinct_actors_not_the_max() {
+    let (service, auth_a) = service_with_admin("corroboration-identity-mean").await;
+
+    let signing_key = oag_crypto::SigningKey::from_bytes(&oag_crypto::random_bytes_32());
+    let proof = sign_actor_key_proof(&signing_key, oag_core::ActorType::Agent, Some("verified-b"), None);
+    let actor_b = service
+        .declare_actor(oag_core::ActorType::Agent, Some("verified-b".into()), None, Some(proof))
+        .await
+        .unwrap();
+    let auth_b = crate::service::AuthContext { actor_id: actor_b, permissions: vec![Permission::GraphAssert] };
+
+    let a1 = service.assert(&auth_a, sample_input("https://example.com/identity-mean")).await.unwrap();
+    service.assert(&auth_b, sample_input("https://example.com/identity-mean")).await.unwrap();
+    let edge_id = edge_id_of(&service, a1).await;
+
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    // bare admin actor (0.0) + verified-key-only actor (0.7) -> mean 0.35, not 0.7.
+    assert!((c.identity_assurance - 0.35).abs() < 1e-6, "got {}", c.identity_assurance);
 }

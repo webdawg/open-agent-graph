@@ -49,7 +49,7 @@ async fn spawn_peer(name: &str) -> ChaosPeer {
 
     let graph = Arc::new(GraphService::new(pool.clone(), identity));
     let actor_id = graph
-        .declare_actor(ActorType::Service, Some(format!("{name}-actor")), None)
+        .declare_actor(ActorType::Service, Some(format!("{name}-actor")), None, None)
         .await
         .unwrap();
     let auth = AuthContext {

@@ -1,11 +1,40 @@
 use oag_core::{Actor, ActorId, ActorType, Permission};
-use oag_crypto::PeerIdentity;
+use oag_crypto::{verify_with_domain, PeerIdentity, Signature, VerifyingKey};
 use oag_events::payload::{ActorDeclarePayload, ActorKeyAddPayload};
 use oag_events::{commit_local_event, EventPayload, ProjectionOutcome};
 use oag_storage::repo::actors;
 use oag_storage::SqlitePool;
+use serde::Serialize;
 
 use crate::error::GraphError;
+
+/// Domain prefix for the message an actor signs to prove possession of the
+/// private key behind a `PublicKeyProof` (spec section 13's domain
+/// separation, same pattern as event signing).
+pub(crate) const ACTOR_KEY_PROOF_DOMAIN: &str = "OAG:ACTOR_KEY_PROOF:v1:";
+
+/// `pub(crate)` (not just `pub`) so tests can construct the exact same
+/// message a real caller's tooling would sign, without duplicating and
+/// risking drift from the shape actually verified below.
+#[derive(Serialize)]
+pub(crate) struct ActorKeyProofMessage<'a> {
+    pub actor_type: &'a str,
+    pub name: Option<&'a str>,
+    pub identity_uri: Option<&'a str>,
+}
+
+/// Proof that the caller controls the private key behind `public_key`:
+/// `signature` must be `sign_with_domain(signing_key, "OAG:ACTOR_KEY_PROOF:v1:",
+/// canonical_json_bytes(&ActorKeyProofMessage { actor_type, name, identity_uri }))`
+/// — i.e. a signature over the *exact* `actor_type`/`name`/`identity_uri`
+/// being declared, binding the proof to this one declaration rather than
+/// letting a signature be replayed onto a different label for the same key.
+/// The private key itself never needs to touch this peer — the proof is
+/// produced entirely by the caller's own tooling.
+pub struct PublicKeyProof {
+    pub public_key: [u8; 32],
+    pub signature: [u8; 64],
+}
 
 /// The single service layer REST and MCP both call into (spec section 90) —
 /// no business logic lives in either transport's handlers.
@@ -94,13 +123,39 @@ impl GraphService {
     }
 
     /// Declare a new actor (spec section 25). Returns its (deterministic,
-    /// possibly-deduplicated) id.
+    /// possibly-deduplicated) id. `public_key_proof`, if given, must verify
+    /// against the exact `actor_type`/`name`/`identity_uri` supplied here
+    /// (see [`PublicKeyProof`]) — an invalid or mismatched proof is rejected
+    /// before anything is committed, exactly like the field-length checks in
+    /// `assert.rs`. A verified public key raises this actor's
+    /// `identity_assurance` ranking signal (spec section 65) and gives it a
+    /// stable, key-derived `ActorId` that dedups across repeat declarations.
     pub async fn declare_actor(
         &self,
         actor_type: ActorType,
         name: Option<String>,
         identity_uri: Option<String>,
+        public_key_proof: Option<PublicKeyProof>,
     ) -> Result<ActorId, GraphError> {
+        let public_key_hex = match &public_key_proof {
+            Some(proof) => {
+                let verifying_key = VerifyingKey::from_bytes(&proof.public_key)
+                    .map_err(|_| GraphError::InvalidInput("invalid public key bytes".to_string()))?;
+                let message = ActorKeyProofMessage {
+                    actor_type: actor_type.as_str(),
+                    name: name.as_deref(),
+                    identity_uri: identity_uri.as_deref(),
+                };
+                let canonical = oag_core::canonical_json_bytes(&message)
+                    .map_err(|e| GraphError::InvalidInput(format!("failed to canonicalize proof message: {e}")))?;
+                let signature = Signature::from_bytes(&proof.signature);
+                verify_with_domain(&verifying_key, ACTOR_KEY_PROOF_DOMAIN, &canonical, &signature)
+                    .map_err(|_| GraphError::InvalidInput("public key proof signature does not verify".to_string()))?;
+                Some(hex::encode(proof.public_key))
+            }
+            None => None,
+        };
+
         let now = self.now();
         let (_, outcome) = commit_local_event(
             &self.pool,
@@ -108,7 +163,7 @@ impl GraphService {
             EventPayload::ActorDeclare(ActorDeclarePayload {
                 actor_type: actor_type.as_str().to_string(),
                 name,
-                public_key: None,
+                public_key: public_key_hex,
                 identity_uri,
             }),
             now,

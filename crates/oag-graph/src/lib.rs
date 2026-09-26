@@ -16,5 +16,5 @@ pub use corroboration::EdgeCorroboration;
 pub use error::GraphError;
 pub use history::HistoryEntry;
 pub use resolve::ResolveOutcome;
-pub use service::{AuthContext, GraphService};
+pub use service::{AuthContext, GraphService, PublicKeyProof};
 pub use subgraph::Subgraph;

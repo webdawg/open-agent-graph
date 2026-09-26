@@ -36,7 +36,7 @@ async fn test_app(name: &str) -> (axum::Router, String) {
     let graph = Arc::new(GraphService::new(pool, identity));
 
     let actor_id = graph
-        .declare_actor(ActorType::Agent, Some("admin".into()), None)
+        .declare_actor(ActorType::Agent, Some("admin".into()), None, None)
         .await
         .unwrap();
     let raw_key = graph
