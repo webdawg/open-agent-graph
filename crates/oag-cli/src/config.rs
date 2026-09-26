@@ -31,6 +31,8 @@ pub struct FileConfig {
     pub federation: FederationSection,
     #[serde(default)]
     pub crawler: CrawlerSection,
+    #[serde(default)]
+    pub reticulum: ReticulumSection,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -191,6 +193,48 @@ impl CrawlerSection {
     }
 }
 
+/// `[reticulum]` — an additional, optional peer transport (this milestone's
+/// plan): OAG peers can still only replicate over HTTP by default.
+/// `enabled = false` by default given the dependency's pre-1.0 maturity —
+/// this is opt-in, not a replacement for `oag-sync`'s HTTP path.
+#[derive(Debug, Deserialize)]
+pub struct ReticulumSection {
+    #[serde(default)]
+    pub enabled: bool,
+    pub listen_tcp: Option<SocketAddr>,
+    pub uplink_tcp: Option<String>,
+    #[serde(default = "default_announce_interval_seconds")]
+    pub announce_interval_seconds: u64,
+}
+
+fn default_announce_interval_seconds() -> u64 {
+    300
+}
+
+impl Default for ReticulumSection {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            listen_tcp: None,
+            uplink_tcp: None,
+            announce_interval_seconds: default_announce_interval_seconds(),
+        }
+    }
+}
+
+impl ReticulumSection {
+    pub fn to_reticulum_config(&self) -> Option<oag_reticulum::ReticulumConfig> {
+        if !self.enabled {
+            return None;
+        }
+        Some(oag_reticulum::ReticulumConfig {
+            listen_tcp: self.listen_tcp,
+            uplink_tcp: self.uplink_tcp.clone(),
+            announce_interval: std::time::Duration::from_secs(self.announce_interval_seconds),
+        })
+    }
+}
+
 impl Default for FileConfig {
     fn default() -> Self {
         Self {
@@ -201,6 +245,7 @@ impl Default for FileConfig {
             network: NetworkSection::default(),
             federation: FederationSection::default(),
             crawler: CrawlerSection::default(),
+            reticulum: ReticulumSection::default(),
         }
     }
 }
@@ -215,6 +260,7 @@ pub struct ResolvedConfig {
     pub bootstrap_peers: Vec<String>,
     pub sync_interval: std::time::Duration,
     pub federation: oag_sync::FederationPolicy,
+    pub reticulum: Option<oag_reticulum::ReticulumConfig>,
 }
 
 pub fn resolve(
@@ -249,6 +295,7 @@ pub fn resolve(
         bootstrap_peers: file.network.bootstrap_peers,
         sync_interval: std::time::Duration::from_secs(file.network.sync_interval_seconds),
         federation,
+        reticulum: file.reticulum.to_reticulum_config(),
     })
 }
 

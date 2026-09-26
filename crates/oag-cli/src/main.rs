@@ -173,6 +173,22 @@ enum PeerCommand {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
+    /// Print this peer's Reticulum destination address, for sharing
+    /// out-of-band with a peer that wants to sync over Reticulum.
+    ReticulumAddress {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// One-shot sync with a peer reachable over Reticulum, given its
+    /// destination address and a TCP interface to reach the network
+    /// through (either that peer's own `listen_tcp`, or a shared transport
+    /// node both peers can reach).
+    AddReticulum {
+        address_hash: String,
+        via_tcp: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -219,6 +235,12 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Peer { command: PeerCommand::Sync { peer_id_or_url, data_dir } } => {
             commands::peer_sync(&data_dir, &peer_id_or_url).await
+        }
+        Command::Peer { command: PeerCommand::ReticulumAddress { data_dir } } => {
+            commands::peer_reticulum_address(&data_dir).await
+        }
+        Command::Peer { command: PeerCommand::AddReticulum { address_hash, via_tcp, data_dir } } => {
+            commands::peer_add_reticulum(&data_dir, &address_hash, &via_tcp).await
         }
         Command::Crawl { url, data_dir, config, allow_private_networks } => {
             commands::crawl(&data_dir, &url, config, allow_private_networks).await

@@ -55,6 +55,14 @@ pub async fn peer_sync(data_dir: &Path, peer_id_or_url: &str) -> anyhow::Result<
         peer_id_or_url.to_string()
     };
 
+    if let Some(address_hash) = url.strip_prefix("reticulum:") {
+        anyhow::bail!(
+            "peer {peer_id_or_url}'s stored address is a Reticulum destination \
+             ({address_hash}), which needs a TCP endpoint to actually reach — \
+             re-run as `oag peer add-reticulum {address_hash} <host:port>`"
+        );
+    }
+
     let summary = sync.sync_with_peer(&url).await?;
     println!("synced with {url}");
     println!(
@@ -94,6 +102,32 @@ pub async fn peer_remove(data_dir: &Path, peer_id: &str) -> anyhow::Result<()> {
     let mut conn = sync.pool().acquire().await?;
     oag_storage::repo::peers::remove_peer(&mut conn, peer_id.as_bytes()).await?;
     println!("removed {peer_id}");
+    Ok(())
+}
+
+pub async fn peer_reticulum_address(data_dir: &Path) -> anyhow::Result<()> {
+    std::fs::create_dir_all(data_dir)?;
+    let identity = PeerIdentity::load_or_generate(&data_dir.join("identity.key"))?;
+    let address_hash = oag_reticulum::local_address_hash(&identity);
+    println!("reticulum_address: {}", address_hash.to_hex_string());
+    Ok(())
+}
+
+pub async fn peer_add_reticulum(data_dir: &Path, address_hash: &str, via_tcp: &str) -> anyhow::Result<()> {
+    let sync = open_sync(data_dir).await?;
+    let identity = PeerIdentity::load_or_generate(&data_dir.join("identity.key"))?;
+    let target = oag_reticulum::parse_address_hash(address_hash)
+        .map_err(|e| anyhow::anyhow!("invalid reticulum address '{address_hash}': {e:?}"))?;
+
+    let summary = oag_reticulum::sync_with_peer(sync.pool(), &identity, via_tcp, target).await?;
+    println!("synced with reticulum:{address_hash} via {via_tcp}");
+    println!(
+        "applied: {}, already_known: {}, forks: {}",
+        summary.applied, summary.already_known, summary.forks
+    );
+    for err in &summary.errors {
+        println!("warning: {err}");
+    }
     Ok(())
 }
 

@@ -22,6 +22,8 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
 
     let self_public_key = identity.verifying_key().to_bytes();
     let pool_for_sync = pool.clone();
+    let pool_for_reticulum = pool.clone();
+    let identity_for_reticulum = identity.clone();
 
     let graph = Arc::new(GraphService::new(pool, identity));
 
@@ -32,6 +34,12 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     let sync_service = oag_sync::SyncService::new(pool_for_sync, peer_id, self_public_key, config.federation);
     let sync_router = oag_sync::router(sync_service.clone());
     oag_sync::spawn_gossip_loop(sync_service, config.bootstrap_peers.clone(), config.sync_interval);
+
+    if let Some(reticulum_config) = config.reticulum.clone() {
+        let address_hash = oag_reticulum::local_address_hash(&identity_for_reticulum);
+        println!("oag: reticulum enabled, destination address = {}", address_hash.to_hex_string());
+        tokio::spawn(oag_reticulum::run_listener(pool_for_reticulum, identity_for_reticulum, reticulum_config));
+    }
 
     let state = oag_api::AppState::new(graph.clone());
     let rest_router = oag_api::build_router(state).merge(sync_router);

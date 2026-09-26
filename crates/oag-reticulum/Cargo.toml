@@ -1,0 +1,22 @@
+[package]
+name = "oag-reticulum"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oag-crypto.workspace = true
+oag-storage.workspace = true
+oag-events.workspace = true
+oag-sync.workspace = true
+reticulum.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+oag-core.workspace = true
+oag-graph.workspace = true

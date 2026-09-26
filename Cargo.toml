@@ -11,6 +11,7 @@ members = [
     "crates/oag-sync",
     "crates/oag-crawler",
     "crates/oag-petname",
+    "crates/oag-reticulum",
     "crates/oag-cli",
 ]
 
@@ -30,6 +31,7 @@ oag-mcp = { path = "crates/oag-mcp" }
 oag-sync = { path = "crates/oag-sync" }
 oag-crawler = { path = "crates/oag-crawler" }
 oag-petname = { path = "crates/oag-petname" }
+oag-reticulum = { path = "crates/oag-reticulum" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -61,3 +63,4 @@ scraper = "0.27"
 url = "2"
 open-english-pronouncing-dictionary = "=0.1.0"
 rand_chacha = "0.3"
+reticulum = "=0.1.0"
