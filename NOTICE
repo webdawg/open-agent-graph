@@ -1,0 +1,33 @@
+This repository bundles third-party data that is licensed separately from
+this project's own AGPL-3.0-or-later code.
+
+## Peer word-name dictionary (crates/oag-petname)
+
+`oag-petname` depends on the `open-english-pronouncing-dictionary` crate
+(https://github.com/JackDanger/open-english-pronouncing-dictionary), whose
+Rust code is MIT-licensed. That crate embeds a ~280,000-word English
+pronunciation corpus ("OpenEPD") which is licensed under the Creative
+Commons Attribution-ShareAlike 4.0 International License (CC-BY-SA 4.0):
+
+    https://creativecommons.org/licenses/by-sa/4.0/
+
+`oag-petname` uses only the corpus's headwords (the dictionary keys) to
+deterministically derive a 128-word human-readable display name from each
+peer's cryptographic identity — it does not use, expose, or redistribute
+the corpus's pronunciation (IPA) data.
+
+OpenEPD is itself a fusion of several upstream sources, each separately
+attributed by the OpenEPD project:
+
+    Misaki (gold and silver tiers)
+    CMUdict 0.7b
+    WikiPron (en_us broad transcriptions)
+
+See the OpenEPD project's own README and `corpus/README.md` for full
+per-source attribution and provenance details:
+
+    https://github.com/JackDanger/open-english-pronouncing-dictionary
+
+Per CC-BY-SA 4.0, any redistribution of the corpus data itself (as opposed
+to names derived from it) must preserve this attribution and remain under
+the same license.

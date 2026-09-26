@@ -18,6 +18,7 @@ oag-api.workspace = true
 oag-mcp.workspace = true
 oag-sync.workspace = true
 oag-crawler.workspace = true
+oag-petname.workspace = true
 url.workspace = true
 serde.workspace = true
 serde_json.workspace = true

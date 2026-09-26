@@ -1562,6 +1562,7 @@ dependencies = [
  "oag-events",
  "oag-graph",
  "oag-mcp",
+ "oag-petname",
  "oag-storage",
  "oag-sync",
  "serde",
@@ -1684,6 +1685,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oag-petname"
+version = "0.1.0"
+dependencies = [
+ "oag-crypto",
+ "open-english-pronouncing-dictionary",
+ "rand 0.8.8",
+ "rand_chacha",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "oag-storage"
 version = "0.1.0"
 dependencies = [
@@ -1728,6 +1741,15 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
+name = "open-english-pronouncing-dictionary"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74bcf1961a8d41383b51255130fb8f9eadf6b07c06f16ca9bc74fba7ed31be92"
+dependencies = [
+ "phonetics-rs",
+]
 
 [[package]]
 name = "openssl-probe"
@@ -1850,6 +1872,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266"
 dependencies = [
  "siphasher",
+]
+
+[[package]]
+name = "phonetics-rs"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9d05f1367ea5d009f329589395a26cd05ee9bcc50e5488c9087e3af03c064ba"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

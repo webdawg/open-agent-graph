@@ -153,7 +153,9 @@ pub async fn edge_corroboration(data_dir: &Path, id: &str) -> anyhow::Result<()>
 
 pub async fn identity_show(data_dir: &Path) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
-    println!("peer_id: {}", graph.identity().peer_id());
+    let peer_id = graph.identity().peer_id();
+    println!("peer_id:   {peer_id}");
+    println!("peer_name: {}", oag_petname::peer_name_string(&peer_id));
     Ok(())
 }
 

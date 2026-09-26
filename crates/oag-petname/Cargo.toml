@@ -1,0 +1,13 @@
+[package]
+name = "oag-petname"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+oag-crypto.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+open-english-pronouncing-dictionary.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true

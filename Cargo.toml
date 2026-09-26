@@ -10,6 +10,7 @@ members = [
     "crates/oag-mcp",
     "crates/oag-sync",
     "crates/oag-crawler",
+    "crates/oag-petname",
     "crates/oag-cli",
 ]
 
@@ -28,6 +29,7 @@ oag-api = { path = "crates/oag-api" }
 oag-mcp = { path = "crates/oag-mcp" }
 oag-sync = { path = "crates/oag-sync" }
 oag-crawler = { path = "crates/oag-crawler" }
+oag-petname = { path = "crates/oag-petname" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -57,3 +59,5 @@ http = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 scraper = "0.27"
 url = "2"
+open-english-pronouncing-dictionary = "=0.1.0"
+rand_chacha = "0.3"
