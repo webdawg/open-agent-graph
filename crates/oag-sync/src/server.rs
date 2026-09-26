@@ -32,6 +32,7 @@ pub fn router(service: SyncService) -> Router {
         .route("/oag/sync/v1/events/{origin}", get(get_events))
         .route("/oag/sync/v1/events", post(post_events))
         .route("/oag/sync/v1/peers", get(peers))
+        .route("/oag/sync/v1/replication-status", get(replication_status))
         .layer(middleware::from_fn_with_state(
             service.clone(),
             rate_limit::rate_limit_middleware,
@@ -176,6 +177,16 @@ async fn peers(State(service): State<SyncService>) -> Json<PeersResponse> {
         });
     }
     Json(PeersResponse { peers: records })
+}
+
+/// Operator-facing durability visibility (not part of the peer wire
+/// protocol itself, so this is a plain `Serialize` response rather than a
+/// `wire.rs` DTO): how many peers are known to have caught up with this
+/// peer's own data, against the network-size-scaled target.
+async fn replication_status(
+    State(service): State<SyncService>,
+) -> Result<Json<crate::replication::ReplicationStatus>, StatusCode> {
+    service.replication_status().await.map(Json).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 fn decode_hex32(s: &str) -> Option<[u8; 32]> {

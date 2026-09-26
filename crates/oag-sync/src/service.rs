@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use oag_crypto::{PeerId, VerifyingKey};
 use oag_events::{ingest_remote_event, IngestOutcome};
-use oag_storage::repo::{events as events_repo, peers as peers_repo};
+use oag_storage::repo::{events as events_repo, peers as peers_repo, replication as replication_repo};
 use oag_storage::SqlitePool;
 
 use crate::client::{SyncClient, SyncClientError};
@@ -127,6 +127,25 @@ impl SyncService {
             peers_repo::upsert_peer(&mut conn, remote_peer_id.as_bytes(), &remote_public_key_bytes, None, now)
                 .await?;
             peers_repo::add_address(&mut conn, remote_peer_id.as_bytes(), addr).await?;
+
+            // Durability visibility (spec: never assume any one peer's own
+            // storage is reliable — replication factor is a monitored
+            // network property instead). `hello.heads` is `addr`'s own
+            // claim about how far it's gotten with every origin it knows;
+            // persist it so `replication_status()` can later ask "how many
+            // peers are known to have caught up with *my* origin."
+            for (origin_hex, sequence) in &hello.heads {
+                if let Some(origin_bytes) = decode_hex32(origin_hex) {
+                    replication_repo::upsert_known_head(
+                        &mut conn,
+                        remote_peer_id.as_bytes(),
+                        &origin_bytes,
+                        *sequence as i64,
+                        now,
+                    )
+                    .await?;
+                }
+            }
         }
 
         // Peer discovery runs *before* event fetching so that, within this

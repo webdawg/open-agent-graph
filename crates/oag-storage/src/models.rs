@@ -161,3 +161,11 @@ pub struct PeerForkRow {
     pub event_id_b: Vec<u8>,
     pub detected_at: i64,
 }
+
+#[derive(Debug, FromRow)]
+pub struct PeerKnownHeadRow {
+    pub peer_id: Vec<u8>,
+    pub origin_peer_id: Vec<u8>,
+    pub sequence: i64,
+    pub observed_at: i64,
+}

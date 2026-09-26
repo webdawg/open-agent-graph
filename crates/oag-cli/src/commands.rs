@@ -138,6 +138,21 @@ pub async fn status(data_dir: &Path) -> anyhow::Result<()> {
     let mut conn = graph.pool().acquire().await?;
     let peer_count = oag_storage::repo::peers::list_peers(&mut conn).await?.len();
     println!("known_peers: {peer_count} (see `oag peer list`)");
+
+    let sync = open_sync(data_dir).await?;
+    let replication = sync.replication_status().await?;
+    let verdict = if replication.meets_target { "OK" } else { "BELOW TARGET" };
+    println!(
+        "replication: {}/{} target replicas confirmed ({} known peers) — {verdict} (see `oag replication status`)",
+        replication.peers_fully_caught_up, replication.target_replication_factor, replication.known_peer_count
+    );
+    Ok(())
+}
+
+pub async fn replication_status(data_dir: &Path) -> anyhow::Result<()> {
+    let sync = open_sync(data_dir).await?;
+    let status = sync.replication_status().await?;
+    println!("{}", serde_json::to_string_pretty(&status)?);
     Ok(())
 }
 

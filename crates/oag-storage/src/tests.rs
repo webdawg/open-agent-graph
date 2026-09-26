@@ -47,6 +47,7 @@ async fn migrations_create_expected_tables() {
         "peers",
         "peer_addresses",
         "peer_forks",
+        "peer_known_heads",
     ] {
         assert!(names.contains(&expected), "missing table {expected}");
     }
@@ -231,4 +232,35 @@ async fn fts_search_finds_node_after_update() {
 
     let fresh = repo::nodes::search(&mut conn, "unrelated", 10).await.unwrap();
     assert_eq!(fresh.len(), 1);
+}
+
+#[tokio::test]
+async fn known_head_upsert_round_trips_and_overwrites() {
+    let path = temp_db_path("known-heads");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    let peer_id = [1u8; 32];
+    let origin_a = [2u8; 32];
+    let origin_b = [3u8; 32];
+
+    repo::replication::upsert_known_head(&mut conn, &peer_id, &origin_a, 5, 100).await.unwrap();
+    repo::replication::upsert_known_head(&mut conn, &peer_id, &origin_b, 9, 100).await.unwrap();
+
+    let heads_a = repo::replication::list_known_heads_for_origin(&mut conn, &origin_a).await.unwrap();
+    assert_eq!(heads_a.len(), 1);
+    assert_eq!(heads_a[0].peer_id, peer_id);
+    assert_eq!(heads_a[0].sequence, 5);
+
+    // A later report for the same (peer, origin) overwrites rather than duplicating.
+    repo::replication::upsert_known_head(&mut conn, &peer_id, &origin_a, 12, 200).await.unwrap();
+    let heads_a = repo::replication::list_known_heads_for_origin(&mut conn, &origin_a).await.unwrap();
+    assert_eq!(heads_a.len(), 1, "same (peer, origin) must overwrite, not duplicate");
+    assert_eq!(heads_a[0].sequence, 12);
+    assert_eq!(heads_a[0].observed_at, 200);
+
+    // origin_b's row is untouched by origin_a's updates.
+    let heads_b = repo::replication::list_known_heads_for_origin(&mut conn, &origin_b).await.unwrap();
+    assert_eq!(heads_b.len(), 1);
+    assert_eq!(heads_b[0].sequence, 9);
 }

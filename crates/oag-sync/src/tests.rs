@@ -101,6 +101,40 @@ async fn two_peer_replication() {
     assert!(second.errors.is_empty());
 }
 
+/// Durability visibility: nothing assumes any one peer's storage is safe on
+/// its own — `replication_status()` should show the real, monitored picture
+/// of how many *other* peers are known to have caught up with this peer's
+/// own data, before and after a round of mutual syncing.
+#[tokio::test]
+async fn replication_status_reflects_sync_state() {
+    let a = spawn_peer("replication-a").await;
+    let b = spawn_peer("replication-b").await;
+
+    let before = a.sync.replication_status().await.unwrap();
+    assert_eq!(before.known_peer_count, 0);
+    assert_eq!(before.peers_fully_caught_up, 0);
+    assert!(!before.meets_target);
+
+    a.graph
+        .assert(&a.auth, sample_assertion("https://example.com/replication-test", "concept-durability"))
+        .await
+        .unwrap();
+
+    // B pulls A's events...
+    b.sync.sync_with_peer(&a.addr).await.unwrap();
+    // ...then A syncs *with* B, receiving B's hello -- which now reports B's
+    // own knowledge of A's origin, exactly the head A needs to see itself
+    // reflected back through another peer.
+    a.sync.sync_with_peer(&b.addr).await.unwrap();
+
+    let after = a.sync.replication_status().await.unwrap();
+    assert_eq!(after.known_peer_count, 1);
+    assert_eq!(after.peers_fully_caught_up, 1, "B should be recorded as fully caught up with A's origin");
+    assert!(after.lagging_peers.is_empty());
+    assert_eq!(after.target_replication_factor, 3);
+    assert!(!after.meets_target, "one caught-up peer is still below the floor of 3");
+}
+
 /// Spec section 98 — A and B each write independently with no sync between
 /// (simulated partition), then reconnect. Both must converge to the same
 /// graph with no manual conflict repair.

@@ -69,6 +69,11 @@ enum Command {
         #[command(subcommand)]
         command: PeerCommand,
     },
+    /// Durability/replication-factor visibility commands.
+    Replication {
+        #[command(subcommand)]
+        command: ReplicationCommand,
+    },
     /// Crawl one URL: fetch it safely, extract structured facts (JSON-LD,
     /// llms.txt, ARD, A2A), and assert them as evidence-backed claims.
     Crawl {
@@ -103,6 +108,17 @@ enum NodeCommand {
 enum AssertionCommand {
     Get {
         id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReplicationCommand {
+    /// Full durability status: target replication factor, how many known
+    /// peers are confirmed caught up with this peer's own data, and which
+    /// ones are lagging (or have never reported anything at all).
+    Status {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
@@ -216,6 +232,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Edge { command: EdgeCommand::Corroboration { id, data_dir } } => {
             commands::edge_corroboration(&data_dir, &id).await
+        }
+        Command::Replication { command: ReplicationCommand::Status { data_dir } } => {
+            commands::replication_status(&data_dir).await
         }
         Command::Identity { command: IdentityCommand::Show { data_dir } } => {
             commands::identity_show(&data_dir).await

@@ -9,6 +9,7 @@ use oag_crypto::{PeerId, PeerIdentity, VerifyingKey};
 use oag_events::ingest_remote_event;
 use oag_events::IngestOutcome;
 use oag_storage::repo::peers as peers_repo;
+use oag_storage::repo::replication as replication_repo;
 use oag_storage::SqlitePool;
 use oag_sync::wire::{EventsResponse, HelloResponse, PeersResponse};
 use oag_sync::SyncSummary;
@@ -106,6 +107,16 @@ pub async fn sync_with_peer(
         peers_repo::upsert_peer(&mut conn, remote_peer_id.as_bytes(), &remote_public_key_bytes, None, now).await?;
         peers_repo::add_address(&mut conn, remote_peer_id.as_bytes(), &format!("reticulum:{}", target.to_hex_string()))
             .await?;
+
+        // Durability visibility (see oag-sync::SyncService::sync_with_peer's
+        // identical block) -- persisted here too since this transport
+        // deliberately duplicates rather than shares oag-sync's pull logic.
+        for (origin_hex, sequence) in &hello.heads {
+            if let Some(origin_bytes) = decode_hex32(origin_hex) {
+                replication_repo::upsert_known_head(&mut conn, remote_peer_id.as_bytes(), &origin_bytes, *sequence as i64, now)
+                    .await?;
+            }
+        }
     }
 
     discover_peers(pool, &transport, &link, link_id, &mut link_events).await;
