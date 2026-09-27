@@ -779,3 +779,108 @@ async fn identity_assurance_is_the_mean_across_distinct_actors_not_the_max() {
     // bare admin actor (0.0) + verified-key-only actor (0.7) -> mean 0.35, not 0.7.
     assert!((c.identity_assurance - 0.35).abs() < 1e-6, "got {}", c.identity_assurance);
 }
+
+#[tokio::test]
+async fn recompute_authority_ranks_a_real_hub_above_a_real_leaf() {
+    let (service, auth) = service_with_admin("authority-hub").await;
+
+    // Three different subjects all assert a relationship to the same
+    // "hub" object -- the hub should end up with the highest authority.
+    for subject in ["https://example.com/spoke-a", "https://example.com/spoke-b", "https://example.com/spoke-c"] {
+        service
+            .assert(&auth, related_to_input(subject, "https://example.com/hub"))
+            .await
+            .unwrap();
+    }
+
+    let summary = service.recompute_authority().await.unwrap();
+    assert!(summary.nodes_scored >= 4, "expected at least the hub + 3 spokes, got {summary:?}");
+    assert!(summary.edges_considered >= 3);
+
+    let hub = service.resolve("https://example.com/hub").await.unwrap();
+    let ResolveOutcome::Found { node: hub_node, .. } = hub else { panic!("hub should resolve") };
+    let spoke = service.resolve("https://example.com/spoke-a").await.unwrap();
+    let ResolveOutcome::Found { node: spoke_node, .. } = spoke else { panic!("spoke should resolve") };
+
+    let hub_authority = service.get_node_authority(hub_node.id).await.unwrap().unwrap();
+    let spoke_authority = service.get_node_authority(spoke_node.id).await.unwrap().unwrap();
+    assert!(hub_authority > spoke_authority, "hub ({hub_authority}) should outrank spoke ({spoke_authority})");
+}
+
+#[tokio::test]
+async fn node_with_no_edges_has_no_authority_score() {
+    let (service, auth) = service_with_admin("authority-none").await;
+    service.assert(&auth, sample_input("https://example.com/authority-scope-check")).await.unwrap();
+    service.recompute_authority().await.unwrap();
+
+    let bogus_node_id = oag_core::NodeId::from_canonical_identifier("url:https://never-in-any-edge.example.com");
+    assert_eq!(service.get_node_authority(bogus_node_id).await.unwrap(), None);
+}
+
+fn related_to_input(subject: &str, object: &str) -> AssertInput {
+    AssertInput {
+        subject: subject.to_string(),
+        subject_type: None,
+        predicate: "related_to".into(),
+        object: object.to_string(),
+        object_type: None,
+        evidence: vec![],
+        actor_confidence: None,
+        observed_at: None,
+        extraction_method: None,
+    }
+}
+
+#[tokio::test]
+async fn subgraph_reports_correct_hop_distance_along_a_chain() {
+    let (service, auth) = service_with_admin("subgraph-distance-chain").await;
+
+    service.assert(&auth, related_to_input("https://example.com/chain-root", "https://example.com/chain-a")).await.unwrap();
+    service.assert(&auth, related_to_input("https://example.com/chain-a", "https://example.com/chain-b")).await.unwrap();
+    service.assert(&auth, related_to_input("https://example.com/chain-b", "https://example.com/chain-c")).await.unwrap();
+
+    let ResolveOutcome::Found { node: root, .. } = service.resolve("https://example.com/chain-root").await.unwrap() else {
+        panic!("root should resolve");
+    };
+
+    let subgraph = service.get_subgraph(root.id, 3, 100).await.unwrap();
+    let distance_of = |identifier: &str| -> u32 {
+        subgraph
+            .nodes
+            .iter()
+            .find(|n| n.node.canonical_identifier == identifier)
+            .unwrap_or_else(|| panic!("{identifier} missing from subgraph"))
+            .distance
+    };
+
+    assert_eq!(distance_of("url:https://example.com/chain-root"), 0);
+    assert_eq!(distance_of("url:https://example.com/chain-a"), 1);
+    assert_eq!(distance_of("url:https://example.com/chain-b"), 2);
+    assert_eq!(distance_of("url:https://example.com/chain-c"), 3);
+}
+
+#[tokio::test]
+async fn subgraph_keeps_the_shortest_distance_when_a_node_is_reachable_two_ways() {
+    let (service, auth) = service_with_admin("subgraph-distance-diamond").await;
+
+    // root -> c directly (distance 1), *and* root -> a -> c / root -> b -> c
+    // (distance 2 via either detour). The direct edge must win.
+    service.assert(&auth, related_to_input("https://example.com/diamond-root", "https://example.com/diamond-c")).await.unwrap();
+    service.assert(&auth, related_to_input("https://example.com/diamond-root", "https://example.com/diamond-a")).await.unwrap();
+    service.assert(&auth, related_to_input("https://example.com/diamond-root", "https://example.com/diamond-b")).await.unwrap();
+    service.assert(&auth, related_to_input("https://example.com/diamond-a", "https://example.com/diamond-c")).await.unwrap();
+    service.assert(&auth, related_to_input("https://example.com/diamond-b", "https://example.com/diamond-c")).await.unwrap();
+
+    let ResolveOutcome::Found { node: root, .. } = service.resolve("https://example.com/diamond-root").await.unwrap() else {
+        panic!("root should resolve");
+    };
+
+    let subgraph = service.get_subgraph(root.id, 3, 100).await.unwrap();
+    let c_distance = subgraph
+        .nodes
+        .iter()
+        .find(|n| n.node.canonical_identifier == "url:https://example.com/diamond-c")
+        .unwrap()
+        .distance;
+    assert_eq!(c_distance, 1, "the direct edge's distance must win over the longer detour");
+}

@@ -48,6 +48,7 @@ async fn migrations_create_expected_tables() {
         "peer_addresses",
         "peer_forks",
         "peer_known_heads",
+        "node_authority",
     ] {
         assert!(names.contains(&expected), "missing table {expected}");
     }
@@ -263,4 +264,28 @@ async fn known_head_upsert_round_trips_and_overwrites() {
     let heads_b = repo::replication::list_known_heads_for_origin(&mut conn, &origin_b).await.unwrap();
     assert_eq!(heads_b.len(), 1);
     assert_eq!(heads_b[0].sequence, 9);
+}
+
+#[tokio::test]
+async fn node_authority_upsert_get_and_clear_round_trip() {
+    let path = temp_db_path("node-authority");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    let node = Node::new(NodeType::concept(), "concept:authority-test", 1);
+    repo::nodes::insert_if_missing(&mut conn, &node).await.unwrap();
+
+    assert_eq!(repo::node_authority::get(&mut conn, node.id).await.unwrap(), None);
+
+    repo::node_authority::upsert(&mut conn, node.id, 0.42, 100).await.unwrap();
+    let score = repo::node_authority::get(&mut conn, node.id).await.unwrap();
+    assert!((score.unwrap() - 0.42).abs() < 1e-6);
+
+    // Overwrite, not duplicate.
+    repo::node_authority::upsert(&mut conn, node.id, 0.9, 200).await.unwrap();
+    let score = repo::node_authority::get(&mut conn, node.id).await.unwrap();
+    assert!((score.unwrap() - 0.9).abs() < 1e-6);
+
+    repo::node_authority::clear_all(&mut conn).await.unwrap();
+    assert_eq!(repo::node_authority::get(&mut conn, node.id).await.unwrap(), None);
 }

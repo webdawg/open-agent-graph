@@ -35,7 +35,8 @@ pub async fn get_node(
         .await?
         .ok_or_else(|| ApiError(oag_graph::GraphError::NotFound(format!("node {id}"))))?;
     let aliases = state.graph.list_aliases(node_id).await?;
-    Ok(Json(json!({ "node": node, "aliases": aliases })))
+    let authority = state.graph.get_node_authority(node_id).await?;
+    Ok(Json(json!({ "node": node, "aliases": aliases, "authority": authority })))
 }
 
 pub async fn get_node_edges(

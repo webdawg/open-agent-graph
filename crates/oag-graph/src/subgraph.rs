@@ -6,9 +6,19 @@ use oag_storage::repo::{assertions as assertions_repo, edges, nodes};
 use crate::error::GraphError;
 use crate::service::GraphService;
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SubgraphNode {
+    pub node: Node,
+    /// Hops from the traversal's root (0 for the root itself). Spec section
+    /// 65's `graph_distance` signal — meaningful only relative to a
+    /// starting point, which a subgraph traversal has and an isolated edge
+    /// lookup (`EdgeCorroboration`) does not.
+    pub distance: u32,
+}
+
 #[derive(Debug, Default, serde::Serialize)]
 pub struct Subgraph {
-    pub nodes: Vec<Node>,
+    pub nodes: Vec<SubgraphNode>,
     pub edges: Vec<Edge>,
     pub assertions: Vec<Assertion>,
 }
@@ -32,12 +42,12 @@ impl GraphService {
             .await?
             .ok_or_else(|| GraphError::NotFound(format!("node {root}")))?;
 
-        let mut visited_nodes: HashMap<NodeId, Node> = HashMap::new();
+        let mut visited_nodes: HashMap<NodeId, (Node, u32)> = HashMap::new();
         let mut visited_edges: HashMap<EdgeId, Edge> = HashMap::new();
-        visited_nodes.insert(root, root_node);
+        visited_nodes.insert(root, (root_node, 0));
         let mut frontier = vec![root];
 
-        for _ in 0..depth {
+        for hop in 1..=depth {
             if visited_nodes.len() >= max_nodes {
                 break;
             }
@@ -54,7 +64,11 @@ impl GraphService {
                             continue;
                         }
                         if let Some(node) = nodes::get_by_id(&mut conn, candidate).await? {
-                            visited_nodes.insert(candidate, node);
+                            // First time a BFS round reaches `candidate` is
+                            // necessarily via a shortest path — later rounds
+                            // never revisit it (the `contains_key` check
+                            // above), so `hop` here is the true distance.
+                            visited_nodes.insert(candidate, (node, hop));
                             next_frontier.push(candidate);
                         }
                     }
@@ -69,7 +83,7 @@ impl GraphService {
         }
 
         Ok(Subgraph {
-            nodes: visited_nodes.into_values().collect(),
+            nodes: visited_nodes.into_values().map(|(node, distance)| SubgraphNode { node, distance }).collect(),
             edges: visited_edges.into_values().collect(),
             assertions,
         })

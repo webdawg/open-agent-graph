@@ -114,7 +114,8 @@ impl OagMcpServer {
         let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
         let node = self.graph.get_node(node_id).await.map_err(map_err)?;
         let aliases = self.graph.list_aliases(node_id).await.map_err(map_err)?;
-        Ok(Json(json!({ "node": node, "aliases": aliases })))
+        let authority = self.graph.get_node_authority(node_id).await.map_err(map_err)?;
+        Ok(Json(json!({ "node": node, "aliases": aliases, "authority": authority })))
     }
 
     #[tool(description = "List all edges touching a node, in either direction.")]

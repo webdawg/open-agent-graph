@@ -163,6 +163,13 @@ pub struct PeerForkRow {
 }
 
 #[derive(Debug, FromRow)]
+pub struct NodeAuthorityRow {
+    pub node_id: Vec<u8>,
+    pub score: f64,
+    pub computed_at: i64,
+}
+
+#[derive(Debug, FromRow)]
 pub struct PeerKnownHeadRow {
     pub peer_id: Vec<u8>,
     pub origin_peer_id: Vec<u8>,

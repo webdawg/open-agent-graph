@@ -74,6 +74,11 @@ enum Command {
         #[command(subcommand)]
         command: ReplicationCommand,
     },
+    /// Node authority (PageRank-style) commands.
+    Authority {
+        #[command(subcommand)]
+        command: AuthorityCommand,
+    },
     /// Crawl one URL: fetch it safely, extract structured facts (JSON-LD,
     /// llms.txt, ARD, A2A), and assert them as evidence-backed claims.
     Crawl {
@@ -108,6 +113,18 @@ enum NodeCommand {
 enum AssertionCommand {
     Get {
         id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum AuthorityCommand {
+    /// Recompute every node's authority score from scratch (spec section
+    /// 65) -- an on-demand batch job, not triggered automatically. Re-run
+    /// periodically or after a large import; `oag node get` prints the
+    /// current score for any node.
+    Recompute {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
@@ -249,6 +266,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Replication { command: ReplicationCommand::Status { data_dir } } => {
             commands::replication_status(&data_dir).await
+        }
+        Command::Authority { command: AuthorityCommand::Recompute { data_dir } } => {
+            commands::authority_recompute(&data_dir).await
         }
         Command::Identity { command: IdentityCommand::Show { data_dir } } => {
             commands::identity_show(&data_dir).await

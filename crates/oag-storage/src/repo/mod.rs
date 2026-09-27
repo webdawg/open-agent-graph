@@ -2,6 +2,7 @@ pub mod actors;
 pub mod assertions;
 pub mod edges;
 pub mod events;
+pub mod node_authority;
 pub mod nodes;
 pub mod peers;
 pub mod replication;

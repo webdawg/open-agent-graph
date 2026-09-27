@@ -1,4 +1,5 @@
 pub mod assert;
+pub mod authority;
 pub mod corroboration;
 pub mod error;
 pub mod history;
@@ -12,9 +13,10 @@ pub mod subgraph;
 mod tests;
 
 pub use assert::{AssertInput, EvidenceInput};
+pub use authority::AuthoritySummary;
 pub use corroboration::EdgeCorroboration;
 pub use error::GraphError;
 pub use history::HistoryEntry;
 pub use resolve::ResolveOutcome;
 pub use service::{AuthContext, GraphService, PublicKeyProof};
-pub use subgraph::Subgraph;
+pub use subgraph::{Subgraph, SubgraphNode};

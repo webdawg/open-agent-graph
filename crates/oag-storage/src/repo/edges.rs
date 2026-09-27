@@ -69,6 +69,13 @@ pub async fn list_by_object(
     rows.into_iter().map(row_to_edge).collect()
 }
 
+/// Every edge in the local graph — used by authority (PageRank) recomputation,
+/// which genuinely needs the whole graph rather than a node-scoped slice of it.
+pub async fn list_all(conn: &mut SqliteConnection) -> Result<Vec<oag_core::Edge>, StorageError> {
+    let rows: Vec<EdgeRow> = sqlx::query_as("SELECT * FROM edges").fetch_all(&mut *conn).await?;
+    rows.into_iter().map(row_to_edge).collect()
+}
+
 /// All edges touching `node` in either direction (used by the subgraph API).
 pub async fn list_touching(
     conn: &mut SqliteConnection,

@@ -156,6 +156,13 @@ pub async fn replication_status(data_dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn authority_recompute(data_dir: &Path) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let summary = graph.recompute_authority().await?;
+    println!("{}", serde_json::to_string_pretty(&summary)?);
+    Ok(())
+}
+
 pub async fn search(data_dir: &Path, query: &str, limit: i64) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
     let results = graph.search(query, limit).await?;
