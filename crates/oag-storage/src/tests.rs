@@ -289,3 +289,68 @@ async fn node_authority_upsert_get_and_clear_round_trip() {
     repo::node_authority::clear_all(&mut conn).await.unwrap();
     assert_eq!(repo::node_authority::get(&mut conn, node.id).await.unwrap(), None);
 }
+
+#[tokio::test]
+async fn clear_projection_tables_wipes_graph_data_but_not_events() {
+    let path = temp_db_path("rebuild-clear");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    let actor = Actor {
+        id: oag_core::ActorId::derive(b"rebuild-test-actor"),
+        actor_type: ActorType::Agent,
+        name: Some("rebuild tester".into()),
+        public_key: None,
+        identity_uri: None,
+        metadata: serde_json::json!({}),
+        created_at: 1,
+    };
+    repo::actors::insert(&mut conn, &actor).await.unwrap();
+    let subject = Node::new(NodeType::repository(), "url:https://example.com/rebuild-subject", 1);
+    let object = Node::new(NodeType::concept(), "concept:rebuild-object", 1);
+    repo::nodes::insert_if_missing(&mut conn, &subject).await.unwrap();
+    repo::nodes::insert_if_missing(&mut conn, &object).await.unwrap();
+    let edge = Edge::new(subject.id, Predicate::new("related_to"), object.id, 1);
+    repo::edges::insert_if_missing(&mut conn, &edge).await.unwrap();
+
+    assert!(repo::nodes::get_by_id(&mut conn, subject.id).await.unwrap().is_some());
+
+    repo::rebuild::clear_projection_tables(&mut conn).await.unwrap();
+
+    assert!(repo::nodes::get_by_id(&mut conn, subject.id).await.unwrap().is_none());
+    assert!(repo::edges::get_by_id(&mut conn, edge.id).await.unwrap().is_none());
+    let actors_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM actors").fetch_one(&mut *conn).await.unwrap();
+    assert_eq!(actors_count.0, 0);
+
+    // Events themselves are a completely separate concern this function
+    // never touches -- there are none in this test, but the table itself
+    // and event_origins must still exist and be queryable.
+    let events_count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM events").fetch_one(&mut *conn).await.unwrap();
+    assert_eq!(events_count.0, 0);
+}
+
+#[tokio::test]
+async fn list_all_in_insertion_order_returns_events_oldest_first() {
+    let path = temp_db_path("rebuild-order");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    for i in 0..3u8 {
+        let event = repo::events::StoredEvent {
+            event_id: oag_core::EventId::derive(&[i]),
+            origin_peer_id: [i; 32],
+            sequence: 1,
+            previous_event_id: None,
+            event_type: "TEST".into(),
+            canonical_payload: format!("{{\"n\":{i}}}").into_bytes(),
+            created_at: 100 + i as i64,
+            signature: vec![0u8; 64],
+        };
+        repo::events::insert_event(&mut conn, &event, 100 + i as i64).await.unwrap();
+    }
+
+    let rows = repo::events::list_all_in_insertion_order(&mut conn).await.unwrap();
+    assert_eq!(rows.len(), 3);
+    let created_ats: Vec<i64> = rows.iter().map(|r| r.created_at).collect();
+    assert_eq!(created_ats, vec![100, 101, 102], "must come back in original insertion order");
+}

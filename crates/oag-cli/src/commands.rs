@@ -230,6 +230,53 @@ pub async fn identity_backup(data_dir: &Path, out: &Path) -> anyhow::Result<()> 
     Ok(())
 }
 
+pub async fn identity_restore(data_dir: &Path, backup_path: &Path, force: bool) -> anyhow::Result<()> {
+    if !backup_path.exists() {
+        anyhow::bail!("backup file '{}' does not exist", backup_path.display());
+    }
+    std::fs::create_dir_all(data_dir)?;
+    let dest = data_dir.join("identity.key");
+    if dest.exists() && !force {
+        anyhow::bail!(
+            "{} already exists -- refusing to overwrite an existing peer identity \
+             (this would desync its peer_id from every event already signed under the \
+             current key). Pass --force if you're certain.",
+            dest.display()
+        );
+    }
+
+    std::fs::copy(backup_path, &dest)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o600))?;
+    }
+
+    let identity = PeerIdentity::load_or_generate(&dest)?;
+    println!("restored identity.key -> {}", dest.display());
+    println!("peer_id: {}", identity.peer_id());
+    Ok(())
+}
+
+pub async fn backup(data_dir: &Path, out: &Path) -> anyhow::Result<()> {
+    let pool = oag_storage::open_pool(&data_dir.join("oag.sqlite")).await?;
+    oag_storage::backup_to(&pool, out).await?;
+    println!("backed up database -> {}", out.display());
+    println!(
+        "warning: full peers replicate graph events, so losing this database usually isn't \
+         catastrophic on its own -- but this snapshot is much faster to restore from than a \
+         full re-sync, and is your only copy if this is a lone/first peer."
+    );
+    Ok(())
+}
+
+pub async fn rebuild(data_dir: &Path) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let summary = graph.rebuild_projection().await?;
+    println!("{}", serde_json::to_string_pretty(&summary)?);
+    Ok(())
+}
+
 pub async fn key_create(
     data_dir: &Path,
     actor_type: &str,
@@ -348,4 +395,74 @@ pub async fn crawl(
     println!("ARD found: {}", summary.ard_found);
     println!("A2A agent card found: {}", summary.a2a_found);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "oag-cli-test-{name}-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn identity_restore_round_trips_the_same_peer_id() {
+        let source_dir = temp_dir("restore-source");
+        let original = open_graph(&source_dir).await.unwrap();
+        let original_peer_id = original.identity().peer_id();
+
+        let backup_path = temp_dir("restore-backup").join("identity.key.bak");
+        identity_backup(&source_dir, &backup_path).await.unwrap();
+
+        let fresh_dir = temp_dir("restore-fresh");
+        identity_restore(&fresh_dir, &backup_path, false).await.unwrap();
+        let restored = open_graph(&fresh_dir).await.unwrap();
+        assert_eq!(restored.identity().peer_id(), original_peer_id);
+    }
+
+    #[tokio::test]
+    async fn identity_restore_refuses_to_overwrite_without_force() {
+        let existing_dir = temp_dir("restore-existing");
+        open_graph(&existing_dir).await.unwrap(); // creates identity.key
+
+        let other_dir = temp_dir("restore-other-source");
+        let backup_path = temp_dir("restore-other-backup").join("identity.key.bak");
+        identity_backup(&other_dir, &backup_path).await.unwrap();
+
+        let result = identity_restore(&existing_dir, &backup_path, false).await;
+        assert!(result.is_err(), "should refuse to overwrite an existing identity without --force");
+    }
+
+    #[tokio::test]
+    async fn identity_restore_overwrites_with_force() {
+        let existing_dir = temp_dir("restore-force-existing");
+        open_graph(&existing_dir).await.unwrap();
+
+        let other_dir = temp_dir("restore-force-source");
+        let other_identity = open_graph(&other_dir).await.unwrap();
+        let other_peer_id = other_identity.identity().peer_id();
+        let backup_path = temp_dir("restore-force-backup").join("identity.key.bak");
+        identity_backup(&other_dir, &backup_path).await.unwrap();
+
+        identity_restore(&existing_dir, &backup_path, true).await.unwrap();
+        let restored = open_graph(&existing_dir).await.unwrap();
+        assert_eq!(restored.identity().peer_id(), other_peer_id);
+    }
+
+    #[tokio::test]
+    async fn backup_and_rebuild_smoke_test() {
+        let data_dir = temp_dir("backup-rebuild-smoke");
+        open_graph(&data_dir).await.unwrap();
+
+        let out_path = temp_dir("backup-rebuild-out").join("snapshot.sqlite");
+        backup(&data_dir, &out_path).await.unwrap();
+        assert!(out_path.exists());
+
+        rebuild(&data_dir).await.unwrap();
+    }
 }

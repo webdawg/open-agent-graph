@@ -163,6 +163,20 @@ pub async fn list_all_origins(
     Ok(rows)
 }
 
+/// Every event this peer has, in the exact order it was originally inserted
+/// (SQLite's implicit `rowid`) — used by `oag rebuild`. This ordering
+/// matters for correctness, not just performance: `commit_local_event`/
+/// `ingest_remote_event` only ever insert an event after its projection
+/// already succeeded once (spec section 38's atomicity), so replaying in
+/// this exact order guarantees every cross-reference (e.g. one origin's
+/// `ADD_EVIDENCE` targeting another origin's assertion) resolves the same
+/// way it did the first time — grouping by origin instead could replay a
+/// reference before its target ever existed.
+pub async fn list_all_in_insertion_order(conn: &mut SqliteConnection) -> Result<Vec<EventRow>, StorageError> {
+    let rows: Vec<EventRow> = sqlx::query_as("SELECT * FROM events ORDER BY rowid").fetch_all(&mut *conn).await?;
+    Ok(rows)
+}
+
 /// One origin's events, oldest first, `sequence` in `[from, to]` inclusive —
 /// backs `GET /oag/sync/v1/events/{origin}?from=&to=`.
 pub async fn list_range(

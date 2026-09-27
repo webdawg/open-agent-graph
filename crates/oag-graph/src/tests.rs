@@ -884,3 +884,75 @@ async fn subgraph_keeps_the_shortest_distance_when_a_node_is_reachable_two_ways(
         .distance;
     assert_eq!(c_distance, 1, "the direct edge's distance must win over the longer detour");
 }
+
+#[tokio::test]
+async fn rebuild_projection_reproduces_identical_graph_state() {
+    let (service, auth) = service_with_admin("rebuild-projection").await;
+
+    // Exercise several event types at once, including a real cross-event
+    // ordering dependency (ADD_EVIDENCE against an already-created
+    // assertion, and a NODE_ALIAS against an already-created node).
+    let assertion_id = service
+        .assert(
+            &auth,
+            AssertInput {
+                subject: "https://example.com/rebuild-subject".into(),
+                subject_type: None,
+                predicate: "implements".into(),
+                object: "https://example.com/rebuild-object".into(),
+                object_type: None,
+                evidence: vec![EvidenceInput {
+                    evidence_type: Some("documentation".into()),
+                    uri: Some("https://example.com/rebuild-subject/docs".into()),
+                    title: Some("Docs".into()),
+                    ..Default::default()
+                }],
+                actor_confidence: Some(0.8),
+                observed_at: None,
+                extraction_method: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let ResolveOutcome::Found { node: subject_node, .. } = service.resolve("https://example.com/rebuild-subject").await.unwrap() else {
+        panic!("subject should resolve");
+    };
+    service.declare_alias(&auth, subject_node.id, "Rebuild Subject".into(), oag_core::AliasType::Name).await.unwrap();
+
+    let other = declare_actor_with_perms(&service, "rebuild-disputer", vec![Permission::GraphAssert]).await;
+    service.dispute_assertion(&other, assertion_id, Some("checking this".into())).await.unwrap();
+
+    // Snapshot every read path before rebuilding.
+    let before_assertion = service.get_assertion(assertion_id).await.unwrap().unwrap();
+    let before_evidence = service.list_evidence(assertion_id).await.unwrap();
+    let before_aliases = service.list_aliases(subject_node.id).await.unwrap();
+    let before_resolve = service.resolve("https://example.com/rebuild-subject").await.unwrap();
+    let before_actor = service.get_actor(before_assertion.actor_id).await.unwrap().unwrap();
+
+    let summary = service.rebuild_projection().await.unwrap();
+    assert!(summary.events_replayed >= 5, "expected at least declare_actor+assert+evidence+alias+actor+dispute, got {summary:?}");
+
+    let after_assertion = service.get_assertion(assertion_id).await.unwrap().unwrap();
+    assert_eq!(after_assertion.status, before_assertion.status);
+    assert_eq!(after_assertion.status, oag_core::AssertionStatus::Disputed);
+
+    let after_evidence = service.list_evidence(assertion_id).await.unwrap();
+    assert_eq!(after_evidence.len(), before_evidence.len());
+    assert_eq!(after_evidence[0].uri, before_evidence[0].uri);
+
+    let after_aliases = service.list_aliases(subject_node.id).await.unwrap();
+    assert_eq!(after_aliases.len(), before_aliases.len());
+    assert_eq!(after_aliases[0].alias, before_aliases[0].alias);
+
+    let after_resolve = service.resolve("https://example.com/rebuild-subject").await.unwrap();
+    let (ResolveOutcome::Found { node: before_node, .. }, ResolveOutcome::Found { node: after_node, .. }) =
+        (before_resolve, after_resolve)
+    else {
+        panic!("both resolves should find the node");
+    };
+    assert_eq!(before_node.id, after_node.id);
+
+    let after_actor = service.get_actor(before_assertion.actor_id).await.unwrap().unwrap();
+    assert_eq!(after_actor.name, before_actor.name);
+}

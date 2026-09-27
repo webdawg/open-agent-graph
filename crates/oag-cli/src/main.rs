@@ -79,6 +79,22 @@ enum Command {
         #[command(subcommand)]
         command: AuthorityCommand,
     },
+    /// Create a consistent snapshot of the whole local database (spec
+    /// section 82) -- safe to run against a live `oag serve` (uses SQLite's
+    /// `VACUUM INTO`, not a raw file copy, which could grab an inconsistent
+    /// mid-write state on an active WAL-mode database).
+    Backup {
+        out: PathBuf,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// Wipe every derived graph table and replay the full signed event log
+    /// to regenerate them from scratch (spec section 83). The event log
+    /// itself is never modified. Best run with `oag serve` stopped.
+    Rebuild {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
     /// Crawl one URL: fetch it safely, extract structured facts (JSON-LD,
     /// llms.txt, ARD, A2A), and assert them as evidence-backed claims.
     Crawl {
@@ -163,6 +179,18 @@ enum IdentityCommand {
         data_dir: PathBuf,
         #[arg(long)]
         out: PathBuf,
+    },
+    /// Restore identity.key from a backup made with `oag identity backup`.
+    /// Refuses to overwrite an existing identity.key unless --force is
+    /// given: silently swapping a peer's identity out from under its
+    /// existing database would desync its peer_id from every event it has
+    /// already signed under the old key.
+    Restore {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+        backup_path: PathBuf,
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -270,11 +298,16 @@ async fn main() -> anyhow::Result<()> {
         Command::Authority { command: AuthorityCommand::Recompute { data_dir } } => {
             commands::authority_recompute(&data_dir).await
         }
+        Command::Backup { out, data_dir } => commands::backup(&data_dir, &out).await,
+        Command::Rebuild { data_dir } => commands::rebuild(&data_dir).await,
         Command::Identity { command: IdentityCommand::Show { data_dir } } => {
             commands::identity_show(&data_dir).await
         }
         Command::Identity { command: IdentityCommand::Backup { data_dir, out } } => {
             commands::identity_backup(&data_dir, &out).await
+        }
+        Command::Identity { command: IdentityCommand::Restore { data_dir, backup_path, force } } => {
+            commands::identity_restore(&data_dir, &backup_path, force).await
         }
         Command::Key {
             command:

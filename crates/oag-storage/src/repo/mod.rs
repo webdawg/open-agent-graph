@@ -5,4 +5,5 @@ pub mod events;
 pub mod node_authority;
 pub mod nodes;
 pub mod peers;
+pub mod rebuild;
 pub mod replication;
