@@ -5,3 +5,4 @@
 *.sqlite-wal
 identity.key
 .env
+/.claude/worktrees/
