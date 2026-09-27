@@ -956,3 +956,78 @@ async fn rebuild_projection_reproduces_identical_graph_state() {
     let after_actor = service.get_actor(before_assertion.actor_id).await.unwrap().unwrap();
     assert_eq!(after_actor.name, before_actor.name);
 }
+
+/// Deterministic, hash-derived bag-of-words embedding -- no network calls,
+/// no external model. Text sharing words lands in the same buckets and so
+/// scores similarly under cosine similarity, which is enough to exercise
+/// real ranking behavior without a real embedding model in the test suite.
+struct FakeEmbeddingProvider;
+
+// Large relative to the handful of distinct words in these tests, so two
+// unrelated words landing in the same bucket (and spuriously inflating
+// similarity) is vanishingly unlikely.
+const FAKE_EMBEDDING_DIM: usize = 4096;
+
+#[async_trait::async_trait]
+impl oag_embeddings::EmbeddingProvider for FakeEmbeddingProvider {
+    async fn embed(&self, text: &str) -> Result<Vec<f32>, oag_embeddings::EmbeddingError> {
+        let mut vector = vec![0.0f32; FAKE_EMBEDDING_DIM];
+        for word in text.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()) {
+            let hash = blake3::hash(word.to_lowercase().as_bytes());
+            let bytes = hash.as_bytes();
+            let bucket = u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]) as usize % FAKE_EMBEDDING_DIM;
+            vector[bucket] += 1.0;
+        }
+        Ok(vector)
+    }
+
+    fn provider_name(&self) -> &'static str {
+        "fake-test-provider"
+    }
+
+    fn model_name(&self) -> &str {
+        "fake-v1"
+    }
+}
+
+#[tokio::test]
+async fn semantic_search_ranks_topically_similar_nodes_above_unrelated_ones() {
+    let (service, auth) = service_with_admin("semantic-search-ranking").await;
+
+    for subject in ["Rust Programming Language", "Rust Async Runtime", "Banana Smoothie Recipe"] {
+        service.assert(&auth, sample_input(subject)).await.unwrap();
+    }
+
+    let summary = service.recompute_embeddings(&FakeEmbeddingProvider).await.unwrap();
+    assert!(summary.nodes_embedded >= 3, "expected at least the 3 subjects embedded, got {summary:?}");
+    assert_eq!(summary.nodes_skipped, 0);
+
+    let results = service.semantic_search(&FakeEmbeddingProvider, "Rust Programming", 2).await.unwrap();
+    assert_eq!(results.len(), 2);
+    let identifiers: Vec<&str> = results.iter().map(|(node, _)| node.canonical_identifier.as_str()).collect();
+    assert!(identifiers.contains(&"concept:rust-programming-language"));
+    assert!(identifiers.contains(&"concept:rust-async-runtime"));
+    assert!(!identifiers.contains(&"concept:banana-smoothie-recipe"));
+}
+
+#[tokio::test]
+async fn semantic_search_with_default_disabled_provider_is_a_typed_error_not_a_panic() {
+    let (service, auth) = service_with_admin("semantic-search-disabled").await;
+    service.assert(&auth, sample_input("Some Topic")).await.unwrap();
+
+    let disabled = oag_embeddings::DisabledProvider;
+    let result = service.semantic_search(&disabled, "some topic", 5).await;
+    assert!(
+        matches!(result, Err(crate::error::GraphError::Embedding(oag_embeddings::EmbeddingError::Disabled))),
+        "got {result:?}"
+    );
+
+    let recompute_result = service.recompute_embeddings(&disabled).await;
+    assert!(
+        matches!(
+            recompute_result,
+            Err(crate::error::GraphError::Embedding(oag_embeddings::EmbeddingError::Disabled))
+        ),
+        "got {recompute_result:?}"
+    );
+}

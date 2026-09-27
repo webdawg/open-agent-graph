@@ -150,6 +150,14 @@ pub async fn search(
     rows.into_iter().map(row_to_node).collect()
 }
 
+/// Every node in the local graph — used by embeddings recomputation (spec
+/// section 64), which needs the whole node set rather than a query-scoped
+/// slice of it (same shape as `edges::list_all` for authority/PageRank).
+pub async fn list_all(conn: &mut SqliteConnection) -> Result<Vec<oag_core::Node>, StorageError> {
+    let rows: Vec<NodeRow> = sqlx::query_as("SELECT * FROM nodes").fetch_all(&mut *conn).await?;
+    rows.into_iter().map(row_to_node).collect()
+}
+
 pub fn metadata_object() -> JsonValue {
     JsonValue::Object(Default::default())
 }

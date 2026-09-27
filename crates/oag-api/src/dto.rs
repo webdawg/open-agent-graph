@@ -95,6 +95,11 @@ pub struct ResolveRequest {
 pub struct SearchQuery {
     pub q: String,
     pub limit: Option<i64>,
+    /// Rank by embedding cosine similarity (spec section 64) instead of
+    /// keyword FTS. Requires this peer to have a real embedding provider
+    /// configured -- errors clearly rather than silently falling back if
+    /// embeddings aren't set up.
+    pub semantic: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

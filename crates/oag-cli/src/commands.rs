@@ -163,10 +163,33 @@ pub async fn authority_recompute(data_dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub async fn search(data_dir: &Path, query: &str, limit: i64) -> anyhow::Result<()> {
+pub async fn search(
+    data_dir: &Path,
+    query: &str,
+    limit: i64,
+    semantic: bool,
+    config_path: Option<std::path::PathBuf>,
+) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
-    let results = graph.search(query, limit).await?;
-    println!("{}", serde_json::to_string_pretty(&results)?);
+    let search_section = crate::config::resolve_search_section(config_path)?;
+    // `--semantic` forces it on for this one invocation; otherwise fall back
+    // to `[search].semantic_enabled` in config.toml as the standing default.
+    if semantic || search_section.semantic_enabled {
+        let provider = search_section.to_embedding_provider();
+        let results = graph.semantic_search(provider.as_ref(), query, limit).await?;
+        println!("{}", serde_json::to_string_pretty(&results)?);
+    } else {
+        let results = graph.search(query, limit).await?;
+        println!("{}", serde_json::to_string_pretty(&results)?);
+    }
+    Ok(())
+}
+
+pub async fn embeddings_recompute(data_dir: &Path, config_path: Option<std::path::PathBuf>) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let provider = crate::config::resolve_search_section(config_path)?.to_embedding_provider();
+    let summary = graph.recompute_embeddings(provider.as_ref()).await?;
+    println!("{}", serde_json::to_string_pretty(&summary)?);
     Ok(())
 }
 

@@ -15,7 +15,6 @@ fn default_true() -> bool {
 
 /// `config.toml` per spec section 94.
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)] // search.semantic_enabled is parsed for forward-compat, not used yet
 pub struct FileConfig {
     #[serde(default)]
     pub data: DataSection,
@@ -54,16 +53,61 @@ impl Default for ServerSection {
     }
 }
 
+/// `[search]` (spec section 64/94): semantic search is opt-in and OAG must
+/// work with it entirely disabled by default. `embedding_provider = "disabled"`
+/// (the default) makes that the literal config default too, not just a
+/// runtime fallback. `semantic_enabled` controls whether `oag search` ranks
+/// semantically *by default* without needing `--semantic`; the flag can
+/// still force it on for a single invocation.
 #[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct SearchSection {
     #[serde(default)]
     pub semantic_enabled: bool,
+    #[serde(default = "default_embedding_provider")]
+    pub embedding_provider: String,
+    pub embedding_base_url: Option<String>,
+    pub embedding_api_key: Option<String>,
+    #[serde(default = "default_embedding_model")]
+    pub embedding_model: String,
+}
+
+fn default_embedding_provider() -> String {
+    "disabled".to_string()
+}
+
+fn default_embedding_model() -> String {
+    "text-embedding-3-small".to_string()
 }
 
 impl Default for SearchSection {
     fn default() -> Self {
-        Self { semantic_enabled: false }
+        Self {
+            semantic_enabled: false,
+            embedding_provider: default_embedding_provider(),
+            embedding_base_url: None,
+            embedding_api_key: None,
+            embedding_model: default_embedding_model(),
+        }
+    }
+}
+
+impl SearchSection {
+    /// `"disabled"` (the default) or a missing `embedding_base_url` both
+    /// yield `DisabledProvider` — spec section 64: OAG must work with
+    /// embeddings completely disabled, so an incomplete config degrades to
+    /// that safe default rather than erroring at startup.
+    pub fn to_embedding_provider(&self) -> Box<dyn oag_embeddings::EmbeddingProvider> {
+        match self.embedding_provider.as_str() {
+            "openai_compatible" => match &self.embedding_base_url {
+                Some(base_url) => Box::new(oag_embeddings::OpenAiCompatibleProvider::new(
+                    base_url.clone(),
+                    self.embedding_api_key.clone(),
+                    self.embedding_model.clone(),
+                )),
+                None => Box::new(oag_embeddings::DisabledProvider),
+            },
+            _ => Box::new(oag_embeddings::DisabledProvider),
+        }
     }
 }
 
@@ -261,6 +305,7 @@ pub struct ResolvedConfig {
     pub sync_interval: std::time::Duration,
     pub federation: oag_sync::FederationPolicy,
     pub reticulum: Option<oag_reticulum::ReticulumConfig>,
+    pub embedding_provider: Box<dyn oag_embeddings::EmbeddingProvider>,
 }
 
 pub fn resolve(
@@ -296,6 +341,7 @@ pub fn resolve(
         sync_interval: std::time::Duration::from_secs(file.network.sync_interval_seconds),
         federation,
         reticulum: file.reticulum.to_reticulum_config(),
+        embedding_provider: file.search.to_embedding_provider(),
     })
 }
 
@@ -319,4 +365,23 @@ pub fn resolve_crawler_config(
     };
 
     Ok(file.crawler.to_crawler_config(allow_private_networks_flag))
+}
+
+/// Lightweight resolver for `oag embeddings recompute` and `oag search
+/// --semantic`, which — like `oag crawl` — are one-shot commands that don't
+/// need `serve`'s full `ResolvedConfig`.
+pub fn resolve_search_section(config_path: Option<PathBuf>) -> anyhow::Result<SearchSection> {
+    let mut figment = Figment::new();
+    if let Some(path) = &config_path {
+        figment = figment.merge(Toml::file(path));
+    }
+    figment = figment.merge(figment::providers::Env::prefixed("OAG_").split("_"));
+
+    let file: FileConfig = if config_path.is_some() {
+        figment.extract()?
+    } else {
+        FileConfig::default()
+    };
+
+    Ok(file.search)
 }

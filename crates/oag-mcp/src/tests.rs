@@ -55,7 +55,9 @@ async fn spawn_mcp_server(name: &str) -> (String, String) {
         .await
         .unwrap();
 
-    let app = axum::Router::new().route_service("/mcp", crate::streamable_http_service(graph));
+    let embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider> = Arc::new(oag_embeddings::DisabledProvider);
+    let app = axum::Router::new()
+        .route_service("/mcp", crate::streamable_http_service(graph, embedding_provider));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {

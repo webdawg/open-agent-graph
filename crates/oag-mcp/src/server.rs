@@ -21,6 +21,9 @@ fn map_err(e: GraphError) -> ErrorData {
         }
         GraphError::NotFound(what) => ErrorData::invalid_params(format!("not found: {what}"), None),
         GraphError::InvalidInput(msg) => ErrorData::invalid_params(msg, None),
+        GraphError::Embedding(oag_embeddings::EmbeddingError::Disabled) => {
+            ErrorData::invalid_params(e.to_string(), None)
+        }
         other => ErrorData::internal_error(other.to_string(), None),
     }
 }
@@ -52,11 +55,12 @@ fn evidence_input(p: EvidenceParam) -> EvidenceInput {
 #[derive(Clone)]
 pub struct OagMcpServer {
     graph: Arc<GraphService>,
+    embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider>,
 }
 
 impl OagMcpServer {
-    pub fn new(graph: Arc<GraphService>) -> Self {
-        Self { graph }
+    pub fn new(graph: Arc<GraphService>, embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider>) -> Self {
+        Self { graph, embedding_provider }
     }
 
     async fn authenticate(&self, parts: &http::request::Parts) -> Result<AuthContext, ErrorData> {
@@ -80,7 +84,17 @@ impl OagMcpServer {
         Parameters(p): Parameters<SearchParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
         self.authenticate_read(&parts).await?;
-        let results = self.graph.search(&p.query, p.limit.unwrap_or(20)).await.map_err(map_err)?;
+        let results = if p.semantic.unwrap_or(false) {
+            let ranked = self
+                .graph
+                .semantic_search(self.embedding_provider.as_ref(), &p.query, p.limit.unwrap_or(20))
+                .await
+                .map_err(map_err)?;
+            json!(ranked)
+        } else {
+            let results = self.graph.search(&p.query, p.limit.unwrap_or(20)).await.map_err(map_err)?;
+            json!(results)
+        };
         Ok(Json(json!({ "results": results })))
     }
 

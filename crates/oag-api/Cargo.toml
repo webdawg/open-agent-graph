@@ -10,6 +10,7 @@ oag-crypto.workspace = true
 oag-storage.workspace = true
 oag-events.workspace = true
 oag-graph.workspace = true
+oag-embeddings.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

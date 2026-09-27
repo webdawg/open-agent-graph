@@ -20,6 +20,7 @@ oag-sync.workspace = true
 oag-crawler.workspace = true
 oag-petname.workspace = true
 oag-reticulum.workspace = true
+oag-embeddings.workspace = true
 url.workspace = true
 hex.workspace = true
 serde.workspace = true

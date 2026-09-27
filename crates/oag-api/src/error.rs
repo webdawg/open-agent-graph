@@ -26,6 +26,13 @@ impl IntoResponse for ApiError {
                 tracing::error!(error = %self.0, "internal error");
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal error".to_string())
             }
+            GraphError::Embedding(oag_embeddings::EmbeddingError::Disabled) => {
+                (StatusCode::BAD_REQUEST, self.0.to_string())
+            }
+            GraphError::Embedding(_) => {
+                tracing::error!(error = %self.0, "embedding provider error");
+                (StatusCode::BAD_GATEWAY, "embedding provider error".to_string())
+            }
         };
         (status, Json(json!({ "error": message }))).into_response()
     }

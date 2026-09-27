@@ -18,7 +18,15 @@ pub async fn search(
     Query(q): Query<SearchQuery>,
 ) -> ApiResult<Json<serde_json::Value>> {
     authenticate_read(&headers, &state.graph).await?;
-    let results = state.graph.search(&q.q, q.limit.unwrap_or(20)).await?;
+    let results = if q.semantic.unwrap_or(false) {
+        let ranked = state
+            .graph
+            .semantic_search(state.embedding_provider.as_ref(), &q.q, q.limit.unwrap_or(20))
+            .await?;
+        json!(ranked)
+    } else {
+        json!(state.graph.search(&q.q, q.limit.unwrap_or(20)).await?)
+    };
     Ok(Json(json!({ "results": results })))
 }
 

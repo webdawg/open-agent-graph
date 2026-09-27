@@ -41,11 +41,13 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         tokio::spawn(oag_reticulum::run_listener(pool_for_reticulum, identity_for_reticulum, reticulum_config));
     }
 
-    let state = oag_api::AppState::new(graph.clone());
+    let embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider> = Arc::from(config.embedding_provider);
+
+    let state = oag_api::AppState::new(graph.clone()).with_embedding_provider(embedding_provider.clone());
     let rest_router = oag_api::build_router(state).merge(sync_router);
 
     let app = if config.mcp_enabled {
-        rest_router.route_service("/mcp", oag_mcp::streamable_http_service(graph.clone()))
+        rest_router.route_service("/mcp", oag_mcp::streamable_http_service(graph.clone(), embedding_provider))
     } else {
         rest_router
     };

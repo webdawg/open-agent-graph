@@ -12,4 +12,6 @@ pub enum GraphError {
     NotFound(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    #[error(transparent)]
+    Embedding(#[from] oag_embeddings::EmbeddingError),
 }

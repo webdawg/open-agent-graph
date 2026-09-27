@@ -8,14 +8,15 @@ use crate::server::OagMcpServer;
 
 /// A `tower::Service` implementing MCP over Streamable HTTP (spec section
 /// 68), ready to mount on the same Axum app as REST via
-/// `router.route_service("/mcp", oag_mcp::streamable_http_service(graph))`.
+/// `router.route_service("/mcp", oag_mcp::streamable_http_service(graph, embedding_provider))`.
 /// `service_factory` clones the shared `Arc<GraphService>` per session, so
 /// REST and MCP always read/write through the exact same service layer.
 pub fn streamable_http_service(
     graph: Arc<GraphService>,
+    embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider>,
 ) -> StreamableHttpService<OagMcpServer, LocalSessionManager> {
     StreamableHttpService::new(
-        move || Ok(OagMcpServer::new(graph.clone())),
+        move || Ok(OagMcpServer::new(graph.clone(), embedding_provider.clone())),
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default(),
     )

@@ -38,6 +38,14 @@ enum Command {
         data_dir: PathBuf,
         #[arg(long, default_value_t = 20)]
         limit: i64,
+        /// Rank by embedding cosine similarity (spec section 64) instead of
+        /// keyword FTS. Requires `[search]` in config.toml to have a real
+        /// embedding provider configured -- errors clearly rather than
+        /// silently falling back if embeddings aren't set up.
+        #[arg(long)]
+        semantic: bool,
+        #[arg(long)]
+        config: Option<PathBuf>,
     },
     /// Node inspection commands.
     Node {
@@ -78,6 +86,11 @@ enum Command {
     Authority {
         #[command(subcommand)]
         command: AuthorityCommand,
+    },
+    /// Semantic search embedding commands (spec section 64).
+    Embeddings {
+        #[command(subcommand)]
+        command: EmbeddingsCommand,
     },
     /// Create a consistent snapshot of the whole local database (spec
     /// section 82) -- safe to run against a live `oag serve` (uses SQLite's
@@ -143,6 +156,21 @@ enum AuthorityCommand {
     Recompute {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum EmbeddingsCommand {
+    /// Recompute every node's embedding from scratch against the configured
+    /// provider (spec section 64) -- an on-demand batch job, like `oag
+    /// authority recompute`. Requires `[search]` in config.toml to have a
+    /// real embedding provider configured; with embeddings left disabled
+    /// (the default) this errors clearly rather than silently no-op'ing.
+    Recompute {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+        #[arg(long)]
+        config: Option<PathBuf>,
     },
 }
 
@@ -280,8 +308,8 @@ async fn main() -> anyhow::Result<()> {
             serve::run(resolved).await
         }
         Command::Status { data_dir } => commands::status(&data_dir).await,
-        Command::Search { query, data_dir, limit } => {
-            commands::search(&data_dir, &query, limit).await
+        Command::Search { query, data_dir, limit, semantic, config } => {
+            commands::search(&data_dir, &query, limit, semantic, config).await
         }
         Command::Node { command: NodeCommand::Get { id, data_dir } } => {
             commands::node_get(&data_dir, &id).await
@@ -297,6 +325,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Authority { command: AuthorityCommand::Recompute { data_dir } } => {
             commands::authority_recompute(&data_dir).await
+        }
+        Command::Embeddings { command: EmbeddingsCommand::Recompute { data_dir, config } } => {
+            commands::embeddings_recompute(&data_dir, config).await
         }
         Command::Backup { out, data_dir } => commands::backup(&data_dir, &out).await,
         Command::Rebuild { data_dir } => commands::rebuild(&data_dir).await,

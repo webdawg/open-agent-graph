@@ -170,6 +170,16 @@ pub struct NodeAuthorityRow {
 }
 
 #[derive(Debug, FromRow)]
+pub struct NodeEmbeddingRow {
+    pub node_id: Vec<u8>,
+    pub provider: String,
+    pub model: String,
+    pub dim: i64,
+    pub embedding: Vec<u8>,
+    pub computed_at: i64,
+}
+
+#[derive(Debug, FromRow)]
 pub struct PeerKnownHeadRow {
     pub peer_id: Vec<u8>,
     pub origin_peer_id: Vec<u8>,

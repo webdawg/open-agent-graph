@@ -1774,6 +1774,7 @@ dependencies = [
  "http-body-util",
  "oag-core",
  "oag-crypto",
+ "oag-embeddings",
  "oag-events",
  "oag-graph",
  "oag-storage",
@@ -1800,6 +1801,7 @@ dependencies = [
  "oag-core",
  "oag-crawler",
  "oag-crypto",
+ "oag-embeddings",
  "oag-events",
  "oag-graph",
  "oag-mcp",
@@ -1869,6 +1871,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "oag-embeddings"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "oag-events"
 version = "0.1.0"
 dependencies = [
@@ -1891,10 +1906,12 @@ dependencies = [
 name = "oag-graph"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "blake3",
  "hex",
  "oag-core",
  "oag-crypto",
+ "oag-embeddings",
  "oag-events",
  "oag-storage",
  "serde",
@@ -1914,6 +1931,7 @@ dependencies = [
  "http",
  "oag-core",
  "oag-crypto",
+ "oag-embeddings",
  "oag-graph",
  "oag-storage",
  "reqwest",

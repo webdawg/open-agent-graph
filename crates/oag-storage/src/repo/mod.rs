@@ -3,6 +3,7 @@ pub mod assertions;
 pub mod edges;
 pub mod events;
 pub mod node_authority;
+pub mod node_embeddings;
 pub mod nodes;
 pub mod peers;
 pub mod rebuild;
