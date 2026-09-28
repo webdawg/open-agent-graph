@@ -8,3 +8,4 @@ pub mod nodes;
 pub mod peers;
 pub mod rebuild;
 pub mod replication;
+pub mod stats;

@@ -38,3 +38,34 @@ Format: question, assumption I'm running with, status.
   clearly (`embeddings are disabled`) rather than silently falling back to keyword FTS — consistent
   with spec section 64's "typed error, never panic" requirement, and avoids a caller mistaking a
   degraded keyword result for a real semantic one. Status: resolved.
+
+## Metrics (spec section 86)
+
+- **Scope: cheap current-state snapshot only, not full spec compliance.** Implemented
+  `events_total`, `nodes_total`, `edges_total`, `assertions_total`, `evidence_total`, `peer_count`,
+  and `sqlite_size_bytes` -- the subset of the spec's suggested measurements that are simple
+  `COUNT(*)`/`PRAGMA` queries against tables that already exist. Deliberately NOT implemented this
+  milestone: `events_by_origin` (a labeled/vector metric -- needs a GROUP BY and a decision on label
+  cardinality), `events_pending_chain`, `peer_sync_lag`, `peer_sync_errors`,
+  `replication_bytes_in`/`out`, `search_latency`, `api_latency` (all need request-duration
+  instrumentation -- a middleware/histogram layer, not a snapshot query), `crawl_jobs`/
+  `crawl_failures`, `verification_jobs`/`verification_failures` (need counters wired through the
+  crawler and verifier code paths), and `blob_store_size` (no blob store exists yet -- spec section
+  84's `blobs/<hash>` is itself unimplemented). Assumption: shipping the correct, cheap subset now is
+  better than blocking the whole endpoint on the request-timing/counter-wiring work the rest needs.
+  Status: open (revisit alongside whichever of request tracing, crawler/verifier job counters, or
+  the blob store lands first).
+- **Output format: hand-rolled Prometheus text exposition, no external crate.** `GET /metrics`
+  returns `text/plain; version=0.0.4` built by a small pure `render()` function in `oag-api`, rather
+  than pulling in `metrics`/`metrics-exporter-prometheus`. Assumption: spec section 86 explicitly
+  says no external metrics platform is required to operate OAG, and seven `# HELP`/`# TYPE`/value
+  line groups don't justify a dependency -- consistent with this project's general preference for a
+  small hand-rolled implementation over a heavyweight crate when the surface is this small (see
+  `oag-embeddings` only pulling in `reqwest`, not a full SDK). Status: resolved.
+- **Unauthenticated endpoint.** `/metrics` needs no bearer token, same as `/api/v1/status`.
+  Assumption: metrics endpoints are conventionally open so a scraper doesn't need a credential
+  provisioned, and nothing in the seven exposed metrics is sensitive (all are aggregate counts/
+  sizes, no per-actor or per-peer breakdown). Status: resolved.
+- **Route placement: top-level `/metrics`, not under `/api/v1`.** Matches the spec's literal path
+  and Prometheus's own scrape-path convention, rather than being namespaced with the rest of the
+  REST API. Status: resolved.

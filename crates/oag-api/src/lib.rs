@@ -2,6 +2,7 @@ pub mod auth;
 pub mod dto;
 pub mod error;
 pub mod handlers;
+pub mod metrics;
 pub mod rate_limit;
 pub mod state;
 #[cfg(test)]
@@ -22,11 +23,14 @@ use tower_http::trace::TraceLayer;
 const MAX_REQUEST_BODY_BYTES: usize = 4 * 1024 * 1024;
 
 /// Build the full `/api/v1` REST router (spec section 66, minus `/peers` —
-/// no replication in this milestone). MCP (`oag-mcp`) is mounted separately
-/// on the same outer Axum app by the caller, both sharing this `AppState`'s
-/// `GraphService`.
+/// no replication in this milestone), plus `GET /metrics` (spec section 86)
+/// at the top level rather than under `/api/v1` — matching the spec's literal
+/// `/metrics` path and Prometheus's own convention. MCP (`oag-mcp`) is
+/// mounted separately on the same outer Axum app by the caller, both sharing
+/// this `AppState`'s `GraphService`.
 pub fn build_router(state: AppState) -> Router {
     Router::new()
+        .route("/metrics", get(metrics::handler))
         .route("/api/v1/search", get(handlers::search))
         .route("/api/v1/nodes/{id}", get(handlers::get_node))
         .route("/api/v1/nodes/{id}/edges", get(handlers::get_node_edges))

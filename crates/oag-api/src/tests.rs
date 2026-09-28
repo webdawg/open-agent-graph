@@ -302,3 +302,66 @@ async fn status_endpoint_needs_no_auth() {
     let body = body_json(response).await;
     assert!(body["peer_id"].as_str().unwrap().starts_with("oagp_"));
 }
+
+#[tokio::test]
+async fn metrics_endpoint_needs_no_auth_and_reflects_seeded_data() {
+    let (app, key) = test_app("metrics").await;
+    let auth_header = format!("Bearer {key}");
+
+    // Seed one assertion (with one piece of evidence) so the counters are
+    // exercising real rows, not just zeros.
+    let create_body = json!({
+        "subject": "https://example.com/metrics-target",
+        "predicate": "implements",
+        "object": "concept:metrics-test",
+        "evidence": [{"type": "documentation", "uri": "https://example.com/docs"}]
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // No Authorization header at all -- /metrics must still work.
+    let response = app
+        .oneshot(Request::get("/metrics").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get("content-type").unwrap(),
+        "text/plain; version=0.0.4"
+    );
+
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8(bytes.to_vec()).unwrap();
+
+    assert!(text.contains("# TYPE nodes_total counter"));
+    assert!(text.contains("# TYPE sqlite_size_bytes gauge"));
+
+    let value_of = |metric: &str| -> i64 {
+        text.lines()
+            .find(|line| line.starts_with(&format!("{metric} ")))
+            .unwrap_or_else(|| panic!("missing value line for {metric} in:\n{text}"))
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+
+    // One assertion created two nodes (subject + object) and one edge.
+    assert_eq!(value_of("nodes_total"), 2);
+    assert_eq!(value_of("edges_total"), 1);
+    assert_eq!(value_of("assertions_total"), 1);
+    assert_eq!(value_of("evidence_total"), 1);
+    assert!(value_of("events_total") > 0);
+    assert!(value_of("sqlite_size_bytes") > 0);
+}
