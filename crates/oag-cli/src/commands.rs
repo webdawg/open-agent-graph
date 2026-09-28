@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use oag_core::{ActorType, Permission};
+use oag_core::{ActorId, ActorType, Permission};
 use oag_crypto::PeerIdentity;
-use oag_graph::GraphService;
+use oag_graph::{AuthContext, GraphService};
 use oag_sync::{FederationPolicy, SyncService};
 
 async fn open_graph(data_dir: &Path) -> anyhow::Result<GraphService> {
@@ -300,6 +300,66 @@ pub async fn rebuild(data_dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Spec section 85's redaction/suppression commands are CLI-only, gated by
+/// filesystem access to the data directory -- the same trust boundary
+/// `oag backup`/`oag rebuild` already rely on. This synthetic `AuthContext`
+/// is never persisted or looked up anywhere; it only needs to carry
+/// `Permission::Admin` through `GraphService`'s existing permission checks,
+/// the same checks a future REST/MCP surface for these commands would reuse
+/// unchanged with a real authenticated actor.
+fn cli_admin_auth() -> AuthContext {
+    AuthContext {
+        actor_id: ActorId::derive(b"oag-cli:local-operator"),
+        permissions: vec![Permission::Admin],
+    }
+}
+
+pub async fn redact_evidence(
+    data_dir: &Path,
+    evidence_id: &str,
+    reason: Option<String>,
+    force: bool,
+) -> anyhow::Result<()> {
+    if !force {
+        anyhow::bail!(
+            "redaction permanently blanks this evidence's title/excerpt in your local database \
+             and cannot be undone by any command in this tool. It also cannot reach copies of \
+             this event already replicated to other peers -- an immutable distributed log can't \
+             promise that (spec section 85). Pass --force if you're certain."
+        );
+    }
+    let graph = open_graph(data_dir).await?;
+    let event_id = evidence_id
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid evidence id '{evidence_id}'"))?;
+    graph.redact_evidence(&cli_admin_auth(), event_id, reason).await?;
+    println!("redacted evidence {evidence_id}");
+    Ok(())
+}
+
+pub async fn redact_list(data_dir: &Path) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let redactions = graph.list_redactions(&cli_admin_auth()).await?;
+    println!("{}", serde_json::to_string_pretty(&redactions)?);
+    Ok(())
+}
+
+pub async fn redact_suppress_node(data_dir: &Path, node_id: &str) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let node_id = node_id.parse().map_err(|_| anyhow::anyhow!("invalid node id '{node_id}'"))?;
+    graph.suppress_node_from_search(&cli_admin_auth(), node_id).await?;
+    println!("suppressed {node_id} from search results (reversible: oag redact unsuppress-node)");
+    Ok(())
+}
+
+pub async fn redact_unsuppress_node(data_dir: &Path, node_id: &str) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let node_id = node_id.parse().map_err(|_| anyhow::anyhow!("invalid node id '{node_id}'"))?;
+    graph.unsuppress_node_from_search(&cli_admin_auth(), node_id).await?;
+    println!("unsuppressed {node_id}");
+    Ok(())
+}
+
 pub async fn key_create(
     data_dir: &Path,
     actor_type: &str,
@@ -491,5 +551,66 @@ mod tests {
         assert!(out_path.exists());
 
         rebuild(&data_dir).await.unwrap();
+    }
+
+    async fn seed_evidence(data_dir: &Path) -> String {
+        let graph = open_graph(data_dir).await.unwrap();
+        let actor_id = graph
+            .declare_actor(ActorType::Agent, Some("seed".into()), None, None)
+            .await
+            .unwrap();
+        let auth = AuthContext { actor_id, permissions: vec![Permission::GraphAssert] };
+        let assertion_id = graph
+            .assert(
+                &auth,
+                oag_graph::AssertInput {
+                    subject: "https://example.com/redact-cli-target".into(),
+                    subject_type: None,
+                    predicate: "instance_of".into(),
+                    object: "concept:redact-cli-test".into(),
+                    object_type: None,
+                    evidence: vec![],
+                    actor_confidence: Some(0.9),
+                    observed_at: None,
+                    extraction_method: None,
+                },
+            )
+            .await
+            .unwrap();
+        graph
+            .add_evidence(
+                &auth,
+                assertion_id,
+                oag_graph::EvidenceInput {
+                    evidence_type: Some("documentation".into()),
+                    title: Some("A Very Personal Title".into()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        graph.list_evidence(assertion_id).await.unwrap()[0].id.to_hex()
+    }
+
+    #[tokio::test]
+    async fn redact_evidence_refuses_without_force() {
+        let data_dir = temp_dir("redact-no-force");
+        let evidence_id = seed_evidence(&data_dir).await;
+
+        let result = redact_evidence(&data_dir, &evidence_id, None, false).await;
+        assert!(result.is_err(), "should refuse to redact without --force");
+    }
+
+    #[tokio::test]
+    async fn redact_evidence_succeeds_with_force_and_lists_the_reason() {
+        let data_dir = temp_dir("redact-with-force");
+        let evidence_id = seed_evidence(&data_dir).await;
+
+        redact_evidence(&data_dir, &evidence_id, Some("test reason".to_string()), true).await.unwrap();
+
+        let graph = open_graph(&data_dir).await.unwrap();
+        let redactions = graph.list_redactions(&cli_admin_auth()).await.unwrap();
+        assert_eq!(redactions.len(), 1);
+        assert_eq!(redactions[0].reason.as_deref(), Some("test reason"));
     }
 }

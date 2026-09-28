@@ -124,3 +124,36 @@ Format: question, assumption I'm running with, status.
   path already funnels through this one function, so recording there means every current and future
   authenticated handler gets `actor_id` on its span for free, with no per-handler boilerplate.
   Status: resolved.
+
+## Deletion and redaction (spec section 85)
+
+- **Scope: evidence content only, not whole assertions/nodes/actors.** `oag redact evidence`
+  blanks `title`/`excerpt` on one evidence row. Redacting/tombstoning a whole assertion or node was
+  deliberately left out: a later `DISPUTE`/`RETRACT`/`ADD_EVIDENCE` event can target an assertion by
+  id, and removing that assertion's projected row would make replaying those later events fail
+  during `oag rebuild` -- a much harder problem than evidence, which nothing else ever references by
+  id. Status: open (revisit if a real request for assertion-level redaction shows up; the referential-
+  integrity problem would need solving first, e.g. a "redacted assertion" tombstone status rather
+  than removing the row).
+- **No REST/MCP surface.** `oag redact *` is CLI-only, matching `oag rebuild`/`oag authority
+  recompute`'s precedent for rare, operator-triggered maintenance actions. `GraphService::
+  redact_evidence`/`suppress_node_from_search`/`unsuppress_node_from_search` already take a real
+  `AuthContext` and check `Permission::Admin`, so adding a REST/MCP route later needs no GraphService
+  changes -- only a handler that authenticates a real actor instead of the CLI's synthetic local one.
+  Status: open.
+- **No "unredact" / content-recovery command.** Intentional, not an oversight: the CLI's own warning
+  text says this is permanent at the tooling level. The original `title`/`excerpt` bytes still exist
+  forever inside `events.canonical_payload` (never modified by redaction), but nothing reads them
+  back out. Status: resolved (working as designed).
+- **`search_suppressions.node_id` has no foreign key to `nodes`.** Necessary, not just simpler:
+  `nodes` is itself a wiped-and-replayed projection table (`oag rebuild`'s `clear_projection_tables`
+  deletes it before replay reinserts it), and a suppression row must survive that delete -- a FK
+  would make the delete fail with a constraint violation for as long as any suppression exists.
+  `redactions.event_id`, by contrast, safely FKs to `events`, which `oag rebuild` never deletes.
+  Status: resolved.
+- **Blob removal is out of scope.** No blob store exists yet (spec section 84's `blobs/<hash>`,
+  already tracked as deferred future work alongside native IPFS hosting). Status: deferred, tracked
+  in memory, not here.
+- **Actor `identity_uri` redaction** (could carry personal data, e.g. an email-shaped URI) was left
+  out for the same "don't scope-creep past the clearest, safest case" reasoning as whole-assertion
+  redaction. Status: open.

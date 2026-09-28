@@ -125,6 +125,24 @@ pub async fn insert_evidence(
     Ok(())
 }
 
+/// Blanks `title`/`excerpt` on the evidence row whose id is `event_id`
+/// (`Evidence.id` is the `ADD_EVIDENCE` event's id) -- `uri`, `content_hash`,
+/// `evidence_type`, and both timestamps are left intact (spec section 85:
+/// "retaining enough cryptographic metadata to preserve event integrity").
+/// Returns whether a row existed to redact, so the caller (`oag_graph::
+/// redaction::redact_evidence`) can distinguish "redacted" from "no such
+/// evidence" without a separate existence check.
+pub async fn redact_evidence(
+    conn: &mut SqliteConnection,
+    event_id: oag_core::EventId,
+) -> Result<bool, StorageError> {
+    let result = sqlx::query("UPDATE evidence SET title = NULL, excerpt = NULL WHERE id = ?")
+        .bind(event_id.as_hash().as_bytes().to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 pub async fn list_evidence(
     conn: &mut SqliteConnection,
     assertion_id: AssertionId,

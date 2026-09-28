@@ -4,7 +4,7 @@
 //! for exactly which tables that means (and, just as importantly, which it
 //! doesn't).
 use oag_events::SignedEvent;
-use oag_storage::repo::{events as events_repo, rebuild as rebuild_repo};
+use oag_storage::repo::{assertions as assertions_repo, events as events_repo, rebuild as rebuild_repo, redactions as redactions_repo};
 
 use crate::error::GraphError;
 use crate::service::GraphService;
@@ -12,6 +12,12 @@ use crate::service::GraphService;
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RebuildSummary {
     pub events_replayed: usize,
+    /// Spec section 85: outstanding redactions reapplied after replay --
+    /// `redactions` itself is never wiped (see `oag_storage::repo::
+    /// rebuild`'s doc comment), but replaying `ADD_EVIDENCE` events fresh
+    /// would otherwise resurrect the original `title`/`excerpt` this many
+    /// times over.
+    pub redactions_reapplied: usize,
 }
 
 impl GraphService {
@@ -39,8 +45,16 @@ impl GraphService {
             replayed += 1;
         }
 
+        let outstanding_redactions = redactions_repo::list_all(&mut tx).await?;
+        for redaction in &outstanding_redactions {
+            assertions_repo::redact_evidence(&mut tx, redaction.event_id).await?;
+        }
+
         tx.commit().await.map_err(oag_storage::StorageError::from)?;
 
-        Ok(RebuildSummary { events_replayed: replayed })
+        Ok(RebuildSummary {
+            events_replayed: replayed,
+            redactions_reapplied: outstanding_redactions.len(),
+        })
     }
 }

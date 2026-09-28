@@ -14,4 +14,6 @@ pub enum GraphError {
     InvalidInput(String),
     #[error(transparent)]
     Embedding(#[from] oag_embeddings::EmbeddingError),
+    #[error("evidence {0} has already been redacted")]
+    AlreadyRedacted(oag_core::EventId),
 }

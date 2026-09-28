@@ -33,6 +33,9 @@ impl IntoResponse for ApiError {
                 tracing::error!(error = %self.0, "embedding provider error");
                 (StatusCode::BAD_GATEWAY, "embedding provider error".to_string())
             }
+            // Redaction is CLI-only (spec section 85) -- no REST handler
+            // ever produces this, but the match must stay exhaustive.
+            GraphError::AlreadyRedacted(_) => (StatusCode::CONFLICT, self.0.to_string()),
         };
         (status, Json(json!({ "error": message }))).into_response()
     }

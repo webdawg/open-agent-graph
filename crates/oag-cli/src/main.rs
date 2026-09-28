@@ -108,6 +108,13 @@ enum Command {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
+    /// Deletion and redaction commands (spec section 85) -- local-only,
+    /// gated by filesystem access to the data directory. These can never
+    /// reach copies of the same data already replicated to other peers.
+    Redact {
+        #[command(subcommand)]
+        command: RedactCommand,
+    },
     /// Crawl one URL: fetch it safely, extract structured facts (JSON-LD,
     /// llms.txt, ARD, A2A), and assert them as evidence-backed claims.
     Crawl {
@@ -171,6 +178,40 @@ enum EmbeddingsCommand {
         data_dir: PathBuf,
         #[arg(long)]
         config: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum RedactCommand {
+    /// Permanently blank an evidence record's title/excerpt in this peer's
+    /// own local database. Cannot be undone by any command in this tool,
+    /// and cannot reach copies of this event already replicated to other
+    /// peers -- refuses without --force.
+    Evidence {
+        evidence_id: String,
+        #[arg(long)]
+        reason: Option<String>,
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// List every evidence redaction recorded on this peer, for auditing.
+    List {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// Hide a node from search results without touching the node, its
+    /// edges, or its assertions. Fully reversible via unsuppress-node.
+    SuppressNode {
+        node_id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    UnsuppressNode {
+        node_id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
     },
 }
 
@@ -331,6 +372,16 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Backup { out, data_dir } => commands::backup(&data_dir, &out).await,
         Command::Rebuild { data_dir } => commands::rebuild(&data_dir).await,
+        Command::Redact { command: RedactCommand::Evidence { evidence_id, reason, force, data_dir } } => {
+            commands::redact_evidence(&data_dir, &evidence_id, reason, force).await
+        }
+        Command::Redact { command: RedactCommand::List { data_dir } } => commands::redact_list(&data_dir).await,
+        Command::Redact { command: RedactCommand::SuppressNode { node_id, data_dir } } => {
+            commands::redact_suppress_node(&data_dir, &node_id).await
+        }
+        Command::Redact { command: RedactCommand::UnsuppressNode { node_id, data_dir } } => {
+            commands::redact_unsuppress_node(&data_dir, &node_id).await
+        }
         Command::Identity { command: IdentityCommand::Show { data_dir } } => {
             commands::identity_show(&data_dir).await
         }

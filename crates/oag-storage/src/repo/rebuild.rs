@@ -5,6 +5,11 @@
 //! `peer_known_heads`, unrelated to graph projection) or `node_authority`
 //! (its own separately-recomputed cache — `edges` reconstructs byte-
 //! identical, so existing authority scores stay valid without a recompute).
+//! Also never `redactions`/`search_suppressions` (spec section 85) — those
+//! are durable operator decisions, not a cache of the event log, and must
+//! survive every rebuild; `oag_graph::rebuild::rebuild_projection` reapplies
+//! outstanding redactions after replaying, precisely because this function
+//! never wipes them in the first place.
 use sqlx::SqliteConnection;
 
 use crate::error::StorageError;

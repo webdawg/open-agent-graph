@@ -7,5 +7,7 @@ pub mod node_embeddings;
 pub mod nodes;
 pub mod peers;
 pub mod rebuild;
+pub mod redactions;
 pub mod replication;
+pub mod search_suppressions;
 pub mod stats;

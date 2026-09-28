@@ -131,7 +131,9 @@ pub async fn list_aliases(
 /// Simple relevance search over node name/description via FTS5 (spec
 /// section 63/65 — the `relevance` signal only; authority/evidence_strength/
 /// freshness/source_independence need corroboration data this milestone
-/// doesn't produce).
+/// doesn't produce). Excludes nodes in `search_suppressions` (spec section
+/// 85) -- a live filter rather than a cached flag on `nodes`, so it stays
+/// correct across `oag rebuild` without any special-casing there.
 pub async fn search(
     conn: &mut SqliteConnection,
     query: &str,
@@ -141,6 +143,7 @@ pub async fn search(
         "SELECT nodes.* FROM nodes_fts \
          JOIN nodes ON nodes.rowid = nodes_fts.rowid \
          WHERE nodes_fts MATCH ? \
+         AND nodes.node_id NOT IN (SELECT node_id FROM search_suppressions) \
          ORDER BY rank LIMIT ?",
     )
     .bind(query)

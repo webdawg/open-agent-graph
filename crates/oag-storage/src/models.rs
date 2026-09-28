@@ -180,6 +180,13 @@ pub struct NodeEmbeddingRow {
 }
 
 #[derive(Debug, FromRow)]
+pub struct RedactionRow {
+    pub event_id: Vec<u8>,
+    pub redacted_at: i64,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, FromRow)]
 pub struct PeerKnownHeadRow {
     pub peer_id: Vec<u8>,
     pub origin_peer_id: Vec<u8>,
