@@ -12,7 +12,14 @@ pub async fn authenticate(headers: &HeaderMap, graph: &GraphService) -> Result<A
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .ok_or(GraphError::InvalidApiKey)?;
-    Ok(graph.authenticate(raw).await?)
+    let auth = graph.authenticate(raw).await?;
+    // Spec section 87: every relevant request's logs should include
+    // `actor_id`. Recorded here, the one place every REST/MCP auth path
+    // funnels through, onto whatever span `oag-api::logging::ApiMakeSpan`
+    // already opened for this request -- present regardless of which
+    // handler ran or how the request finishes.
+    tracing::Span::current().record("actor_id", tracing::field::display(auth.actor_id));
+    Ok(auth)
 }
 
 /// Convenience for read endpoints: authenticate, then require `graph:read`.

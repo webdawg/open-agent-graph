@@ -2,6 +2,7 @@ pub mod auth;
 pub mod dto;
 pub mod error;
 pub mod handlers;
+pub mod logging;
 pub mod metrics;
 pub mod rate_limit;
 pub mod state;
@@ -29,6 +30,7 @@ const MAX_REQUEST_BODY_BYTES: usize = 4 * 1024 * 1024;
 /// mounted separately on the same outer Axum app by the caller, both sharing
 /// this `AppState`'s `GraphService`.
 pub fn build_router(state: AppState) -> Router {
+    let peer_id = state.graph.identity().peer_id();
     Router::new()
         .route("/metrics", get(metrics::handler))
         .route("/api/v1/search", get(handlers::search))
@@ -68,7 +70,11 @@ pub fn build_router(state: AppState) -> Router {
             state.clone(),
             rate_limit::rate_limit_middleware,
         ))
-        .layer(TraceLayer::new_for_http())
+        .layer(
+            TraceLayer::new_for_http()
+                .make_span_with(logging::ApiMakeSpan::new(peer_id))
+                .on_response(logging::on_response),
+        )
         .layer(RequestBodyLimitLayer::new(MAX_REQUEST_BODY_BYTES))
         .with_state(state)
 }

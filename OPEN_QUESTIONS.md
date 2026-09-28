@@ -104,3 +104,23 @@ Format: question, assumption I'm running with, status.
   `CrawlerSection` rather than inventing a new `[llm]` table -- LLM extraction is crawler-specific
   (unlike embeddings, which search also needs), so it belongs in the section that already owns
   crawl-time behavior. Status: resolved.
+
+## Logging (spec section 87)
+
+- **Scope: REST only, for this milestone.** Every `oag-api` REST request now gets a structured
+  `http_request` tracing span with `request_id`, `peer_id`, `route`, `method`, `actor_id` (recorded
+  once auth resolves it -- absent on endpoints needing no auth, like `/api/v1/status` and
+  `/metrics`), `status`, `duration_ms`, and `result`. Deliberately NOT done this milestone: MCP
+  request spans (`oag-mcp` has its own transport/dispatch loop, not this router), and
+  `event_id`/`origin_peer` fields (spec section 87's other two fields -- these belong on
+  `oag-sync`'s replication/gossip/ingest paths, which aren't single-HTTP-request scoped the same
+  way a REST handler is; wiring them in needs its own pass over those code paths). Status: open
+  (revisit alongside whichever of an MCP request-logging pass or replication-path instrumentation
+  lands first).
+- **`request_id` is a process-local pid+counter, not a UUID.** Avoids a new dependency for a value
+  that only needs to disambiguate concurrent requests within one running peer's own logs -- nothing
+  compares `request_id`s across peers or processes. Status: resolved.
+- **`actor_id` is recorded from inside `auth::authenticate`, not per-handler.** Every REST/MCP auth
+  path already funnels through this one function, so recording there means every current and future
+  authenticated handler gets `actor_id` on its span for free, with no per-handler boilerplate.
+  Status: resolved.
