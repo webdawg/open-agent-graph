@@ -1837,6 +1837,7 @@ dependencies = [
 name = "oag-crawler"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "futures-util",
  "oag-core",

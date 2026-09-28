@@ -205,6 +205,23 @@ pub struct CrawlerSection {
     pub max_response_bytes: usize,
     #[serde(default = "default_crawler_timeout_seconds")]
     pub request_timeout_seconds: u64,
+    /// spec section 74: LLM extraction is opt-in and OAG must work with it
+    /// entirely disabled -- same shape and default as `[search]`'s
+    /// `embedding_provider`.
+    #[serde(default = "default_llm_provider")]
+    pub llm_provider: String,
+    pub llm_base_url: Option<String>,
+    pub llm_api_key: Option<String>,
+    #[serde(default = "default_llm_model")]
+    pub llm_model: String,
+}
+
+fn default_llm_provider() -> String {
+    "disabled".to_string()
+}
+
+fn default_llm_model() -> String {
+    "gpt-4o-mini".to_string()
 }
 
 fn default_max_response_bytes() -> usize {
@@ -222,6 +239,10 @@ impl Default for CrawlerSection {
             allow_private_networks: false,
             max_response_bytes: default_max_response_bytes(),
             request_timeout_seconds: default_crawler_timeout_seconds(),
+            llm_provider: default_llm_provider(),
+            llm_base_url: None,
+            llm_api_key: None,
+            llm_model: default_llm_model(),
         }
     }
 }
@@ -233,6 +254,24 @@ impl CrawlerSection {
             max_response_bytes: self.max_response_bytes,
             request_timeout: std::time::Duration::from_secs(self.request_timeout_seconds),
             ..oag_crawler::CrawlerConfig::default()
+        }
+    }
+
+    /// `"disabled"` (the default) or a missing `llm_base_url` both yield
+    /// `DisabledExtractor` -- spec section 74/11: OAG must work with LLM
+    /// extraction completely disabled, so an incomplete config degrades to
+    /// that safe default rather than erroring at startup.
+    pub fn to_llm_extractor(&self) -> std::sync::Arc<dyn oag_crawler::LlmExtractor> {
+        match self.llm_provider.as_str() {
+            "openai_compatible" => match &self.llm_base_url {
+                Some(base_url) => std::sync::Arc::new(oag_crawler::OpenAiCompatibleExtractor::new(
+                    base_url.clone(),
+                    self.llm_api_key.clone(),
+                    self.llm_model.clone(),
+                )),
+                None => std::sync::Arc::new(oag_crawler::DisabledExtractor),
+            },
+            _ => std::sync::Arc::new(oag_crawler::DisabledExtractor),
         }
     }
 }
@@ -348,10 +387,12 @@ pub fn resolve(
 /// Lightweight resolver for `oag crawl`, which — like `oag peer *` — is a
 /// one-shot command that doesn't need `serve`'s full `ResolvedConfig`
 /// (data dir is passed separately, network/federation are irrelevant here).
+/// Returns the LLM extractor (spec section 74) alongside the fetch config
+/// since both come from the same `[crawler]` section.
 pub fn resolve_crawler_config(
     config_path: Option<PathBuf>,
     allow_private_networks_flag: bool,
-) -> anyhow::Result<oag_crawler::CrawlerConfig> {
+) -> anyhow::Result<(oag_crawler::CrawlerConfig, std::sync::Arc<dyn oag_crawler::LlmExtractor>)> {
     let mut figment = Figment::new();
     if let Some(path) = &config_path {
         figment = figment.merge(Toml::file(path));
@@ -364,7 +405,10 @@ pub fn resolve_crawler_config(
         FileConfig::default()
     };
 
-    Ok(file.crawler.to_crawler_config(allow_private_networks_flag))
+    Ok((
+        file.crawler.to_crawler_config(allow_private_networks_flag),
+        file.crawler.to_llm_extractor(),
+    ))
 }
 
 /// Lightweight resolver for `oag embeddings recompute` and `oag search

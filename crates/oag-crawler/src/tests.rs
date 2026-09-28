@@ -17,6 +17,7 @@ use oag_storage::pool::open_pool;
 use crate::crawler::CrawlerService;
 use crate::error::CrawlError;
 use crate::fetch::{safe_fetch, CrawlerConfig};
+use crate::llm_extract::DisabledExtractor;
 
 async fn spawn_fixture(router: Router) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -202,7 +203,7 @@ async fn full_crawl_populates_graph_via_all_extractors() {
     let url = Url::parse(&base).unwrap();
 
     let graph = fresh_graph("full-crawl").await;
-    let crawler = CrawlerService::new(graph.clone(), allowing_config());
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor));
 
     let summary = crawler.crawl(&url).await.unwrap();
     assert!(summary.facts_asserted > 0);
@@ -259,8 +260,69 @@ async fn crawl_with_default_config_is_blocked_by_ssrf_policy() {
     let url = Url::parse(&base).unwrap();
 
     let graph = fresh_graph("blocked-crawl").await;
-    let crawler = CrawlerService::new(graph, CrawlerConfig::default());
+    let crawler = CrawlerService::new(graph, CrawlerConfig::default(), Arc::new(DisabledExtractor));
 
     let result = crawler.crawl(&url).await;
     assert!(matches!(result, Err(CrawlError::BlockedAddress(_))), "got {result:?}");
+}
+
+/// A fixed-response extractor, standing in for a real LLM (`oag-embeddings`'
+/// `OpenAiCompatibleExtractor` tests already cover the HTTP-parsing side --
+/// this test is about the crawler orchestrator's handling of *any*
+/// non-disabled extractor).
+struct FakeLlmExtractor;
+
+#[async_trait::async_trait]
+impl crate::llm_extract::LlmExtractor for FakeLlmExtractor {
+    async fn extract(
+        &self,
+        _page_text: &str,
+        source_url: &str,
+    ) -> Result<Vec<crate::llm_extract::CandidateAssertion>, CrawlError> {
+        Ok(vec![crate::llm_extract::CandidateAssertion {
+            subject: source_url.to_string(),
+            predicate: "written_in".to_string(),
+            object: "concept:rust".to_string(),
+            confidence: 0.42,
+        }])
+    }
+
+    fn model_name(&self) -> &str {
+        "fake-model-v1"
+    }
+}
+
+/// Spec section 74: an enabled LLM extractor's candidates land as real
+/// assertions, tagged `ExtractionMethod::LlmExtraction`, carrying the
+/// extractor's own confidence (not the fixed confidence deterministic
+/// extraction uses), and attributed to a distinct actor named after the
+/// model -- not the "crawler" actor structured extraction uses.
+#[tokio::test]
+async fn llm_extraction_candidates_are_asserted_with_correct_provenance() {
+    let base = spawn_fixture(fixture_router()).await;
+    let url = Url::parse(&base).unwrap();
+
+    let graph = fresh_graph("llm-extraction").await;
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(FakeLlmExtractor));
+
+    let summary = crawler.crawl(&url).await.unwrap();
+    assert_eq!(summary.llm_candidates_asserted, 1);
+
+    let ResolveOutcome::Found { node: rust_node, .. } = graph.resolve("concept:rust").await.unwrap() else {
+        panic!("expected the LLM-asserted object node to exist");
+    };
+    let edges = graph.get_edges(rust_node.id).await.unwrap();
+    assert!(
+        edges.iter().any(|e| e.predicate.as_str() == "written_in"),
+        "expected a written_in edge from the LLM candidate"
+    );
+
+    let assertions = graph.list_assertions_for_node(rust_node.id).await.unwrap();
+    assert_eq!(assertions.len(), 1);
+    assert_eq!(assertions[0].extraction_method, oag_core::ExtractionMethod::LlmExtraction);
+    assert_eq!(assertions[0].actor_confidence, Some(0.42));
+
+    let actor = graph.get_actor(assertions[0].actor_id).await.unwrap().expect("actor must exist");
+    assert_eq!(actor.name.as_deref(), Some("llm-extractor:fake-model-v1"));
+    assert_eq!(actor.actor_type, oag_core::ActorType::Model);
 }

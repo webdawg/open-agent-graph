@@ -54,3 +54,51 @@ impl ExtractedPage {
         self.aliases.extend(other.aliases);
     }
 }
+
+/// Plain-text rendering of an HTML page's `<body>`, script/style content
+/// explicitly excluded (their contents are ordinary text nodes to `scraper`,
+/// not stripped by default), whitespace-collapsed and truncated to
+/// `max_chars`. Used only as LLM extraction's prompt input (spec section
+/// 74) -- the deterministic extractors above parse the raw HTML/DOM
+/// directly and never need this.
+pub fn body_text(html: &str, max_chars: usize) -> String {
+    let document = scraper::Html::parse_document(html);
+    let selector = scraper::Selector::parse("body").unwrap();
+    let mut parts = Vec::new();
+    if let Some(body) = document.select(&selector).next() {
+        for node in body.descendants() {
+            let scraper::node::Node::Text(text) = node.value() else { continue };
+            let in_script_or_style = node.ancestors().any(|ancestor| {
+                matches!(ancestor.value(), scraper::node::Node::Element(el) if el.name() == "script" || el.name() == "style")
+            });
+            if !in_script_or_style {
+                parts.push(text.text.as_ref());
+            }
+        }
+    }
+    let collapsed = parts.join(" ").split_whitespace().collect::<Vec<_>>().join(" ");
+    collapsed.chars().take(max_chars).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn body_text_strips_tags_and_collapses_whitespace() {
+        let html = "<html><head><title>ignored</title></head><body>\n  <h1>Hello</h1>\n  <p>World  wide</p>\n</body></html>";
+        assert_eq!(body_text(html, 1000), "Hello World wide");
+    }
+
+    #[test]
+    fn body_text_excludes_script_and_style_content() {
+        let html = "<html><body><p>Visible</p><script>evil()</script><style>.x{}</style></body></html>";
+        assert_eq!(body_text(html, 1000), "Visible");
+    }
+
+    #[test]
+    fn body_text_truncates_to_max_chars() {
+        let html = "<html><body>abcdefghij</body></html>";
+        assert_eq!(body_text(html, 5), "abcde");
+    }
+}

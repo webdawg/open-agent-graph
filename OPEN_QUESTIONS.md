@@ -69,3 +69,38 @@ Format: question, assumption I'm running with, status.
 - **Route placement: top-level `/metrics`, not under `/api/v1`.** Matches the spec's literal path
   and Prometheus's own scrape-path convention, rather than being namespaced with the rest of the
   REST API. Status: resolved.
+
+## LLM extraction (spec section 74)
+
+- **Runs unconditionally as a fallback pass, not gated behind a CLI flag.** Spec section 73's
+  priority order is "prefer deterministic, then use LLM extraction" -- read as a default pipeline
+  order, not an opt-in the operator has to remember per crawl. A disabled extractor
+  (`DisabledExtractor`, the default) returns zero candidates and makes no network request, so this
+  is a true no-op when unconfigured -- unlike `oag search --semantic`, there's no separate flag to
+  turn it on for one invocation, since there's no meaningful "run LLM extraction just this once"
+  use case for a background/batch crawl. Status: open (revisit if a real use case for per-invocation
+  override shows up).
+- **No threshold on candidate confidence -- every candidate is asserted.** Low-confidence
+  LLM-extracted assertions still go through `assert()` at whatever confidence the model reported,
+  rather than being dropped below some cutoff. Assumption: the corroboration/ranking layer (spec
+  section 65 -- `EdgeCorroboration`, already complete) is the intended place low-confidence,
+  single-source claims get down-weighted, not the extraction layer itself; filtering here would
+  hide information ranking could otherwise use. Status: open (revisit if low-confidence LLM noise
+  turns out to be a real problem in practice).
+- **Extractor identity/model info live entirely in the actor name, not a new field.** Every
+  candidate is asserted by a `Model`-type actor named `llm-extractor:<model>` (e.g.
+  `llm-extractor:gpt-4o-mini`), reusing the identical pattern the "crawler" actor already
+  establishes for structured extraction -- no new schema field for "extractor identity" or "model
+  information" (spec section 74's wording) since `assert()`'s existing actor/evidence/confidence/
+  timestamp machinery already covers all of it once the actor itself encodes the model. Status:
+  resolved.
+- **Malformed LLM responses are treated as zero candidates, not a crawl failure.** A non-JSON or
+  wrong-shape chat completion logs a `tracing::warn!` and the crawl continues with whatever
+  deterministic facts it already found. Assumption: an occasional bad LLM response is expected
+  behavior, not a bug -- failing the whole crawl over it would make LLM extraction net-negative for
+  reliability. Status: resolved.
+- **Config shape mirrors `[search]`'s embedding fields exactly, under `[crawler]`.** Added
+  `llm_provider` ("disabled" | "openai_compatible"), `llm_base_url`, `llm_api_key`, `llm_model` to
+  `CrawlerSection` rather than inventing a new `[llm]` table -- LLM extraction is crawler-specific
+  (unlike embeddings, which search also needs), so it belongs in the section that already owns
+  crawl-time behavior. Status: resolved.

@@ -401,10 +401,11 @@ pub async fn crawl(
     allow_private_networks_flag: bool,
 ) -> anyhow::Result<()> {
     let url = url::Url::parse(url).map_err(|e| anyhow::anyhow!("invalid URL '{url}': {e}"))?;
-    let crawler_config = crate::config::resolve_crawler_config(config_path, allow_private_networks_flag)?;
+    let (crawler_config, llm_extractor) =
+        crate::config::resolve_crawler_config(config_path, allow_private_networks_flag)?;
 
     let graph = std::sync::Arc::new(open_graph(data_dir).await?);
-    let crawler = oag_crawler::CrawlerService::new(graph, crawler_config);
+    let crawler = oag_crawler::CrawlerService::new(graph, crawler_config, llm_extractor);
 
     let summary = crawler.crawl(&url).await?;
 
@@ -417,6 +418,9 @@ pub async fn crawl(
     println!("llms.txt found: {}", summary.llms_txt_found);
     println!("ARD found: {}", summary.ard_found);
     println!("A2A agent card found: {}", summary.a2a_found);
+    if summary.llm_candidates_asserted > 0 {
+        println!("LLM candidate assertions: {}", summary.llm_candidates_asserted);
+    }
     Ok(())
 }
 

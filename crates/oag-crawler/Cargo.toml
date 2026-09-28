@@ -19,6 +19,7 @@ url.workspace = true
 scraper.workspace = true
 reqwest = { workspace = true, features = ["stream"] }
 futures-util = "0.3"
+async-trait.workspace = true
 
 [dev-dependencies]
 axum.workspace = true

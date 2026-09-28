@@ -7,8 +7,15 @@ use url::Url;
 use crate::error::CrawlError;
 use crate::extract::{self, origin_of, ExtractedPage};
 use crate::fetch::{check_robots, safe_fetch, CrawlerConfig};
+use crate::llm_extract::LlmExtractor;
 
 const CRAWLER_ACTOR_NAME: &str = "crawler";
+
+/// Page text past this length is truncated before being sent to an LLM
+/// extractor (spec section 74) -- bounds prompt size/cost; deterministic
+/// extraction (spec section 73) already ran over the full page and doesn't
+/// use this limit.
+const LLM_EXTRACTION_MAX_CHARS: usize = 8_000;
 
 #[derive(Debug, Default)]
 pub struct CrawlSummary {
@@ -19,6 +26,7 @@ pub struct CrawlSummary {
     pub llms_txt_found: bool,
     pub ard_found: bool,
     pub a2a_found: bool,
+    pub llm_candidates_asserted: usize,
 }
 
 fn now_ts() -> i64 {
@@ -35,11 +43,12 @@ fn now_ts() -> i64 {
 pub struct CrawlerService {
     graph: Arc<GraphService>,
     config: CrawlerConfig,
+    llm_extractor: Arc<dyn LlmExtractor>,
 }
 
 impl CrawlerService {
-    pub fn new(graph: Arc<GraphService>, config: CrawlerConfig) -> Self {
-        Self { graph, config }
+    pub fn new(graph: Arc<GraphService>, config: CrawlerConfig, llm_extractor: Arc<dyn LlmExtractor>) -> Self {
+        Self { graph, config, llm_extractor }
     }
 
     /// Reuses a single, stable "crawler" actor across separate `oag crawl`
@@ -59,6 +68,30 @@ impl CrawlerService {
             None => {
                 self.graph
                     .declare_actor(ActorType::Crawler, Some(CRAWLER_ACTOR_NAME.to_string()), None, None)
+                    .await?
+            }
+        };
+        Ok(AuthContext {
+            actor_id,
+            permissions: vec![Permission::GraphAssert],
+        })
+    }
+
+    /// Reuses a single actor per distinct model, named after that model
+    /// (spec section 74's "extractor identity" and "model information" are
+    /// then both just this actor's declared name -- discoverable via `oag
+    /// actor get` like any other actor, not a separate bookkeeping field).
+    /// Only ever called when there's at least one candidate to assert, so a
+    /// disabled extractor (whose `model_name()` is never reached because
+    /// `extract` always returns empty) never causes an actor to be
+    /// declared.
+    async fn llm_extractor_auth(&self) -> Result<AuthContext, CrawlError> {
+        let actor_name = format!("llm-extractor:{}", self.llm_extractor.model_name());
+        let actor_id = match self.graph.find_actor_by_name(&actor_name, ActorType::Model).await? {
+            Some(actor) => actor.id,
+            None => {
+                self.graph
+                    .declare_actor(ActorType::Model, Some(actor_name), None, None)
                     .await?
             }
         };
@@ -131,7 +164,49 @@ impl CrawlerService {
             }
             _ => {}
         }
-        self.assert_extracted(&auth, &page_extracted, page_evidence, 0.7, &mut summary).await;
+        self.assert_extracted(&auth, &page_extracted, page_evidence.clone(), 0.7, &mut summary).await;
+
+        // Spec section 73's priority order: LLM extraction (section 74) is
+        // the fallback pass, run after every deterministic extractor above,
+        // over the page's own text. A disabled extractor returns no
+        // candidates, so this is a no-op (no actor declared, no requests
+        // made) when LLM extraction isn't configured.
+        if is_html {
+            let text = extract::body_text(&body_str, LLM_EXTRACTION_MAX_CHARS);
+            if !text.trim().is_empty() {
+                if let Ok(candidates) = self.llm_extractor.extract(&text, &final_url).await {
+                    if !candidates.is_empty() {
+                        let llm_auth = self.llm_extractor_auth().await?;
+                        for candidate in candidates {
+                            let result = self
+                                .graph
+                                .assert(
+                                    &llm_auth,
+                                    AssertInput {
+                                        subject: candidate.subject,
+                                        subject_type: None,
+                                        predicate: candidate.predicate,
+                                        object: candidate.object,
+                                        object_type: None,
+                                        evidence: vec![EvidenceInput {
+                                            evidence_type: Some("agent_observation".to_string()),
+                                            ..page_evidence.clone()
+                                        }],
+                                        actor_confidence: Some(candidate.confidence),
+                                        observed_at: None,
+                                        extraction_method: Some(ExtractionMethod::LlmExtraction),
+                                    },
+                                )
+                                .await;
+                            match result {
+                                Ok(_) => summary.llm_candidates_asserted += 1,
+                                Err(_) => summary.facts_skipped += 1,
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         let site_origin = origin_of(url);
 
