@@ -402,6 +402,20 @@ pub async fn key_create(
     Ok(())
 }
 
+pub async fn key_list(data_dir: &Path) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let keys = graph.list_keys().await?;
+    println!("{}", serde_json::to_string_pretty(&keys)?);
+    Ok(())
+}
+
+pub async fn key_revoke(data_dir: &Path, key_hash: &str) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    graph.revoke_key(key_hash).await?;
+    println!("revoked key {key_hash}");
+    Ok(())
+}
+
 pub async fn doctor(data_dir: &Path, config_path: Option<std::path::PathBuf>) -> anyhow::Result<()> {
     let mut ok = true;
 
@@ -653,5 +667,52 @@ mod tests {
         std::fs::write(&config_path, "this is not valid toml {{{").unwrap();
         let result = doctor(&data_dir, Some(config_path)).await;
         assert!(result.is_err(), "a malformed config.toml must fail oag doctor");
+    }
+
+    #[tokio::test]
+    async fn key_revoke_deactivates_the_key_and_survives_rebuild() {
+        let data_dir = temp_dir("key-revoke-cli");
+        let graph = open_graph(&data_dir).await.unwrap();
+        let actor_id =
+            graph.declare_actor(ActorType::Agent, Some("revoke-cli-test".into()), None, None).await.unwrap();
+        let raw_key = graph.create_key(actor_id, vec![Permission::GraphRead]).await.unwrap();
+
+        // The key authenticates before revocation.
+        assert!(graph.authenticate(&raw_key).await.is_ok());
+
+        let keys = key_list_for_test(&data_dir).await;
+        assert_eq!(keys.len(), 1);
+        assert!(keys[0].revoked_at.is_none());
+        let key_hash = keys[0].key_hash.clone();
+
+        key_revoke(&data_dir, &key_hash).await.unwrap();
+
+        // No longer authenticates.
+        let graph = open_graph(&data_dir).await.unwrap();
+        assert!(matches!(graph.authenticate(&raw_key).await, Err(oag_graph::GraphError::InvalidApiKey)));
+
+        let keys = key_list_for_test(&data_dir).await;
+        assert_eq!(keys.len(), 1, "revoked keys stay listed, just flagged");
+        assert!(keys[0].revoked_at.is_some());
+
+        // Revocation is itself an event -- it must survive oag rebuild.
+        rebuild(&data_dir).await.unwrap();
+        let graph = open_graph(&data_dir).await.unwrap();
+        assert!(
+            matches!(graph.authenticate(&raw_key).await, Err(oag_graph::GraphError::InvalidApiKey)),
+            "revocation must survive rebuild, not be resurrected by replaying the original ACTOR_KEY_ADD"
+        );
+    }
+
+    #[tokio::test]
+    async fn key_revoke_unknown_hash_is_not_found() {
+        let data_dir = temp_dir("key-revoke-unknown");
+        open_graph(&data_dir).await.unwrap();
+        let result = key_revoke(&data_dir, &"ab".repeat(32)).await;
+        assert!(result.is_err(), "revoking an unknown key hash must error, not silently succeed");
+    }
+
+    async fn key_list_for_test(data_dir: &Path) -> Vec<oag_storage::repo::actors::ApiKeyInfo> {
+        open_graph(data_dir).await.unwrap().list_keys().await.unwrap()
     }
 }

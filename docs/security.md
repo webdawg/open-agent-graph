@@ -43,7 +43,15 @@ class of signature-malleability bugs that ad-hoc JSON serialization would introd
 
 REST and MCP share one auth path (`crates/oag-api/src/auth.rs`): `Authorization: Bearer <api-key>`.
 API keys are created locally via `oag key create` and bound to one actor and an explicit list of
-permissions.
+permissions. Only a key's BLAKE3 hash is ever stored — the raw key is shown once, at creation, and
+cannot be recovered or re-displayed later.
+
+`oag key list` shows every key ever issued (by hash, active and revoked alike) and `oag key revoke
+<hash>` deactivates one immediately — useful if a key leaks or an integration is decommissioned.
+Revocation is itself a signed `ACTOR_KEY_REVOKE` event (spec section 106 invariant 1: every mutation
+is a signed event, not a silent database edit), so it's auditable and survives `oag rebuild` exactly
+like any other mutation. Like `oag key create`, both are CLI-only, gated by filesystem access to the
+data directory — there is no REST/MCP surface for key management.
 
 Permissions (`Permission` enum, `crates/oag-core/src/actor.rs`):
 

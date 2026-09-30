@@ -19,6 +19,7 @@ pub enum EventPayload {
     SupersedeAssertion(SupersedeAssertionPayload),
     ActorDeclare(ActorDeclarePayload),
     ActorKeyAdd(ActorKeyAddPayload),
+    ActorKeyRevoke(ActorKeyRevokePayload),
     NodeAlias(NodeAliasPayload),
 }
 
@@ -33,6 +34,7 @@ impl EventPayload {
             EventPayload::SupersedeAssertion(_) => "SUPERSEDE_ASSERTION",
             EventPayload::ActorDeclare(_) => "ACTOR_DECLARE",
             EventPayload::ActorKeyAdd(_) => "ACTOR_KEY_ADD",
+            EventPayload::ActorKeyRevoke(_) => "ACTOR_KEY_REVOKE",
             EventPayload::NodeAlias(_) => "NODE_ALIAS",
         }
     }
@@ -110,6 +112,17 @@ pub struct ActorKeyAddPayload {
     pub actor_id: String,
     pub key_hash: String,
     pub permissions: Vec<String>,
+}
+
+/// Revocation is itself a signed event (spec section 106 invariant 1: every
+/// mutation is a signed immutable event) -- not a raw `UPDATE`, even though
+/// `actor_keys.revoked_at` could be set directly. This keeps key revocation
+/// auditable and replicated exactly like every other mutation in this
+/// system, rather than being a silent, unlogged side channel.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActorKeyRevokePayload {
+    pub actor_id: String,
+    pub key_hash: String,
 }
 
 /// `node_id` is the hex-encoded id of an *already-existing* node (the

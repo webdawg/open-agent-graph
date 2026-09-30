@@ -2037,6 +2037,7 @@ dependencies = [
 name = "oag-storage"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "oag-core",
  "serde",
  "serde_json",

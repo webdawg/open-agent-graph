@@ -128,6 +128,8 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag edge corroboration <id>` | Ranking signals for one edge |
 | `oag identity show/backup/restore` | Peer identity lifecycle — see `docs/security.md` |
 | `oag key create` | Issue a new API key scoped to specific permissions |
+| `oag key list` | List every key ever issued (active and revoked), by hash -- never the raw key |
+| `oag key revoke <hash>` | Revoke a key by the hash `oag key list` shows for it |
 | `oag peer add/list/remove/sync` | Manage known peer addresses and trigger one-shot sync |
 | `oag replication status` | Durability view — see `docs/replication.md` |
 | `oag authority recompute` | Batch-recompute the PageRank-style `authority` signal |

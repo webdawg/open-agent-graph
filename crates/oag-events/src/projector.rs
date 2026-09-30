@@ -64,6 +64,10 @@ pub async fn project(
             project_actor_key_add(conn, created_at, p).await?;
             Ok(ProjectionOutcome::Unit)
         }
+        EventPayload::ActorKeyRevoke(p) => {
+            project_actor_key_revoke(conn, created_at, p).await?;
+            Ok(ProjectionOutcome::Unit)
+        }
         EventPayload::NodeAlias(p) => {
             project_node_alias(conn, p).await?;
             Ok(ProjectionOutcome::Unit)
@@ -375,5 +379,23 @@ async fn project_actor_key_add(
         .filter_map(|s| Permission::parse(s))
         .collect();
     actors::create_key(conn, &key_hash, actor_id, &permissions, created_at).await?;
+    Ok(())
+}
+
+async fn project_actor_key_revoke(
+    conn: &mut SqliteConnection,
+    created_at: i64,
+    p: &crate::payload::ActorKeyRevokePayload,
+) -> Result<(), EventsError> {
+    let key_hash_bytes = hex::decode(&p.key_hash)?;
+    let key_hash_len = key_hash_bytes.len();
+    let key_hash: [u8; 32] = key_hash_bytes
+        .try_into()
+        .map_err(|_| EventsError::BadSignatureLength(key_hash_len))?;
+    // Not an error if already revoked or unknown (e.g. replaying a rebuild
+    // where a later revoke-of-an-already-revoked-key can't happen in
+    // practice, but this mirrors every other projector function's
+    // tolerance for a no-op rather than assuming a specific prior state).
+    actors::revoke_key(conn, &key_hash, created_at).await?;
     Ok(())
 }

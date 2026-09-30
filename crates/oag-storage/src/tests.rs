@@ -1,6 +1,6 @@
 use oag_core::{
     Actor, ActorType, Assertion, AssertionStatus, Edge, Evidence, EvidenceType, ExtractionMethod,
-    Node, NodeType, Predicate,
+    Node, NodeType, Permission, Predicate,
 };
 
 use crate::pool::open_pool;
@@ -353,4 +353,36 @@ async fn list_all_in_insertion_order_returns_events_oldest_first() {
     assert_eq!(rows.len(), 3);
     let created_ats: Vec<i64> = rows.iter().map(|r| r.created_at).collect();
     assert_eq!(created_ats, vec![100, 101, 102], "must come back in original insertion order");
+}
+
+/// `ApiKeyInfo.permissions` must round-trip in `Permission::as_str()` form
+/// (`"graph:read"`, colon-separated) -- not `Permission`'s own derived
+/// kebab-case Serialize (`"graph-read"`), which `Permission::parse` and
+/// `oag key create --permission` don't understand. A caller pasting
+/// `oag key list`'s own output back into `--permission` must work.
+#[tokio::test]
+async fn list_keys_reports_colon_separated_permission_strings() {
+    let pool = open_pool(&temp_db_path("list-keys-format")).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    let actor = Actor {
+        id: oag_core::ActorId::derive(b"list-keys-format-actor"),
+        actor_type: ActorType::Agent,
+        name: Some("test".into()),
+        public_key: None,
+        identity_uri: None,
+        metadata: serde_json::json!({}),
+        created_at: 1,
+    };
+    repo::actors::insert(&mut conn, &actor).await.unwrap();
+    repo::actors::create_key(&mut conn, &[7u8; 32], actor.id, &[Permission::GraphRead, Permission::GraphCrawl], 1)
+        .await
+        .unwrap();
+
+    let keys = repo::actors::list_keys(&mut conn).await.unwrap();
+    assert_eq!(keys.len(), 1);
+    assert_eq!(keys[0].permissions, vec!["graph:read".to_string(), "graph:crawl".to_string()]);
+    for p in &keys[0].permissions {
+        assert!(Permission::parse(p).is_some(), "{p} must round-trip through Permission::parse");
+    }
 }

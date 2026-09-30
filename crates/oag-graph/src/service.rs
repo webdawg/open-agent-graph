@@ -206,4 +206,46 @@ impl GraphService {
         let mut conn = self.pool.acquire().await.map_err(oag_storage::StorageError::from)?;
         Ok(actors::get_by_id(&mut conn, actor_id).await?)
     }
+
+    /// Every key ever issued on this peer, active and revoked alike (never
+    /// the raw key itself -- only its hash is ever stored). No `AuthContext`
+    /// parameter, matching `create_key`'s own existing convention: key
+    /// management is a data-dir-filesystem-trust CLI operation today, same
+    /// as `oag backup`/`oag rebuild`, not something REST/MCP exposes.
+    pub async fn list_keys(&self) -> Result<Vec<oag_storage::repo::actors::ApiKeyInfo>, GraphError> {
+        let mut conn = self.pool.acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(actors::list_keys(&mut conn).await?)
+    }
+
+    /// Revoke a previously-issued key by its hex-encoded hash (as shown by
+    /// `list_keys`), via an `ACTOR_KEY_REVOKE` event (spec section 106
+    /// invariant 1 -- revocation is a mutation like any other, not a raw
+    /// `UPDATE`). Errors with `GraphError::NotFound` if `key_hash_hex`
+    /// doesn't match any currently-active key, rather than silently
+    /// succeeding on a typo or an already-revoked key.
+    pub async fn revoke_key(&self, key_hash_hex: &str) -> Result<(), GraphError> {
+        let key_hash_bytes = hex::decode(key_hash_hex)
+            .map_err(|e| GraphError::InvalidInput(format!("invalid key hash '{key_hash_hex}': {e}")))?;
+        let key_hash: [u8; 32] = key_hash_bytes
+            .try_into()
+            .map_err(|_| GraphError::InvalidInput(format!("key hash '{key_hash_hex}' must be 32 bytes")))?;
+
+        let mut conn = self.pool.acquire().await.map_err(oag_storage::StorageError::from)?;
+        let existing = actors::find_active_key(&mut conn, &key_hash).await?;
+        let Some(existing) = existing else {
+            return Err(GraphError::NotFound(format!("active key {key_hash_hex}")));
+        };
+
+        commit_local_event(
+            &self.pool,
+            &self.identity,
+            EventPayload::ActorKeyRevoke(oag_events::payload::ActorKeyRevokePayload {
+                actor_id: existing.actor_id.to_hex(),
+                key_hash: key_hash_hex.to_string(),
+            }),
+            self.now(),
+        )
+        .await?;
+        Ok(())
+    }
 }

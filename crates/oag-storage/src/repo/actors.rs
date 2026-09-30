@@ -130,3 +130,58 @@ pub async fn find_active_key(
         permissions,
     }))
 }
+
+/// Auditable view of an issued key -- never the raw key itself (that's
+/// shown once at creation and never stored, only its hash). `key_hash` is
+/// what `oag key revoke` takes to identify which key to revoke.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ApiKeyInfo {
+    pub key_hash: String,
+    pub actor_id: ActorId,
+    /// `Permission::as_str()` form (`"graph:read"`), matching exactly what
+    /// `oag key create --permission` accepts and `Permission::parse` expects
+    /// -- deliberately not `Vec<Permission>`, whose own `#[derive(Serialize)]`
+    /// uses a *different*, kebab-case representation (`"graph-read"`) that a
+    /// caller couldn't paste back into `--permission` without it being
+    /// silently rejected as unknown.
+    pub permissions: Vec<String>,
+    pub created_at: i64,
+    pub revoked_at: Option<i64>,
+}
+
+fn row_to_key_info(row: ActorKeyRow) -> Result<ApiKeyInfo, StorageError> {
+    let permissions: Vec<String> = serde_json::from_str(&row.permissions)?;
+    Ok(ApiKeyInfo {
+        key_hash: hex::encode(&row.key_hash),
+        actor_id: ActorId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.actor_id)?)),
+        permissions,
+        created_at: row.created_at,
+        revoked_at: row.revoked_at,
+    })
+}
+
+/// Every key ever issued on this peer (active and revoked alike -- revoked
+/// ones stay listed for audit purposes, just flagged via `revoked_at`).
+pub async fn list_keys(conn: &mut SqliteConnection) -> Result<Vec<ApiKeyInfo>, StorageError> {
+    let rows: Vec<ActorKeyRow> =
+        sqlx::query_as("SELECT * FROM actor_keys ORDER BY created_at").fetch_all(&mut *conn).await?;
+    rows.into_iter().map(row_to_key_info).collect()
+}
+
+/// Sets `revoked_at` on a currently-active key. Returns `false` (not an
+/// error) if `key_hash` doesn't match any active key -- already-revoked or
+/// unknown are both just "nothing to do" from this function's point of view;
+/// the caller (`GraphService::revoke_key`) decides whether that's worth
+/// surfacing as an error.
+pub async fn revoke_key(
+    conn: &mut SqliteConnection,
+    key_hash: &[u8; 32],
+    revoked_at: i64,
+) -> Result<bool, StorageError> {
+    let result = sqlx::query("UPDATE actor_keys SET revoked_at = ? WHERE key_hash = ? AND revoked_at IS NULL")
+        .bind(revoked_at)
+        .bind(key_hash.to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}

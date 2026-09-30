@@ -292,6 +292,19 @@ enum KeyCommand {
         #[arg(long)]
         identity_uri: Option<String>,
     },
+    /// List every key ever issued on this peer (active and revoked), by
+    /// hash -- never the raw key itself, which is only ever shown once at
+    /// creation.
+    List {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// Revoke a key by the hash `oag key list` shows for it.
+    Revoke {
+        key_hash: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -398,6 +411,10 @@ async fn main() -> anyhow::Result<()> {
                 KeyCommand::Create { data_dir, actor_type, name, permissions, public_key, key_proof, identity_uri },
         } => {
             commands::key_create(&data_dir, &actor_type, name, permissions, identity_uri, public_key, key_proof).await
+        }
+        Command::Key { command: KeyCommand::List { data_dir } } => commands::key_list(&data_dir).await,
+        Command::Key { command: KeyCommand::Revoke { key_hash, data_dir } } => {
+            commands::key_revoke(&data_dir, &key_hash).await
         }
         Command::Peer { command: PeerCommand::Add { url, data_dir } } => {
             commands::peer_add(&data_dir, &url).await

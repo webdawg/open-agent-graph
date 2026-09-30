@@ -4,8 +4,9 @@ use oag_storage::pool::open_pool;
 
 use crate::commit::commit_local_event;
 use crate::payload::{
-    ActorDeclarePayload, ActorKeyAddPayload, AddEvidencePayload, AssertRelationPayload,
-    DisputeAssertionPayload, EventPayload, NodeAliasPayload, RetractAssertionPayload,
+    ActorDeclarePayload, ActorKeyAddPayload, ActorKeyRevokePayload, AddEvidencePayload,
+    AssertRelationPayload, DisputeAssertionPayload, EventPayload, NodeAliasPayload,
+    RetractAssertionPayload,
 };
 use crate::projector::ProjectionOutcome;
 
@@ -288,4 +289,69 @@ async fn node_alias_for_nonexistent_node_is_not_found() {
     )
     .await;
     assert!(matches!(result, Err(crate::error::EventsError::NotFound(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn actor_key_revoke_deactivates_the_key() {
+    let pool = open_pool(&temp_db_path("key-revoke")).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let now = 1_700_000_000_i64;
+
+    let (_, outcome) = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::ActorDeclare(ActorDeclarePayload {
+            actor_type: "agent".into(),
+            name: Some("revoke-test".into()),
+            public_key: None,
+            identity_uri: None,
+        }),
+        now,
+    )
+    .await
+    .unwrap();
+    let ProjectionOutcome::ActorDeclared { actor_id } = outcome else {
+        panic!("expected ActorDeclared outcome");
+    };
+
+    let key_hash = blake3::hash(b"revoke-me").to_hex().to_string();
+    commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::ActorKeyAdd(ActorKeyAddPayload {
+            actor_id: actor_id.to_hex(),
+            key_hash: key_hash.clone(),
+            permissions: vec!["graph:assert".into()],
+        }),
+        now,
+    )
+    .await
+    .unwrap();
+
+    let key_hash_bytes: [u8; 32] = hex::decode(&key_hash).unwrap().try_into().unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    assert!(
+        oag_storage::repo::actors::find_active_key(&mut conn, &key_hash_bytes).await.unwrap().is_some(),
+        "key must be active before revocation"
+    );
+    drop(conn);
+
+    commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::ActorKeyRevoke(ActorKeyRevokePayload { actor_id: actor_id.to_hex(), key_hash: key_hash.clone() }),
+        now + 1,
+    )
+    .await
+    .unwrap();
+
+    let mut conn = pool.acquire().await.unwrap();
+    assert!(
+        oag_storage::repo::actors::find_active_key(&mut conn, &key_hash_bytes).await.unwrap().is_none(),
+        "key must no longer authenticate after revocation"
+    );
+
+    let keys = oag_storage::repo::actors::list_keys(&mut conn).await.unwrap();
+    assert_eq!(keys.len(), 1);
+    assert!(keys[0].revoked_at.is_some(), "list_keys must still show the key, flagged as revoked");
 }
