@@ -107,16 +107,20 @@ Format: question, assumption I'm running with, status.
 
 ## Logging (spec section 87)
 
-- **Scope: REST only, for this milestone.** Every `oag-api` REST request now gets a structured
-  `http_request` tracing span with `request_id`, `peer_id`, `route`, `method`, `actor_id` (recorded
-  once auth resolves it -- absent on endpoints needing no auth, like `/api/v1/status` and
-  `/metrics`), `status`, `duration_ms`, and `result`. Deliberately NOT done this milestone: MCP
-  request spans (`oag-mcp` has its own transport/dispatch loop, not this router), and
-  `event_id`/`origin_peer` fields (spec section 87's other two fields -- these belong on
-  `oag-sync`'s replication/gossip/ingest paths, which aren't single-HTTP-request scoped the same
-  way a REST handler is; wiring them in needs its own pass over those code paths). Status: open
-  (revisit alongside whichever of an MCP request-logging pass or replication-path instrumentation
-  lands first).
+- **Scope: REST and MCP are both done; replication-path fields are not.** Every `oag-api` REST
+  request gets a structured `http_request` span (`request_id`, `peer_id`, `route`, `method`,
+  `actor_id`, `status`, `duration_ms`, `result`). Every `oag-mcp` tool call gets the equivalent
+  `mcp_tool` span (`tool` instead of `route`/`method`, same `actor_id`/`duration_ms`/`result`
+  fields) via a generic `OagMcpServer::traced` wrapper -- all 13 tool methods share the identical
+  `Result<Json<serde_json::Value>, ErrorData>` return shape, so one wrapper covers all of them, and
+  `actor_id` is recorded from inside the shared `authenticate`/`authenticate_read` methods exactly
+  like REST's `auth::authenticate`. Verified against a real running `oag serve` process with a real
+  MCP client call, not just unit tests (test binaries never initialize a `tracing_subscriber`, so
+  `RUST_LOG` produces no output there regardless).
+  Still NOT done: `event_id`/`origin_peer` fields (spec section 87's other two fields -- these
+  belong on `oag-sync`'s replication/gossip/ingest paths, which aren't single-request-scoped the
+  same way a REST/MCP call is; wiring them in needs its own pass over those code paths). Status:
+  open (revisit alongside replication-path instrumentation).
 - **`request_id` is a process-local pid+counter, not a UUID.** Avoids a new dependency for a value
   that only needs to disambiguate concurrent requests within one running peer's own logs -- nothing
   compares `request_id`s across peers or processes. Status: resolved.

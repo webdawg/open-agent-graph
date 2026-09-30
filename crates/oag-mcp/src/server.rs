@@ -7,6 +7,7 @@ use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{ServerCapabilities, ServerConfig};
 use rmcp::{tool, tool_router, ErrorData, ServerHandler};
 use serde_json::json;
+use tracing::Instrument;
 
 use crate::params::{
     AddEvidenceParams, AssertParams, DisputeParams, EdgeIdParams, EvidenceParam, HistoryParams,
@@ -65,13 +66,47 @@ impl OagMcpServer {
 
     async fn authenticate(&self, parts: &http::request::Parts) -> Result<AuthContext, ErrorData> {
         let raw = extract_bearer(parts)?;
-        self.graph.authenticate(raw).await.map_err(map_err)
+        let auth = self.graph.authenticate(raw).await.map_err(map_err)?;
+        // Spec section 87: every relevant request's logs should include
+        // `actor_id`. Recorded here, the one place every tool's auth path
+        // funnels through, onto whatever span `Self::traced` already opened
+        // for this call.
+        tracing::Span::current().record("actor_id", tracing::field::display(auth.actor_id));
+        Ok(auth)
     }
 
     async fn authenticate_read(&self, parts: &http::request::Parts) -> Result<AuthContext, ErrorData> {
         let auth = self.authenticate(parts).await?;
         auth.require(Permission::GraphRead).map_err(map_err)?;
         Ok(auth)
+    }
+
+    /// Spec section 87: a structured `tracing` span per MCP tool call,
+    /// mirroring `oag_api::logging`'s REST request spans exactly —
+    /// `tool`/`peer_id` known up front, `actor_id` recorded from inside
+    /// `Self::authenticate` once auth resolves it, `duration_ms`/`result`
+    /// logged on completion. Every `#[tool]` method has the identical
+    /// `Result<Json<serde_json::Value>, ErrorData>` shape, so one generic
+    /// wrapper covers all of them.
+    async fn traced<F>(&self, tool: &'static str, fut: F) -> Result<Json<serde_json::Value>, ErrorData>
+    where
+        F: std::future::Future<Output = Result<Json<serde_json::Value>, ErrorData>>,
+    {
+        let start = std::time::Instant::now();
+        let span = tracing::info_span!(
+            "mcp_tool",
+            tool,
+            peer_id = %self.graph.identity().peer_id(),
+            actor_id = tracing::field::Empty,
+        );
+        let result = fut.instrument(span.clone()).await;
+        let _entered = span.enter();
+        tracing::info!(
+            duration_ms = start.elapsed().as_millis() as u64,
+            result = if result.is_ok() { "ok" } else { "error" },
+            "mcp tool call completed"
+        );
+        result
     }
 }
 
@@ -83,19 +118,22 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<SearchParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        self.authenticate_read(&parts).await?;
-        let results = if p.semantic.unwrap_or(false) {
-            let ranked = self
-                .graph
-                .semantic_search(self.embedding_provider.as_ref(), &p.query, p.limit.unwrap_or(20))
-                .await
-                .map_err(map_err)?;
-            json!(ranked)
-        } else {
-            let results = self.graph.search(&p.query, p.limit.unwrap_or(20)).await.map_err(map_err)?;
-            json!(results)
-        };
-        Ok(Json(json!({ "results": results })))
+        self.traced("graph_search", async {
+            self.authenticate_read(&parts).await?;
+            let results = if p.semantic.unwrap_or(false) {
+                let ranked = self
+                    .graph
+                    .semantic_search(self.embedding_provider.as_ref(), &p.query, p.limit.unwrap_or(20))
+                    .await
+                    .map_err(map_err)?;
+                json!(ranked)
+            } else {
+                let results = self.graph.search(&p.query, p.limit.unwrap_or(20)).await.map_err(map_err)?;
+                json!(results)
+            };
+            Ok(Json(json!({ "results": results })))
+        })
+        .await
     }
 
     #[tool(description = "Resolve a URL or name to its graph node, if one exists. Returns an exact match, candidate matches, or nothing found.")]
@@ -104,18 +142,21 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<ResolveParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        self.authenticate_read(&parts).await?;
-        let outcome = self.graph.resolve(&p.value).await.map_err(map_err)?;
-        Ok(Json(match outcome {
-            oag_graph::ResolveOutcome::Found { node, confidence } => json!({
-                "node_id": node.id.to_hex(),
-                "canonical_identifier": node.canonical_identifier,
-                "type": node.node_type.as_str(),
-                "confidence": confidence,
-            }),
-            oag_graph::ResolveOutcome::Candidates(nodes) => json!({ "candidates": nodes }),
-            oag_graph::ResolveOutcome::NotFound => json!({ "candidates": [] }),
-        }))
+        self.traced("graph_resolve", async {
+            self.authenticate_read(&parts).await?;
+            let outcome = self.graph.resolve(&p.value).await.map_err(map_err)?;
+            Ok(Json(match outcome {
+                oag_graph::ResolveOutcome::Found { node, confidence } => json!({
+                    "node_id": node.id.to_hex(),
+                    "canonical_identifier": node.canonical_identifier,
+                    "type": node.node_type.as_str(),
+                    "confidence": confidence,
+                }),
+                oag_graph::ResolveOutcome::Candidates(nodes) => json!({ "candidates": nodes }),
+                oag_graph::ResolveOutcome::NotFound => json!({ "candidates": [] }),
+            }))
+        })
+        .await
     }
 
     #[tool(description = "Get a single node by its id.")]
@@ -124,12 +165,15 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<NodeIdParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        self.authenticate_read(&parts).await?;
-        let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
-        let node = self.graph.get_node(node_id).await.map_err(map_err)?;
-        let aliases = self.graph.list_aliases(node_id).await.map_err(map_err)?;
-        let authority = self.graph.get_node_authority(node_id).await.map_err(map_err)?;
-        Ok(Json(json!({ "node": node, "aliases": aliases, "authority": authority })))
+        self.traced("graph_get_node", async {
+            self.authenticate_read(&parts).await?;
+            let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
+            let node = self.graph.get_node(node_id).await.map_err(map_err)?;
+            let aliases = self.graph.list_aliases(node_id).await.map_err(map_err)?;
+            let authority = self.graph.get_node_authority(node_id).await.map_err(map_err)?;
+            Ok(Json(json!({ "node": node, "aliases": aliases, "authority": authority })))
+        })
+        .await
     }
 
     #[tool(description = "List all edges touching a node, in either direction.")]
@@ -138,10 +182,13 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<NodeIdParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        self.authenticate_read(&parts).await?;
-        let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
-        let edges = self.graph.get_edges(node_id).await.map_err(map_err)?;
-        Ok(Json(json!({ "edges": edges })))
+        self.traced("graph_get_edges", async {
+            self.authenticate_read(&parts).await?;
+            let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
+            let edges = self.graph.get_edges(node_id).await.map_err(map_err)?;
+            Ok(Json(json!({ "edges": edges })))
+        })
+        .await
     }
 
     #[tool(description = "Get corroboration signals for one edge: how many independent sources (not just how many assertions) back it, how strong the evidence is, and how much verification/dispute agreement it has. Never collapsed into one score — inspect each signal.")]
@@ -150,12 +197,15 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<EdgeIdParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        self.authenticate_read(&parts).await?;
-        let edge_id = p.edge_id.parse().map_err(|_| ErrorData::invalid_params("invalid edge_id", None))?;
-        let corroboration = self.graph.get_edge_corroboration(edge_id).await.map_err(map_err)?;
-        let value = serde_json::to_value(&corroboration)
-            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
-        Ok(Json(value))
+        self.traced("graph_get_corroboration", async {
+            self.authenticate_read(&parts).await?;
+            let edge_id = p.edge_id.parse().map_err(|_| ErrorData::invalid_params("invalid edge_id", None))?;
+            let corroboration = self.graph.get_edge_corroboration(edge_id).await.map_err(map_err)?;
+            let value = serde_json::to_value(&corroboration)
+                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+            Ok(Json(value))
+        })
+        .await
     }
 
     #[tool(description = "Get a compact semantic neighborhood (nodes, edges, assertions) around a node, out to a given depth.")]
@@ -164,16 +214,19 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<SubgraphParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        self.authenticate_read(&parts).await?;
-        let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
-        let sg = self
-            .graph
-            .get_subgraph(node_id, p.depth.unwrap_or(1), p.max_nodes.unwrap_or(200))
-            .await
-            .map_err(map_err)?;
-        let value = serde_json::to_value(&sg)
-            .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
-        Ok(Json(value))
+        self.traced("graph_get_subgraph", async {
+            self.authenticate_read(&parts).await?;
+            let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
+            let sg = self
+                .graph
+                .get_subgraph(node_id, p.depth.unwrap_or(1), p.max_nodes.unwrap_or(200))
+                .await
+                .map_err(map_err)?;
+            let value = serde_json::to_value(&sg)
+                .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+            Ok(Json(value))
+        })
+        .await
     }
 
     #[tool(description = "Find evidence sources backing any assertion whose edge touches this node.")]
@@ -182,10 +235,13 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<NodeIdParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        self.authenticate_read(&parts).await?;
-        let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
-        let sources = self.graph.find_sources(node_id).await.map_err(map_err)?;
-        Ok(Json(json!({ "sources": sources })))
+        self.traced("graph_find_sources", async {
+            self.authenticate_read(&parts).await?;
+            let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
+            let sources = self.graph.find_sources(node_id).await.map_err(map_err)?;
+            Ok(Json(json!({ "sources": sources })))
+        })
+        .await
     }
 
     #[tool(description = "Assert that a relationship holds between a subject and an object, optionally with supporting evidence. Creates a signed, evidence-backed claim — not a declaration of global truth.")]
@@ -194,23 +250,26 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<AssertParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        let auth = self.authenticate(&parts).await?;
-        let input = AssertInput {
-            subject: p.subject,
-            subject_type: p.subject_type,
-            predicate: p.predicate,
-            object: p.object,
-            object_type: p.object_type,
-            evidence: p.evidence.into_iter().map(evidence_input).collect(),
-            actor_confidence: p.confidence,
-            observed_at: None,
-            extraction_method: None,
-        };
-        let assertion_id = self.graph.assert(&auth, input).await.map_err(map_err)?;
-        Ok(Json(json!({
-            "assertion_id": assertion_id.to_hex(),
-            "status": "accepted_pending_verification",
-        })))
+        self.traced("graph_assert", async {
+            let auth = self.authenticate(&parts).await?;
+            let input = AssertInput {
+                subject: p.subject,
+                subject_type: p.subject_type,
+                predicate: p.predicate,
+                object: p.object,
+                object_type: p.object_type,
+                evidence: p.evidence.into_iter().map(evidence_input).collect(),
+                actor_confidence: p.confidence,
+                observed_at: None,
+                extraction_method: None,
+            };
+            let assertion_id = self.graph.assert(&auth, input).await.map_err(map_err)?;
+            Ok(Json(json!({
+                "assertion_id": assertion_id.to_hex(),
+                "status": "accepted_pending_verification",
+            })))
+        })
+        .await
     }
 
     #[tool(description = "Attach a piece of evidence to an existing assertion.")]
@@ -219,16 +278,19 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<AddEvidenceParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        let auth = self.authenticate(&parts).await?;
-        let assertion_id = p
-            .assertion_id
-            .parse()
-            .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
-        self.graph
-            .add_evidence(&auth, assertion_id, evidence_input(p.evidence))
-            .await
-            .map_err(map_err)?;
-        Ok(Json(json!({ "status": "accepted" })))
+        self.traced("graph_add_evidence", async {
+            let auth = self.authenticate(&parts).await?;
+            let assertion_id = p
+                .assertion_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
+            self.graph
+                .add_evidence(&auth, assertion_id, evidence_input(p.evidence))
+                .await
+                .map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
+        })
+        .await
     }
 
     #[tool(description = "Record a verification observation for an assertion (e.g. confirmed, contradicted, unreachable).")]
@@ -237,22 +299,25 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<VerifyParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        let auth = self.authenticate(&parts).await?;
-        let assertion_id = p
-            .assertion_id
-            .parse()
-            .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
-        let observed_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        let result = oag_core::VerifyResult::parse(&p.result)
-            .ok_or_else(|| ErrorData::invalid_params("unknown verify result, expected one of confirmed/not_confirmed/changed/contradicted/unreachable/unknown", None))?;
-        self.graph
-            .verify_assertion(&auth, assertion_id, result, observed_at)
-            .await
-            .map_err(map_err)?;
-        Ok(Json(json!({ "status": "accepted" })))
+        self.traced("graph_verify_assertion", async {
+            let auth = self.authenticate(&parts).await?;
+            let assertion_id = p
+                .assertion_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
+            let observed_at = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            let result = oag_core::VerifyResult::parse(&p.result)
+                .ok_or_else(|| ErrorData::invalid_params("unknown verify result, expected one of confirmed/not_confirmed/changed/contradicted/unreachable/unknown", None))?;
+            self.graph
+                .verify_assertion(&auth, assertion_id, result, observed_at)
+                .await
+                .map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
+        })
+        .await
     }
 
     #[tool(description = "Dispute an existing assertion. Disagreement is first-class data — this does not delete or hide the original claim.")]
@@ -261,16 +326,19 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<DisputeParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        let auth = self.authenticate(&parts).await?;
-        let assertion_id = p
-            .assertion_id
-            .parse()
-            .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
-        self.graph
-            .dispute_assertion(&auth, assertion_id, p.reason)
-            .await
-            .map_err(map_err)?;
-        Ok(Json(json!({ "status": "accepted" })))
+        self.traced("graph_dispute_assertion", async {
+            let auth = self.authenticate(&parts).await?;
+            let assertion_id = p
+                .assertion_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
+            self.graph
+                .dispute_assertion(&auth, assertion_id, p.reason)
+                .await
+                .map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
+        })
+        .await
     }
 
     #[tool(description = "Retract an assertion. History is preserved — the original assertion remains inspectable.")]
@@ -279,16 +347,19 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<RetractParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        let auth = self.authenticate(&parts).await?;
-        let assertion_id = p
-            .assertion_id
-            .parse()
-            .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
-        self.graph
-            .retract_assertion(&auth, assertion_id, p.reason)
-            .await
-            .map_err(map_err)?;
-        Ok(Json(json!({ "status": "accepted" })))
+        self.traced("graph_retract_assertion", async {
+            let auth = self.authenticate(&parts).await?;
+            let assertion_id = p
+                .assertion_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
+            self.graph
+                .retract_assertion(&auth, assertion_id, p.reason)
+                .await
+                .map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
+        })
+        .await
     }
 
     #[tool(description = "Get the full event history for a node, edge, or assertion — every assert/verify/dispute/retract event that touched it, oldest first.")]
@@ -297,9 +368,12 @@ impl OagMcpServer {
         Extension(parts): Extension<http::request::Parts>,
         Parameters(p): Parameters<HistoryParams>,
     ) -> Result<Json<serde_json::Value>, ErrorData> {
-        self.authenticate_read(&parts).await?;
-        let entries = self.graph.get_history(&p.object_type, &p.id).await.map_err(map_err)?;
-        Ok(Json(json!({ "history": entries })))
+        self.traced("graph_get_history", async {
+            self.authenticate_read(&parts).await?;
+            let entries = self.graph.get_history(&p.object_type, &p.id).await.map_err(map_err)?;
+            Ok(Json(json!({ "history": entries })))
+        })
+        .await
     }
 }
 
