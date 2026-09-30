@@ -4,7 +4,7 @@ use oag_storage::pool::open_pool;
 
 use crate::assert::{AssertInput, EvidenceInput};
 use crate::resolve::ResolveOutcome;
-use crate::service::GraphService;
+use crate::service::{AuthContext, GraphService};
 
 fn temp_db_path(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(
@@ -1030,4 +1030,72 @@ async fn semantic_search_with_default_disabled_provider_is_a_typed_error_not_a_p
         ),
         "got {recompute_result:?}"
     );
+}
+
+/// Spec section 104's "crash recovery" storage test. A real process crash
+/// can't be simulated in-process, but the property that actually matters is
+/// testable without one: nothing about a peer's committed data should
+/// depend on that process staying alive. Close every handle to the pool
+/// (dropping `GraphService`/`SqlitePool` is exactly what a killed process
+/// does -- no graceful shutdown hook runs either way), then reopen a
+/// completely fresh `SqlitePool`/`GraphService` against the same on-disk
+/// file and confirm every committed event's projection is still there,
+/// byte-for-byte queryable the same as before.
+#[tokio::test]
+async fn committed_data_survives_a_full_pool_close_and_reopen() {
+    let db_path = temp_db_path("crash-recovery");
+
+    let assertion_id = {
+        let pool = open_pool(&db_path).await.unwrap();
+        let service = GraphService::new(pool, PeerIdentity::generate());
+        let actor_id =
+            service.declare_actor(ActorType::Agent, Some("admin".into()), None, None).await.unwrap();
+        let auth = AuthContext { actor_id, permissions: vec![Permission::GraphAssert] };
+
+        let assertion_id = service
+            .assert(
+                &auth,
+                AssertInput {
+                    subject: "https://example.com/crash-recovery-test".into(),
+                    subject_type: None,
+                    predicate: "instance_of".into(),
+                    object: "concept:crash-recovery-test".into(),
+                    object_type: None,
+                    evidence: vec![EvidenceInput {
+                        evidence_type: Some("documentation".into()),
+                        title: Some("Survives a restart".into()),
+                        ..Default::default()
+                    }],
+                    actor_confidence: Some(0.9),
+                    observed_at: None,
+                    extraction_method: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        // `service` and its `SqlitePool` go out of scope here with no
+        // explicit close/flush call -- the same abrupt end a `kill -9`
+        // leaves behind. (A real peer's signing identity lives in a
+        // separate `identity.key` file outside the database and survives
+        // independently of it -- already covered by `oag-sync`'s
+        // `peer_restart_resumes_and_converges`; this test is specifically
+        // about the *data*.)
+        assertion_id
+    };
+
+    // Reopen a completely fresh pool and service against the same file.
+    let pool = open_pool(&db_path).await.unwrap();
+    let service = GraphService::new(pool, PeerIdentity::generate());
+
+    let assertion = service.get_assertion(assertion_id).await.unwrap();
+    assert!(assertion.is_some(), "assertion committed before the simulated crash must survive it");
+    assert_eq!(assertion.unwrap().status, oag_core::AssertionStatus::Active);
+
+    let evidence = service.list_evidence(assertion_id).await.unwrap();
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(evidence[0].title.as_deref(), Some("Survives a restart"));
+
+    let resolved = service.resolve("https://example.com/crash-recovery-test").await.unwrap();
+    assert!(matches!(resolved, ResolveOutcome::Found { confidence, .. } if confidence == 1.0));
 }

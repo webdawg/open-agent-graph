@@ -10,13 +10,14 @@ use crate::server::router;
 use crate::service::SyncService;
 
 struct TestPeer {
+    dir: std::path::PathBuf,
     graph: Arc<GraphService>,
     sync: SyncService,
     auth: AuthContext,
     addr: String,
 }
 
-async fn spawn_peer(name: &str) -> TestPeer {
+fn fresh_temp_dir(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "oag-sync-test-{name}-{}",
         std::time::SystemTime::now()
@@ -25,17 +26,32 @@ async fn spawn_peer(name: &str) -> TestPeer {
             .as_nanos()
     ));
     std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+async fn spawn_peer(name: &str) -> TestPeer {
+    spawn_peer_at(fresh_temp_dir(name), name).await
+}
+
+/// `PeerIdentity::load_or_generate` and a find-or-declare actor lookup (same
+/// pattern as `oag-crawler`'s `crawler_auth`) rather than always generating
+/// fresh -- so `restart_peer` below can reopen an *existing* data directory
+/// and get back the exact same `peer_id`/`actor_id`, simulating a process
+/// restart (spec section 104's "peer restart" replication test) rather than
+/// a brand-new peer.
+async fn spawn_peer_at(dir: std::path::PathBuf, name: &str) -> TestPeer {
     let pool = open_pool(&dir.join("oag.sqlite")).await.unwrap();
 
-    let identity = PeerIdentity::generate();
+    let identity = PeerIdentity::load_or_generate(&dir.join("identity.key")).unwrap();
     let peer_id = identity.peer_id();
     let public_key = identity.verifying_key().to_bytes();
 
     let graph = Arc::new(GraphService::new(pool.clone(), identity));
-    let actor_id = graph
-        .declare_actor(ActorType::Service, Some(format!("{name}-actor")), None, None)
-        .await
-        .unwrap();
+    let actor_name = format!("{name}-actor");
+    let actor_id = match graph.find_actor_by_name(&actor_name, ActorType::Service).await.unwrap() {
+        Some(actor) => actor.id,
+        None => graph.declare_actor(ActorType::Service, Some(actor_name), None, None).await.unwrap(),
+    };
     let auth = AuthContext {
         actor_id,
         permissions: vec![Permission::GraphAssert],
@@ -51,11 +67,25 @@ async fn spawn_peer(name: &str) -> TestPeer {
     });
 
     TestPeer {
+        dir,
         graph,
         sync,
         auth,
         addr: format!("http://{addr}"),
     }
+}
+
+/// Simulates `old`'s process being killed and `oag serve` started again
+/// against the same data directory: a fresh `SqlitePool`/`GraphService`/
+/// `SyncService`/HTTP listener (on a new port -- restarting the exact same
+/// port isn't the point here, only that identity and data survive), same
+/// `peer_id` and `actor_id` as before. `old`'s own background HTTP server
+/// task is simply abandoned (nobody talks to it again), same as a killed
+/// process's listener socket would be.
+async fn restart_peer(old: TestPeer, name: &str) -> TestPeer {
+    let dir = old.dir.clone();
+    drop(old);
+    spawn_peer_at(dir, name).await
 }
 
 fn sample_assertion(subject: &str, object: &str) -> AssertInput {
@@ -249,4 +279,45 @@ async fn push_event_count_over_limit_is_rejected() {
         .await
         .unwrap();
     assert_eq!(resp.status(), reqwest::StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+/// Spec section 104's "peer restart" replication test: a peer's process
+/// dying and coming back up against the same data directory must not lose
+/// data, desync its identity, or prevent it from continuing to converge
+/// with the network -- distinct from `partition_reconnect_converges`, which
+/// only ever simulates a network split, never an actual process restart
+/// (same `GraphService`/`SyncService` instances throughout that test).
+#[tokio::test]
+async fn peer_restart_resumes_and_converges() {
+    let a = spawn_peer("restart-a").await;
+    let b = spawn_peer("restart-b").await;
+
+    let before_restart = b
+        .graph
+        .assert(&b.auth, sample_assertion("https://example.com/before-restart", "concept-before"))
+        .await
+        .unwrap();
+    a.sync.sync_with_peer(&b.addr).await.unwrap();
+    assert!(a.graph.get_assertion(before_restart).await.unwrap().is_some());
+
+    let original_peer_id = b.sync.self_peer_id();
+    let b = restart_peer(b, "restart-b").await;
+    assert_eq!(b.sync.self_peer_id(), original_peer_id, "restart must not desync the peer's identity");
+
+    // Data written before the "crash" is still there after reopening the
+    // same data directory fresh.
+    assert!(
+        b.graph.get_assertion(before_restart).await.unwrap().is_some(),
+        "data committed before restart must survive it"
+    );
+
+    // The restarted peer can still author new events under its own chain...
+    let after_restart = b
+        .graph
+        .assert(&b.auth, sample_assertion("https://example.com/after-restart", "concept-after"))
+        .await
+        .unwrap();
+    // ...and the network still converges around it post-restart.
+    a.sync.sync_with_peer(&b.addr).await.unwrap();
+    assert!(a.graph.get_assertion(after_restart).await.unwrap().is_some(), "A should see B's post-restart event");
 }
