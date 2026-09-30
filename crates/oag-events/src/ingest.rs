@@ -325,4 +325,49 @@ mod tests {
             .unwrap();
         assert!(info.forked);
     }
+
+    /// Spec section 104's "invalid signature" / "malformed event" replication
+    /// tests: a corrupted signed event arriving over the wire (bit flip,
+    /// truncation, whatever) must be rejected with a typed error, never a
+    /// panic, and must never be silently accepted.
+    #[tokio::test]
+    async fn tampered_signature_is_rejected_not_panicked() {
+        let (pool, remote_identity, actor_event_id, actor_id_hex) = seeded_pool("tampered-signature").await;
+        let (mut signed, _) = build_and_sign(
+            &remote_identity,
+            2,
+            Some(actor_event_id),
+            1_700_000_001,
+            assert_payload(&actor_id_hex),
+        )
+        .unwrap();
+
+        // Flip one hex character in the signature -- still valid hex, still
+        // the right length, just cryptographically wrong.
+        let mut chars: Vec<char> = signed.signature.chars().collect();
+        chars[0] = if chars[0] == 'a' { 'b' } else { 'a' };
+        signed.signature = chars.into_iter().collect();
+
+        let result = ingest_remote_event(&pool, remote_identity.verifying_key(), signed, 1_700_000_002).await;
+        assert!(result.is_err(), "a tampered signature must be rejected, not accepted");
+    }
+
+    #[tokio::test]
+    async fn malformed_signature_encoding_is_rejected_not_panicked() {
+        let (pool, remote_identity, actor_event_id, actor_id_hex) = seeded_pool("malformed-signature").await;
+        let (mut signed, _) = build_and_sign(
+            &remote_identity,
+            2,
+            Some(actor_event_id),
+            1_700_000_001,
+            assert_payload(&actor_id_hex),
+        )
+        .unwrap();
+
+        // Not valid hex at all, and the wrong length either way.
+        signed.signature = "not-a-real-signature".to_string();
+
+        let result = ingest_remote_event(&pool, remote_identity.verifying_key(), signed, 1_700_000_002).await;
+        assert!(result.is_err(), "a malformed signature encoding must be rejected, not accepted");
+    }
 }
