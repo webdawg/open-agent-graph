@@ -658,3 +658,65 @@ async fn crawl_endpoint_requires_graph_crawl_permission_and_populates_the_graph(
     assert!(text.contains("crawl_jobs 1"), "expected crawl_jobs 1 in:\n{text}");
     assert!(text.contains("crawl_failures 0"), "expected crawl_failures 0 in:\n{text}");
 }
+
+#[tokio::test]
+async fn get_actor_endpoint_returns_the_asserting_actor() {
+    let (app, key) = test_app("get-actor").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/actor-lookup-test",
+        "predicate": "instance_of",
+        "object": "concept:actor-lookup-test",
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let assertion_id = body_json(response).await["assertion_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/assertions/{assertion_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let actor_id = body_json(response).await["assertion"]["actor_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/actors/{actor_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    assert_eq!(body["actor"]["name"], "admin");
+
+    // Unknown actor id -> 404, not a panic.
+    let response = app
+        .oneshot(
+            Request::get(format!("/api/v1/actors/{}", "0".repeat(64)))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

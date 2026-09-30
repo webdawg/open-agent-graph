@@ -52,6 +52,11 @@ enum Command {
         #[command(subcommand)]
         command: NodeCommand,
     },
+    /// Actor inspection commands.
+    Actor {
+        #[command(subcommand)]
+        command: ActorCommand,
+    },
     /// Assertion inspection commands.
     Assertion {
         #[command(subcommand)]
@@ -140,6 +145,15 @@ enum Command {
 
 #[derive(Subcommand)]
 enum NodeCommand {
+    Get {
+        id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum ActorCommand {
     Get {
         id: String,
         #[arg(long, default_value = "./data")]
@@ -369,6 +383,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Node { command: NodeCommand::Get { id, data_dir } } => {
             commands::node_get(&data_dir, &id).await
+        }
+        Command::Actor { command: ActorCommand::Get { id, data_dir } } => {
+            commands::actor_get(&data_dir, &id).await
         }
         Command::Assertion { command: AssertionCommand::Get { id, data_dir } } => {
             commands::assertion_get(&data_dir, &id).await

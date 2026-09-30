@@ -11,9 +11,9 @@ use serde_json::json;
 use tracing::Instrument;
 
 use crate::params::{
-    AddEvidenceParams, AssertParams, CrawlParams, DisputeParams, EdgeIdParams, EvidenceParam,
-    HistoryParams, NodeIdParams, ResolveParams, RetractParams, SearchParams, SubgraphParams,
-    VerifyParams,
+    ActorIdParams, AddEvidenceParams, AssertParams, CrawlParams, DisputeParams, EdgeIdParams,
+    EvidenceParam, HistoryParams, NodeIdParams, ResolveParams, RetractParams, SearchParams,
+    SubgraphParams, VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -189,6 +189,21 @@ impl OagMcpServer {
             let aliases = self.graph.list_aliases(node_id).await.map_err(map_err)?;
             let authority = self.graph.get_node_authority(node_id).await.map_err(map_err)?;
             Ok(Json(json!({ "node": node, "aliases": aliases, "authority": authority })))
+        })
+        .await
+    }
+
+    #[tool(description = "Get a single actor by its id -- who or what made a claim (human, agent, model, crawler, organization, domain, service, peer, or anonymous), and its identity_uri/public key if it has one.")]
+    async fn graph_get_actor(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<ActorIdParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_get_actor", async {
+            self.authenticate_read(&parts).await?;
+            let actor_id = p.actor_id.parse().map_err(|_| ErrorData::invalid_params("invalid actor_id", None))?;
+            let actor = self.graph.get_actor(actor_id).await.map_err(map_err)?;
+            Ok(Json(json!({ "actor": actor })))
         })
         .await
     }

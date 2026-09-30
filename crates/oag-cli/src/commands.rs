@@ -193,6 +193,16 @@ pub async fn embeddings_recompute(data_dir: &Path, config_path: Option<std::path
     Ok(())
 }
 
+pub async fn actor_get(data_dir: &Path, id: &str) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let actor_id = id.parse().map_err(|_| anyhow::anyhow!("invalid actor id '{id}'"))?;
+    match graph.get_actor(actor_id).await? {
+        Some(actor) => println!("{}", serde_json::to_string_pretty(&actor)?),
+        None => println!("not found"),
+    }
+    Ok(())
+}
+
 pub async fn node_get(data_dir: &Path, id: &str) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
     let node_id = id.parse().map_err(|_| anyhow::anyhow!("invalid node id '{id}'"))?;

@@ -23,6 +23,11 @@ pub struct NodeIdParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+pub struct ActorIdParams {
+    pub actor_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct EdgeIdParams {
     pub edge_id: String,
 }

@@ -1,7 +1,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::HeaderMap;
 use axum::Json;
-use oag_core::{AssertionId, EdgeId, NodeId};
+use oag_core::{ActorId, AssertionId, EdgeId, NodeId};
 use serde_json::json;
 
 use crate::dto::{
@@ -28,6 +28,21 @@ pub async fn search(
         json!(state.graph.search(&q.q, q.limit.unwrap_or(20)).await?)
     };
     Ok(Json(json!({ "results": results })))
+}
+
+pub async fn get_actor(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    authenticate_read(&headers, &state.graph).await?;
+    let actor_id = parse_actor_id(&id)?;
+    let actor = state
+        .graph
+        .get_actor(actor_id)
+        .await?
+        .ok_or_else(|| ApiError(oag_graph::GraphError::NotFound(format!("actor {id}"))))?;
+    Ok(Json(json!({ "actor": actor })))
 }
 
 pub async fn get_node(
@@ -234,6 +249,11 @@ pub async fn status(State(state): State<AppState>) -> Json<serde_json::Value> {
 pub(crate) fn parse_node_id(s: &str) -> Result<NodeId, ApiError> {
     s.parse()
         .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid node id '{s}'"))))
+}
+
+fn parse_actor_id(s: &str) -> Result<ActorId, ApiError> {
+    s.parse()
+        .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid actor id '{s}'"))))
 }
 
 pub(crate) fn parse_assertion_id(s: &str) -> Result<AssertionId, ApiError> {

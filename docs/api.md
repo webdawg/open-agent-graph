@@ -14,6 +14,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | GET | `/search?q=&limit=&semantic=` | `graph:read` | Keyword (or `semantic=true` embedding-ranked) node search |
 | POST | `/resolve` | `graph:read` | Resolve an identifier string to its node, if one exists |
 | GET | `/nodes/{id}` | `graph:read` | Get a node by id |
+| GET | `/actors/{id}` | `graph:read` | Get an actor by id |
 | GET | `/nodes/{id}/edges` | `graph:read` | List edges touching a node |
 | GET | `/nodes/{id}/assertions` | `graph:read` | List assertions on any edge touching a node |
 | GET | `/subgraph?node=&depth=` | `graph:read` | Compact neighborhood traversal around a node |
@@ -101,6 +102,7 @@ tool per `GraphService` capability:
 | `graph_search` | `GET /search` |
 | `graph_resolve` | `POST /resolve` |
 | `graph_get_node` | `GET /nodes/{id}` |
+| `graph_get_actor` | `GET /actors/{id}` |
 | `graph_get_edges` | `GET /nodes/{id}/edges` |
 | `graph_get_corroboration` | `GET /edges/{id}/corroboration` |
 | `graph_get_subgraph` | `GET /subgraph` |
@@ -124,6 +126,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag status` | This peer's identity and basic status |
 | `oag search` | Search the local graph (`--semantic` to rank by embedding similarity) |
 | `oag node get <id>` | Get a node |
+| `oag actor get <id>` | Get an actor |
 | `oag assertion get <id>` | Get an assertion with its evidence |
 | `oag edge corroboration <id>` | Ranking signals for one edge |
 | `oag identity show/backup/restore` | Peer identity lifecycle — see `docs/security.md` |

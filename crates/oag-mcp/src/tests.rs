@@ -224,6 +224,52 @@ async fn graph_crawl_fetches_a_real_page_and_asserts_facts() {
 }
 
 #[tokio::test]
+async fn graph_get_actor_returns_the_asserting_actor() {
+    let (url, raw_key) = spawn_mcp_server("get-actor").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let assert_result = client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({
+                "subject": "https://example.com/mcp-actor-test",
+                "predicate": "instance_of",
+                "object": "concept:mcp-actor-test",
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ))
+        .await
+        .unwrap();
+    let assertion_id =
+        assert_result.structured_content.unwrap()["assertion_id"].as_str().unwrap().to_string();
+
+    let history_result = client
+        .call_tool(CallToolRequestParams::new("graph_get_history").with_arguments(
+            json!({ "object_type": "assertion", "id": assertion_id }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+    let history = history_result.structured_content.unwrap();
+    let actor_id = history["history"][0]["payload"]["actor_id"].as_str().unwrap().to_string();
+
+    let actor_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_actor")
+                .with_arguments(json!({ "actor_id": actor_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let actor = actor_result.structured_content.expect("graph_get_actor returns structured content");
+    assert_eq!(actor["actor"]["name"], "mcp-test");
+}
+
+#[tokio::test]
 async fn graph_crawl_without_permission_is_rejected() {
     let pool = open_pool(&temp_db_path("crawl-no-permission")).await.unwrap();
     let identity = PeerIdentity::generate();
