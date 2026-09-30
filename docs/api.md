@@ -1,0 +1,108 @@
+# API Reference
+
+OAG exposes the same `GraphService` capabilities three ways: REST, MCP, and the `oag` CLI. All three
+share one service layer (`docs/architecture.md`) — nothing is implemented in only one of them by
+accident; a capability missing from one surface is a deliberate, documented scope decision (see
+`OPEN_QUESTIONS.md`).
+
+## REST (`/api/v1/*`, spec section 66)
+
+Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-key>` unless noted.
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/search?q=&limit=&semantic=` | `graph:read` | Keyword (or `semantic=true` embedding-ranked) node search |
+| POST | `/resolve` | `graph:read` | Resolve an identifier string to its node, if one exists |
+| GET | `/nodes/{id}` | `graph:read` | Get a node by id |
+| GET | `/nodes/{id}/edges` | `graph:read` | List edges touching a node |
+| GET | `/nodes/{id}/assertions` | `graph:read` | List assertions on any edge touching a node |
+| GET | `/subgraph?node=&depth=` | `graph:read` | Compact neighborhood traversal around a node |
+| GET | `/assertions/{id}` | `graph:read` | Get one assertion plus its evidence/disputes/observations |
+| POST | `/assertions` | `graph:assert` | Create an assertion, optionally with evidence attached |
+| POST | `/assertions/{id}/evidence` | `graph:assert` | Attach evidence to an existing assertion |
+| POST | `/assertions/{id}/verify` | `graph:verify` | Record a verification observation |
+| POST | `/assertions/{id}/dispute` | `graph:verify` | Dispute an assertion |
+| POST | `/assertions/{id}/retract` | `graph:retract-own` | Retract your own assertion |
+| GET | `/edges/{id}/corroboration` | `graph:read` | Every ranking signal for one edge (see `docs/data-model.md`) |
+| GET | `/history/{object_type}/{id}` | `graph:read` | Full event history for a node/edge/assertion |
+| GET | `/status` | none | Peer id, identity, basic status |
+| GET | `/metrics` (top-level, not under `/api/v1`) | none | Prometheus text-format metrics (spec section 86) |
+
+### `/metrics` (spec section 86)
+
+Hand-rolled Prometheus exposition format, no external metrics platform required:
+
+```
+events_total, nodes_total, edges_total, assertions_total, evidence_total   (counters)
+peer_count, sqlite_size_bytes                                              (gauges)
+```
+
+`events_by_origin`, request-latency histograms, replication throughput, and crawler/verification job
+counters are not yet implemented — see `OPEN_QUESTIONS.md`'s "Metrics" section for the exact scope
+decision.
+
+### Request logging (spec section 87)
+
+Every REST request gets a structured `tracing` span: `request_id`, `peer_id`, `route`, `method`,
+`actor_id` (once auth resolves it), `status`, `duration_ms`, `result`. Set `RUST_LOG=info` (or finer)
+to see it. MCP request spans are not yet implemented — see `OPEN_QUESTIONS.md`'s "Logging" section.
+
+### Replication API
+
+`/oag/sync/v1/*` is a separate, unauthenticated router — see `docs/replication.md` for its full
+endpoint list and rationale.
+
+## MCP tools
+
+Mounted at `/mcp` on the same `oag serve` process, same `Authorization: Bearer` auth as REST, one
+tool per `GraphService` capability:
+
+| Tool | Equivalent to |
+|---|---|
+| `graph_search` | `GET /search` |
+| `graph_resolve` | `POST /resolve` |
+| `graph_get_node` | `GET /nodes/{id}` |
+| `graph_get_edges` | `GET /nodes/{id}/edges` |
+| `graph_get_corroboration` | `GET /edges/{id}/corroboration` |
+| `graph_get_subgraph` | `GET /subgraph` |
+| `graph_find_sources` | No REST equivalent — evidence backing any assertion whose edge touches a node |
+| `graph_assert` | `POST /assertions` |
+| `graph_add_evidence` | `POST /assertions/{id}/evidence` |
+| `graph_verify_assertion` | `POST /assertions/{id}/verify` |
+| `graph_dispute_assertion` | `POST /assertions/{id}/dispute` |
+| `graph_retract_assertion` | `POST /assertions/{id}/retract` |
+| `graph_get_history` | `GET /history/{object_type}/{id}` |
+
+## CLI (`oag`)
+
+Every subcommand accepts `--data-dir` (default `./data`); network-facing ones also accept
+`--config`. Run `oag <command> --help` for exact flags.
+
+| Command | Purpose |
+|---|---|
+| `oag serve` | Start this peer's REST + MCP + sync server |
+| `oag status` | This peer's identity and basic status |
+| `oag search` | Search the local graph (`--semantic` to rank by embedding similarity) |
+| `oag node get <id>` | Get a node |
+| `oag assertion get <id>` | Get an assertion with its evidence |
+| `oag edge corroboration <id>` | Ranking signals for one edge |
+| `oag identity show/backup/restore` | Peer identity lifecycle — see `docs/security.md` |
+| `oag key create` | Issue a new API key scoped to specific permissions |
+| `oag peer add/list/remove/sync` | Manage known peer addresses and trigger one-shot sync |
+| `oag replication status` | Durability view — see `docs/replication.md` |
+| `oag authority recompute` | Batch-recompute the PageRank-style `authority` signal |
+| `oag embeddings recompute` | Batch-recompute node embeddings for semantic search |
+| `oag backup <path>` | Consistent whole-database snapshot (`VACUUM INTO`) |
+| `oag rebuild` | Wipe and replay every derived table from the event log |
+| `oag redact evidence/list/suppress-node/unsuppress-node` | Deletion and redaction — see `docs/security.md` |
+| `oag crawl <url>` | Fetch a URL, extract structured facts, assert them as evidence-backed claims |
+| `oag doctor` | Local health checks |
+
+## Configuration (`config.toml`, spec section 94)
+
+Sections: `[data]`, `[server]`, `[search]` (semantic search / embeddings, disabled by default),
+`[mcp]`, `[network]` (bootstrap peers, sync interval), `[federation]` (`open` or `allowlist` — see
+`docs/security.md`), `[crawler]` (SSRF defaults, LLM extraction config, disabled by default),
+`[reticulum]` (optional additional transport, disabled by default). Every section has a safe
+default; an empty or absent `config.toml` is a fully functional single-peer, no-external-service
+configuration. `OAG_<SECTION>_<KEY>` environment variables override file values.
