@@ -38,6 +38,11 @@ pub enum IngestOutcome {
 /// this milestone's sync client always fetches contiguous ranges in
 /// ascending order, so a gap here indicates a genuine problem upstream, not
 /// normal reordering).
+#[tracing::instrument(
+    skip(pool, verifying_key, signed, received_at),
+    fields(event_id = tracing::field::Empty, origin_peer = tracing::field::Empty, result = tracing::field::Empty),
+    err
+)]
 pub async fn ingest_remote_event(
     pool: &SqlitePool,
     verifying_key: VerifyingKey,
@@ -45,8 +50,14 @@ pub async fn ingest_remote_event(
     received_at: i64,
 ) -> Result<IngestOutcome, EventsError> {
     let event_id = verify_and_derive_id(&signed, &verifying_key)?;
+    // Spec section 87: every relevant event's logs should include `event_id`
+    // and `origin_peer`. Recorded as soon as each is known, rather than
+    // passed in as function arguments, so this same span covers every
+    // subsequent return path (duplicate/fork/applied/rejected) below.
+    tracing::Span::current().record("event_id", tracing::field::display(event_id));
 
     let claimed_peer_id: PeerId = signed.unsigned.origin_peer.parse()?;
+    tracing::Span::current().record("origin_peer", tracing::field::display(claimed_peer_id));
     let derived_peer_id = PeerId::from_public_key(&verifying_key);
     if claimed_peer_id != derived_peer_id {
         return Err(EventsError::OriginKeyMismatch {
@@ -68,6 +79,7 @@ pub async fn ingest_remote_event(
     if let Some(existing) = events_repo::find_event_id_at(&mut tx, &origin_peer_id, sequence as i64).await? {
         if existing == event_id {
             tx.commit().await.map_err(oag_storage::StorageError::from)?;
+            tracing::Span::current().record("result", "already_known");
             return Ok(IngestOutcome::AlreadyKnown(event_id));
         }
         // A fork must be recorded even if this is the first time we've heard
@@ -92,6 +104,8 @@ pub async fn ingest_remote_event(
         .await?;
         oag_storage::repo::peers::mark_forked(&mut tx, &origin_peer_id).await?;
         tx.commit().await.map_err(oag_storage::StorageError::from)?;
+        tracing::Span::current().record("result", "forked");
+        tracing::warn!(existing = %existing, incoming = %event_id, "origin fork detected");
         return Ok(IngestOutcome::Forked { existing, incoming: event_id });
     }
 
@@ -136,6 +150,8 @@ pub async fn ingest_remote_event(
 
     tx.commit().await.map_err(oag_storage::StorageError::from)?;
 
+    tracing::Span::current().record("result", "applied");
+    tracing::info!("remote event ingested");
     Ok(IngestOutcome::Applied(event_id, outcome))
 }
 

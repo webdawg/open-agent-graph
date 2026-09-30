@@ -117,10 +117,13 @@ Format: question, assumption I'm running with, status.
   like REST's `auth::authenticate`. Verified against a real running `oag serve` process with a real
   MCP client call, not just unit tests (test binaries never initialize a `tracing_subscriber`, so
   `RUST_LOG` produces no output there regardless).
-  Still NOT done: `event_id`/`origin_peer` fields (spec section 87's other two fields -- these
-  belong on `oag-sync`'s replication/gossip/ingest paths, which aren't single-request-scoped the
-  same way a REST/MCP call is; wiring them in needs its own pass over those code paths). Status:
-  open (revisit alongside replication-path instrumentation).
+  `event_id`/`origin_peer` are also done: `oag_events::ingest::ingest_remote_event` (the single
+  choke point for both the push and pull replication paths -- see `docs/replication.md`) carries an
+  `#[instrument]` span with `event_id`/`origin_peer`/`result` (`applied`/`already_known`/`forked`),
+  errors auto-logged via the `err` attribute. Verified against two real `oag serve` processes
+  actually replicating over HTTP, not just unit tests. Every field spec section 87 lists is now
+  covered somewhere (REST/MCP spans have `request_id`/`peer_id`/`route or tool`/`actor_id`/
+  `duration_ms`/`result`; the ingest span has `event_id`/`origin_peer`/`result`). Status: resolved.
 - **`request_id` is a process-local pid+counter, not a UUID.** Avoids a new dependency for a value
   that only needs to disambiguate concurrent requests within one running peer's own logs -- nothing
   compares `request_id`s across peers or processes. Status: resolved.
