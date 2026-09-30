@@ -24,6 +24,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | POST | `/assertions/{id}/verify` | `graph:verify` | Record a verification observation |
 | POST | `/assertions/{id}/dispute` | `graph:verify` | Dispute an assertion |
 | POST | `/assertions/{id}/retract` | `graph:retract-own` | Retract your own assertion |
+| POST | `/assertions/{id}/supersede` | `graph:assert` | Flag an assertion as superseded by a newer one (spec section 36) -- both must already exist |
 | GET | `/edges/{id}` | `graph:read` | Get an edge (subject/predicate/object) by id |
 | GET | `/edges/{id}/corroboration` | `graph:read` | Every ranking signal for one edge (see `docs/data-model.md`) |
 | GET | `/history/{object_type}/{id}` | `graph:read` | Full event history for a node/edge/assertion |
@@ -114,6 +115,7 @@ tool per `GraphService` capability:
 | `graph_verify_assertion` | `POST /assertions/{id}/verify` |
 | `graph_dispute_assertion` | `POST /assertions/{id}/dispute` |
 | `graph_retract_assertion` | `POST /assertions/{id}/retract` |
+| `graph_supersede_assertion` | `POST /assertions/{id}/supersede` |
 | `graph_get_history` | `GET /history/{object_type}/{id}` |
 | `graph_crawl` | `POST /crawl` -- also requires `graph:crawl`, not just an authenticated key |
 

@@ -781,3 +781,60 @@ async fn get_edge_endpoint_returns_the_edge() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+/// Spec section 36 (Supersession): GraphService::supersede_assertion
+/// already existed but had no REST/MCP/CLI surface at all until now --
+/// the old assertion must remain inspectable, just flagged, exactly like
+/// dispute/retract never delete anything.
+#[tokio::test]
+async fn supersede_endpoint_flags_the_old_assertion_without_deleting_it() {
+    let (app, key) = test_app("supersede").await;
+    let auth_header = format!("Bearer {key}");
+
+    async fn create_assertion(app: axum::Router, auth_header: &str, object: &str) -> String {
+        let body = json!({
+            "subject": "https://example.com/supersede-test",
+            "predicate": "instance_of",
+            "object": object,
+        });
+        let response = app
+            .oneshot(
+                Request::post("/api/v1/assertions")
+                    .header("authorization", auth_header)
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        body_json(response).await["assertion_id"].as_str().unwrap().to_string()
+    }
+
+    let old_id = create_assertion(app.clone(), &auth_header, "concept:supersede-test-v1").await;
+    let new_id = create_assertion(app.clone(), &auth_header, "concept:supersede-test-v2").await;
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/assertions/{old_id}/supersede"))
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "new_assertion_id": new_id }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::get(format!("/api/v1/assertions/{old_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(body["assertion"]["status"], "superseded", "old assertion must be flagged, still fully present");
+}

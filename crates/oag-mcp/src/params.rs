@@ -87,6 +87,12 @@ pub struct RetractParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+pub struct SupersedeParams {
+    pub old_assertion_id: String,
+    pub new_assertion_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct HistoryParams {
     pub object_type: String,
     pub id: String,

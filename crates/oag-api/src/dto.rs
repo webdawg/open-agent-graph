@@ -87,6 +87,11 @@ pub struct RetractRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct SupersedeRequest {
+    pub new_assertion_id: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ResolveRequest {
     pub value: String,
 }

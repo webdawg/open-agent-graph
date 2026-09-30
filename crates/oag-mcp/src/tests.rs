@@ -325,6 +325,59 @@ async fn graph_get_edge_returns_the_edge() {
 }
 
 #[tokio::test]
+async fn graph_supersede_assertion_flags_the_old_assertion() {
+    let (url, raw_key) = spawn_mcp_server("supersede").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let old_result = client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({ "subject": "https://example.com/mcp-supersede-test", "predicate": "instance_of", "object": "concept:mcp-supersede-v1" })
+                .as_object()
+                .unwrap()
+                .clone(),
+        ))
+        .await
+        .unwrap();
+    let old_id = old_result.structured_content.unwrap()["assertion_id"].as_str().unwrap().to_string();
+
+    let new_result = client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({ "subject": "https://example.com/mcp-supersede-test", "predicate": "instance_of", "object": "concept:mcp-supersede-v2" })
+                .as_object()
+                .unwrap()
+                .clone(),
+        ))
+        .await
+        .unwrap();
+    let new_id = new_result.structured_content.unwrap()["assertion_id"].as_str().unwrap().to_string();
+
+    client
+        .call_tool(CallToolRequestParams::new("graph_supersede_assertion").with_arguments(
+            json!({ "old_assertion_id": old_id, "new_assertion_id": new_id }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+
+    let history_result = client
+        .call_tool(CallToolRequestParams::new("graph_get_history").with_arguments(
+            json!({ "object_type": "assertion", "id": old_id }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+    let history = history_result.structured_content.unwrap();
+    let events = history["history"].as_array().unwrap();
+    assert!(
+        events.iter().any(|e| e["event_type"] == "SUPERSEDE_ASSERTION"),
+        "expected a SUPERSEDE_ASSERTION event in history: {events:?}"
+    );
+}
+
+#[tokio::test]
 async fn graph_crawl_without_permission_is_rejected() {
     let pool = open_pool(&temp_db_path("crawl-no-permission")).await.unwrap();
     let identity = PeerIdentity::generate();

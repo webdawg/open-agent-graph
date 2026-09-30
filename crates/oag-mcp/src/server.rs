@@ -13,7 +13,7 @@ use tracing::Instrument;
 use crate::params::{
     ActorIdParams, AddEvidenceParams, AssertParams, CrawlParams, DisputeParams, EdgeIdParams,
     EvidenceParam, HistoryParams, NodeIdParams, ResolveParams, RetractParams, SearchParams,
-    SubgraphParams, VerifyParams,
+    SubgraphParams, SupersedeParams, VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -402,6 +402,31 @@ impl OagMcpServer {
                 .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
             self.graph
                 .retract_assertion(&auth, assertion_id, p.reason)
+                .await
+                .map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
+        })
+        .await
+    }
+
+    #[tool(description = "Mark an assertion as superseded by a newer one -- the old assertion remains inspectable, just flagged, exactly like dispute/retract never delete anything. Both assertion ids must already exist.")]
+    async fn graph_supersede_assertion(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<SupersedeParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_supersede_assertion", async {
+            let auth = self.authenticate(&parts).await?;
+            let old_assertion_id = p
+                .old_assertion_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid old_assertion_id", None))?;
+            let new_assertion_id = p
+                .new_assertion_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid new_assertion_id", None))?;
+            self.graph
+                .supersede_assertion(&auth, old_assertion_id, new_assertion_id)
                 .await
                 .map_err(map_err)?;
             Ok(Json(json!({ "status": "accepted" })))

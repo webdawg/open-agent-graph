@@ -205,6 +205,19 @@ pub async fn retract_assertion(
     Ok(Json(json!({ "status": "accepted" })))
 }
 
+pub async fn supersede_assertion(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<crate::dto::SupersedeRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let auth = authenticate(&headers, &state.graph).await?;
+    let old_assertion_id = parse_assertion_id(&id)?;
+    let new_assertion_id = parse_assertion_id(&body.new_assertion_id)?;
+    state.graph.supersede_assertion(&auth, old_assertion_id, new_assertion_id).await?;
+    Ok(Json(json!({ "status": "accepted" })))
+}
+
 pub async fn resolve(
     State(state): State<AppState>,
     headers: HeaderMap,

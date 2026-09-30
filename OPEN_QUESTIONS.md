@@ -172,6 +172,19 @@ Format: question, assumption I'm running with, status.
   out for the same "don't scope-creep past the clearest, safest case" reasoning as whole-assertion
   redaction. Status: open.
 
+## Supersession surface (spec section 36)
+
+- **`GraphService::supersede_assertion` existed but had zero exposure until now.** Found while
+  auditing for other node/actor/edge-style "capability exists, surface doesn't" gaps. Added
+  `POST /api/v1/assertions/{id}/supersede` and MCP's `graph_supersede_assertion`, both requiring
+  `graph:assert` (matches the method's own existing permission check -- superseding is closer to
+  "asserting a new fact that obsoletes an old one" than to retraction's own-claim-only semantics).
+  Status: resolved.
+- **No CLI verb**, deliberately: `dispute`/`retract` don't have `oag assertion dispute`/`oag
+  assertion retract` CLI commands either -- assertion mutations are REST/MCP-only by established
+  convention here; the CLI's `assertion` subcommand stays read-only (`get`). Status: resolved
+  (matches existing precedent, not a gap).
+
 ## Human Interface (spec section 80)
 
 - **Auth: reuses `graph:read` API keys via `?key=`, not a new permission type.** A plain browser

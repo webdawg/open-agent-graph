@@ -61,6 +61,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/assertions/{id}/retract",
             post(handlers::retract_assertion),
         )
+        .route(
+            "/api/v1/assertions/{id}/supersede",
+            post(handlers::supersede_assertion),
+        )
         .route("/api/v1/edges/{id}", get(handlers::get_edge))
         .route(
             "/api/v1/edges/{id}/corroboration",
