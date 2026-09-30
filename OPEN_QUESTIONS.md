@@ -47,13 +47,21 @@ Format: question, assumption I'm running with, status.
   `crawl_jobs`/`crawl_failures` (process-lifetime `AtomicU64` counters on `CrawlerService`,
   incremented on every `crawl()` call regardless of caller -- CLI, REST, or MCP). Still NOT
   implemented: `events_by_origin` (a labeled/vector metric -- needs a GROUP BY and a decision on
-  label cardinality), `events_pending_chain`, `peer_sync_lag`, `peer_sync_errors`,
+  label cardinality), `events_pending_chain`, `peer_sync_errors` (needs a durable counter wired
+  through the gossip loop's own error path -- not derivable from a read-only status query),
   `replication_bytes_in`/`out`, `search_latency`, `api_latency` (all need request-duration
   instrumentation -- a middleware/histogram layer, not a snapshot query), `verification_jobs`/
-  `verification_failures` (no counter wired through `verify_assertion` yet), and `blob_store_size`
-  (no blob store exists yet -- spec section 84's `blobs/<hash>` is itself unimplemented). Status:
-  open (revisit alongside whichever of request-latency histograms, a verification counter, or the
-  blob store lands first).
+  `verification_failures` (no counter wired through `verify_assertion` yet -- lower priority than
+  crawl's were, since local verification has no real external-I/O failure mode the way a crawl
+  does), and `blob_store_size` (no blob store exists yet -- spec section 84's `blobs/<hash>` is
+  itself unimplemented). `peer_sync_lag` IS now covered, in aggregate: `replication_target`/
+  `replication_peers_caught_up`/`replication_lagging_peers`/`replication_meets_target`, derived
+  from `SyncService::replication_status()` (the same computation `oag replication status` already
+  used) via a second, read-only `SyncService` handle on `AppState` constructed straight from the
+  same pool/identity `GraphService` already has -- no threading through `oag serve`'s startup
+  needed, since federation policy doesn't affect this read-only query. Status: open (revisit
+  alongside whichever of request-latency histograms, `peer_sync_errors`, or the blob store lands
+  first).
 - **Output format: hand-rolled Prometheus text exposition, no external crate.** `GET /metrics`
   returns `text/plain; version=0.0.4` built by a small pure `render()` function in `oag-api`, rather
   than pulling in `metrics`/`metrics-exporter-prometheus`. Assumption: spec section 86 explicitly

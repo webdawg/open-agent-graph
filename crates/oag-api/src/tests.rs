@@ -374,6 +374,7 @@ async fn metrics_endpoint_needs_no_auth_and_reflects_seeded_data() {
     let text = String::from_utf8(bytes.to_vec()).unwrap();
 
     assert!(text.contains("# TYPE nodes_total counter"));
+    assert!(text.contains("# TYPE replication_target gauge"), "expected live replication gauges:\n{text}");
     assert!(text.contains("# TYPE sqlite_size_bytes gauge"));
 
     let value_of = |metric: &str| -> i64 {

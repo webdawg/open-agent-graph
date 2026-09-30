@@ -48,11 +48,18 @@ Hand-rolled Prometheus exposition format, no external metrics platform required:
 events_total, nodes_total, edges_total, assertions_total, evidence_total   (counters)
 crawl_jobs, crawl_failures                                                 (counters, process-lifetime)
 peer_count, sqlite_size_bytes                                              (gauges)
+replication_target, replication_peers_caught_up,
+replication_lagging_peers, replication_meets_target                       (gauges; aggregate, not per-peer)
 ```
 
-`events_by_origin`, request-latency histograms, replication throughput, and verification job
-counters are not yet implemented — see `OPEN_QUESTIONS.md`'s "Metrics" section for the exact scope
-decision.
+The `replication_*` gauges are derived from the same computation `oag replication status` /
+`GET /oag/sync/v1/replication-status` use, aggregated rather than broken out per peer (a per-peer
+label set would be an unbounded-cardinality vector as the network grows). Omitted from the response
+entirely (not zeroed) if that query fails.
+
+`events_by_origin`, request-latency histograms, `peer_sync_errors`, `replication_bytes_in`/`out`, and
+verification job counters are not yet implemented — see `OPEN_QUESTIONS.md`'s "Metrics" section for
+the exact scope decision.
 
 ### Request logging (spec section 87)
 

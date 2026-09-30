@@ -1831,6 +1831,7 @@ dependencies = [
  "oag-events",
  "oag-graph",
  "oag-storage",
+ "oag-sync",
  "serde",
  "serde_json",
  "sqlx",
