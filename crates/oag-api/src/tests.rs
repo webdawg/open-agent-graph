@@ -365,3 +365,143 @@ async fn metrics_endpoint_needs_no_auth_and_reflects_seeded_data() {
     assert!(value_of("events_total") > 0);
     assert!(value_of("sqlite_size_bytes") > 0);
 }
+
+async fn body_text(response: axum::response::Response) -> String {
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    String::from_utf8(bytes.to_vec()).unwrap()
+}
+
+/// Spec section 80: the Human Interface reuses the same `graph:read` API
+/// keys as REST, accepted via `?key=` (a plain link can't set a header) --
+/// missing or wrong key must be rejected exactly like a REST call would be.
+#[tokio::test]
+async fn human_interface_pages_require_the_same_api_key_as_rest() {
+    let (app, key) = test_app("human-auth").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/human-ui-test",
+        "predicate": "instance_of",
+        "object": "concept:human-ui-test",
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let assertion_id = body_json(response).await["assertion_id"].as_str().unwrap().to_string();
+
+    let resolve_response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/resolve")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "value": "https://example.com/human-ui-test" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let node_id = body_json(resolve_response).await["node_id"].as_str().unwrap().to_string();
+
+    // No key at all.
+    let response = app
+        .clone()
+        .oneshot(Request::get(format!("/ui/nodes/{node_id}")).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Wrong key.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/ui/nodes/{node_id}?key=oagk_wrong"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Correct key.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/ui/nodes/{node_id}?key={key}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::get(format!("/ui/assertions/{assertion_id}?key={key}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+/// The core security property of the human interface: fields containing
+/// attacker/crawler-controlled text (here, an evidence title and excerpt)
+/// must render HTML-escaped, never as live markup -- proves askama's
+/// default autoescaping is actually active on these templates, not just
+/// assumed.
+#[tokio::test]
+async fn human_interface_escapes_hostile_content() {
+    let (app, key) = test_app("human-xss").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/xss-test",
+        "predicate": "instance_of",
+        "object": "concept:xss-test",
+        "evidence": [{
+            "type": "documentation",
+            "title": "<script>alert(1)</script>",
+            "excerpt": "<img src=x onerror=alert(2)>"
+        }]
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let assertion_id = body_json(response).await["assertion_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .oneshot(
+            Request::get(format!("/ui/assertions/{assertion_id}?key={key}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let html = body_text(response).await;
+
+    assert!(!html.contains("<script>"), "raw <script> tag leaked into rendered HTML:\n{html}");
+    assert!(!html.contains("<img src=x"), "raw <img> tag leaked into rendered HTML:\n{html}");
+    // askama's default HTML escaper uses numeric character references, not
+    // named ones (e.g. `&#60;` not `&lt;`) -- confirmed against its own
+    // documented example output.
+    assert!(html.contains("&#60;script&#62;"), "expected the escaped script tag to be present:\n{html}");
+    assert!(html.contains("&#60;img src=x"), "expected the escaped img tag to be present:\n{html}");
+}

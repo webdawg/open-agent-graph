@@ -164,3 +164,31 @@ Format: question, assumption I'm running with, status.
 - **Actor `identity_uri` redaction** (could carry personal data, e.g. an email-shaped URI) was left
   out for the same "don't scope-creep past the clearest, safest case" reasoning as whole-assertion
   redaction. Status: open.
+
+## Human Interface (spec section 80)
+
+- **Auth: reuses `graph:read` API keys via `?key=`, not a new permission type.** A plain browser
+  link can't set an `Authorization` header, so `GET /ui/nodes/{id}` and `GET /ui/assertions/{id}`
+  accept the exact same bearer key as REST as a query parameter instead. Keeps today's read-security
+  posture identical -- nothing becomes newly public on any deployment. Known tradeoff, stated
+  nowhere else yet: the key ends up in browser history and any server access logs that record query
+  strings (this project's own request-logging span, spec section 87, currently logs `route` as the
+  path template not the full query string, so it does NOT leak the key -- but a reverse proxy in
+  front of a real deployment might). A dedicated, narrower "viewer" permission was considered and
+  deferred as bigger scope for a first version. Status: open (revisit if key-in-URL turns out to be
+  a real operational problem, or if a narrower permission is wanted).
+- **No search/browse landing page.** `/ui/nodes/{id}` and `/ui/assertions/{id}` are direct-link only
+  -- reached via an id already known from `oag search`, REST, or MCP. A landing page with a search
+  box is a natural, separable follow-up. Status: open.
+- **No CSS.** Spec section 80 is about provenance being inspectable, not about visual design;
+  minimal unstyled HTML only. Status: resolved (working as intended for v1).
+- **No pagination** on relationship/history/assertion lists on either page -- same "correct at
+  today's scale, revisit if it becomes a real problem" reasoning already applied elsewhere
+  (`oag rebuild`, corroboration). Status: open.
+- **`askama` is now a dependency** (compile-time HTML templates, autoescaped by default) -- the
+  first HTML anywhere in this codebase, and the reason: several rendered fields (crawled page
+  titles, evidence excerpts, actor names) are attacker/crawler-controlled text, and hand-rolled
+  escaping is a real stored-XSS risk class, not a style choice. Verified with a real test asserting
+  a `<script>`/`<img onerror=...>` payload renders escaped (`&#60;script&#62;` -- askama's default
+  escaper uses numeric character references, not named entities like `&lt;`) rather than as live
+  markup. Status: resolved.

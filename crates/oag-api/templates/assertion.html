@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Assertion {{ assertion_id }} — OAG</title>
+</head>
+<body>
+<h1>Assertion</h1>
+<p><a href="/api/v1/assertions/{{ assertion_id }}?key={{ key }}">view as JSON</a></p>
+
+<h2>Subject</h2>
+<p><a href="{{ subject_link }}">{{ subject_identifier }}</a></p>
+
+<h2>Predicate</h2>
+<p><strong>{{ predicate }}</strong></p>
+
+<h2>Object</h2>
+<p><a href="{{ object_link }}">{{ object_identifier }}</a></p>
+
+<h2>Actor</h2>
+<p>
+{% if let Some(name) = actor_name %}{{ name }}{% else %}(anonymous){% endif %}
+({{ actor_type }}, id {{ actor_id }})
+</p>
+
+<h2>Origin peer</h2>
+{% if let Some(p) = provenance %}
+<p>{{ p.origin_peer }}</p>
+{% else %}
+<p>(unknown — this peer no longer has the originating event)</p>
+{% endif %}
+
+<h2>Event ID</h2>
+<p><code>{{ assertion_id }}</code></p>
+
+<h2>Signature status</h2>
+{% if let Some(p) = provenance %}
+  {% if p.signature_valid %}
+  <p>valid</p>
+  {% else if p.origin_key_known %}
+  <p>INVALID — signature does not verify against the origin's known public key</p>
+  {% else %}
+  <p>unverifiable — this peer does not have the origin's public key on file</p>
+  {% endif %}
+{% else %}
+<p>(unknown)</p>
+{% endif %}
+
+<h2>Evidence</h2>
+{% if evidence.is_empty() %}
+<p>(none)</p>
+{% else %}
+<ul>
+{% for e in evidence %}
+  <li>
+    [{{ e.evidence_type }}]
+    {% if let Some(title) = e.title %}{{ title }}{% endif %}
+    {% if let Some(excerpt) = e.excerpt %}<blockquote>{{ excerpt }}</blockquote>{% endif %}
+    {% if let Some(uri) = e.uri %} — <a href="{{ uri }}">{{ uri }}</a>{% endif %}
+    {% if let Some(hash) = e.content_hash %} <code>{{ hash }}</code>{% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2>Created</h2>
+<p>{{ created_at }}</p>
+
+<h2>Observed</h2>
+<p>{% if let Some(t) = observed_at %}{{ t }}{% else %}(not specified){% endif %}</p>
+
+<h2>Verification</h2>
+{% if observations.is_empty() %}
+<p>(none)</p>
+{% else %}
+<ul>
+{% for o in observations %}
+  <li>{{ o.result }} at {{ o.observed_at }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2>Disputes</h2>
+{% if disputes.is_empty() %}
+<p>(none)</p>
+{% else %}
+<ul>
+{% for d in disputes %}
+  <li>{% if let Some(reason) = d.reason %}{{ reason }}{% else %}(no reason given){% endif %} at {{ d.created_at }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2>Supersession</h2>
+{% if let Some(s) = supersession %}
+<p>Superseded by <a href="{{ s.link }}">{{ s.new_assertion_id }}</a> at {{ s.created_at }}</p>
+{% else %}
+<p>(not superseded)</p>
+{% endif %}
+
+<h2>Status</h2>
+<p>{{ status }}</p>
+</body>
+</html>

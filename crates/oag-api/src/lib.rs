@@ -2,6 +2,7 @@ pub mod auth;
 pub mod dto;
 pub mod error;
 pub mod handlers;
+pub mod human;
 pub mod logging;
 pub mod metrics;
 pub mod rate_limit;
@@ -66,6 +67,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/subgraph", get(handlers::subgraph))
         .route("/api/v1/history/{object_type}/{id}", get(handlers::history))
         .route("/api/v1/status", get(handlers::status))
+        .route("/ui/nodes/{id}", get(human::node_page))
+        .route("/ui/assertions/{id}", get(human::assertion_page))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             rate_limit::rate_limit_middleware,

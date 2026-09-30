@@ -1,9 +1,9 @@
 # API Reference
 
-OAG exposes the same `GraphService` capabilities three ways: REST, MCP, and the `oag` CLI. All three
-share one service layer (`docs/architecture.md`) — nothing is implemented in only one of them by
-accident; a capability missing from one surface is a deliberate, documented scope decision (see
-`OPEN_QUESTIONS.md`).
+OAG exposes the same `GraphService` capabilities four ways: REST, MCP, the `oag` CLI, and a minimal
+human-browsable HTML view. All four share one service layer (`docs/architecture.md`) — nothing is
+implemented in only one of them by accident; a capability missing from one surface is a deliberate,
+documented scope decision (see `OPEN_QUESTIONS.md`).
 
 ## REST (`/api/v1/*`, spec section 66)
 
@@ -45,12 +45,30 @@ decision.
 
 Every REST request gets a structured `tracing` span: `request_id`, `peer_id`, `route`, `method`,
 `actor_id` (once auth resolves it), `status`, `duration_ms`, `result`. Set `RUST_LOG=info` (or finer)
-to see it. MCP request spans are not yet implemented — see `OPEN_QUESTIONS.md`'s "Logging" section.
+to see it. MCP tool calls get the equivalent `mcp_tool` span (see below); `oag-sync`'s replication
+path logs `event_id`/`origin_peer` on every ingested event (`docs/replication.md`).
 
 ### Replication API
 
 `/oag/sync/v1/*` is a separate, unauthenticated router — see `docs/replication.md` for its full
 endpoint list and rationale.
+
+## Human Interface (`/ui/*`, spec section 80)
+
+A minimal, human-browsable HTML view — secondary to the APIs, for making provenance visually
+inspectable rather than for general browsing. Reuses the exact same `graph:read` API keys as REST,
+accepted as a `?key=` query parameter since a plain browser link can't set an `Authorization`
+header (see `docs/security.md`).
+
+| Path | Purpose |
+|---|---|
+| `GET /ui/nodes/{id}?key=` | Name, type, canonical identifier, aliases, relationships, assertions (with their evidence/disputes/last observation), history |
+| `GET /ui/assertions/{id}?key=` | Subject/predicate/object, actor, origin peer, event id, signature status, evidence, verification, disputes, supersession |
+
+Rendered via `askama` compile-time HTML templates with default autoescaping — every field is HTML-
+escaped, since several of them (crawled page titles, evidence excerpts, actor names) can contain
+attacker/crawler-controlled text. No CSS, no search/landing page, no pagination — see
+`OPEN_QUESTIONS.md`'s "Human Interface" section for the exact scope decisions.
 
 ## MCP tools
 

@@ -55,7 +55,8 @@ oag-petname     Deterministic 128-word human-readable names derived from a peer'
 oag-reticulum   Optional additional peer transport over the Reticulum mesh-networking protocol,
                 alongside (not replacing) oag-sync's HTTP path.
 
-oag-api         Axum REST router + MCP mount point, request logging, rate limiting.
+oag-api         Axum REST router + MCP mount point, a minimal human-browsable HTML view (spec
+                section 80), request logging, rate limiting.
 
 oag-mcp         MCP tool definitions, one per GraphService capability exposed to agents.
 
@@ -130,9 +131,10 @@ redaction interacts with rebuild.
 
 `GET /metrics` (spec section 86) exposes a small, hand-rolled Prometheus text-format endpoint —
 event/node/edge/assertion/evidence counts, peer count, and database size; no external metrics
-platform required. Every REST request gets a structured `tracing` span (spec section 87) carrying
-`request_id`/`peer_id`/`route`/`method`/`actor_id`/`status`/`duration_ms`/`result`. See
-`docs/api.md` for the exact metric names and log fields.
+platform required. Every REST request and MCP tool call gets a structured `tracing` span (spec
+section 87) carrying `request_id`/`peer_id`/`route or tool`/`actor_id`/`status`/`duration_ms`/
+`result`; every ingested replication event logs `event_id`/`origin_peer`/`result`
+(`docs/replication.md`). See `docs/api.md` for the exact metric names and log fields.
 
 ## What's deliberately not built yet
 

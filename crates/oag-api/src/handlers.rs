@@ -231,17 +231,17 @@ pub async fn status(State(state): State<AppState>) -> Json<serde_json::Value> {
     }))
 }
 
-fn parse_node_id(s: &str) -> Result<NodeId, ApiError> {
+pub(crate) fn parse_node_id(s: &str) -> Result<NodeId, ApiError> {
     s.parse()
         .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid node id '{s}'"))))
 }
 
-fn parse_assertion_id(s: &str) -> Result<AssertionId, ApiError> {
+pub(crate) fn parse_assertion_id(s: &str) -> Result<AssertionId, ApiError> {
     s.parse()
         .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid assertion id '{s}'"))))
 }
 
-fn parse_edge_id(s: &str) -> Result<EdgeId, ApiError> {
+pub(crate) fn parse_edge_id(s: &str) -> Result<EdgeId, ApiError> {
     s.parse()
         .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid edge id '{s}'"))))
 }

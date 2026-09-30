@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ node.canonical_identifier }} — OAG</title>
+</head>
+<body>
+<h1>Node</h1>
+<p><a href="/api/v1/nodes/{{ node.id }}?key={{ key }}">view as JSON</a></p>
+
+<h2>Name</h2>
+<p>{% if let Some(name) = node.name %}{{ name }}{% else %}(none){% endif %}</p>
+
+<h2>Type</h2>
+<p>{{ node.node_type }}</p>
+
+<h2>Canonical identifier</h2>
+<p><code>{{ node.canonical_identifier }}</code></p>
+
+<h2>Aliases</h2>
+{% if aliases.is_empty() %}
+<p>(none)</p>
+{% else %}
+<ul>
+{% for a in aliases %}
+  <li>{{ a.alias }} ({{ a.alias_type }})</li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2>Relationships</h2>
+{% if relationships.is_empty() %}
+<p>(none)</p>
+{% else %}
+<ul>
+{% for r in relationships %}
+  <li>
+    {% if r.direction == "outgoing" %}
+      &#8594; <strong>{{ r.predicate }}</strong> &#8594; <a href="{{ r.link }}">{{ r.other_node_identifier }}</a>
+    {% else %}
+      <a href="{{ r.link }}">{{ r.other_node_identifier }}</a> &#8594; <strong>{{ r.predicate }}</strong> &#8594; (this node)
+    {% endif %}
+  </li>
+{% endfor %}
+</ul>
+{% endif %}
+
+<h2>Assertions</h2>
+{% if assertions.is_empty() %}
+<p>(none)</p>
+{% else %}
+{% for a in assertions %}
+  <div>
+    <p>
+      <a href="{{ a.link }}">{{ a.subject_identifier }} {{ a.predicate }} {{ a.object_identifier }}</a>
+      — status: {{ a.status }}
+      {% if let Some(c) = a.actor_confidence %} (actor confidence: {{ c }}){% endif %}
+    </p>
+
+    <h3>Evidence</h3>
+    {% if a.evidence.is_empty() %}
+    <p>(none)</p>
+    {% else %}
+    <ul>
+    {% for e in a.evidence %}
+      <li>
+        [{{ e.evidence_type }}]
+        {% if let Some(title) = e.title %}{{ title }}{% endif %}
+        {% if let Some(uri) = e.uri %} — <a href="{{ uri }}">{{ uri }}</a>{% endif %}
+      </li>
+    {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h3>Disputes</h3>
+    {% if a.disputes.is_empty() %}
+    <p>(none)</p>
+    {% else %}
+    <ul>
+    {% for d in a.disputes %}
+      <li>{% if let Some(reason) = d.reason %}{{ reason }}{% else %}(no reason given){% endif %} at {{ d.created_at }}</li>
+    {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h3>Last observation</h3>
+    {% if let Some(o) = a.last_observation %}
+    <p>{{ o.result }} at {{ o.observed_at }}</p>
+    {% else %}
+    <p>(none)</p>
+    {% endif %}
+  </div>
+{% endfor %}
+{% endif %}
+
+<h2>History</h2>
+{% if history.is_empty() %}
+<p>(none)</p>
+{% else %}
+<ul>
+{% for h in history %}
+  <li>{{ h.created_at }} — {{ h.event_type }} ({{ h.event_id }})</li>
+{% endfor %}
+</ul>
+{% endif %}
+</body>
+</html>
