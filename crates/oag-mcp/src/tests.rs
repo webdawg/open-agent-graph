@@ -378,6 +378,98 @@ async fn graph_supersede_assertion_flags_the_old_assertion() {
 }
 
 #[tokio::test]
+async fn graph_get_assertion_returns_assertion_with_evidence() {
+    let (url, raw_key) = spawn_mcp_server("get-assertion").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let assert_result = client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({
+                "subject": "https://example.com/mcp-get-assertion-test",
+                "predicate": "instance_of",
+                "object": "concept:mcp-get-assertion-test",
+                "evidence": [{"type": "documentation", "uri": "https://example.com/docs"}]
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ))
+        .await
+        .unwrap();
+    let assertion_id =
+        assert_result.structured_content.unwrap()["assertion_id"].as_str().unwrap().to_string();
+
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_assertion")
+                .with_arguments(json!({ "assertion_id": assertion_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let body = result.structured_content.expect("graph_get_assertion returns structured content");
+    assert_eq!(body["assertion"]["status"], "active");
+    assert_eq!(body["evidence"].as_array().unwrap().len(), 1);
+
+    // Unknown id -> a real tool error, not a panic or an empty success.
+    let bogus = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_assertion")
+                .with_arguments(json!({ "assertion_id": "0".repeat(64) }).as_object().unwrap().clone()),
+        )
+        .await;
+    assert!(bogus.is_err(), "unknown assertion id should error");
+}
+
+#[tokio::test]
+async fn graph_get_node_assertions_lists_assertions_touching_a_node() {
+    let (url, raw_key) = spawn_mcp_server("get-node-assertions").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({
+                "subject": "https://example.com/mcp-node-assertions-test",
+                "predicate": "instance_of",
+                "object": "concept:mcp-node-assertions-test",
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ))
+        .await
+        .unwrap();
+
+    let resolve_result = client
+        .call_tool(CallToolRequestParams::new("graph_resolve").with_arguments(
+            json!({ "value": "https://example.com/mcp-node-assertions-test" }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+    let node_id = resolve_result.structured_content.unwrap()["node_id"].as_str().unwrap().to_string();
+
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_node_assertions")
+                .with_arguments(json!({ "node_id": node_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let body = result.structured_content.expect("graph_get_node_assertions returns structured content");
+    assert_eq!(body["assertions"].as_array().unwrap().len(), 1);
+    assert_eq!(body["assertions"][0]["status"], "active");
+}
+
+#[tokio::test]
 async fn graph_crawl_without_permission_is_rejected() {
     let pool = open_pool(&temp_db_path("crawl-no-permission")).await.unwrap();
     let identity = PeerIdentity::generate();

@@ -11,9 +11,9 @@ use serde_json::json;
 use tracing::Instrument;
 
 use crate::params::{
-    ActorIdParams, AddEvidenceParams, AssertParams, CrawlParams, DisputeParams, EdgeIdParams,
-    EvidenceParam, HistoryParams, NodeIdParams, ResolveParams, RetractParams, SearchParams,
-    SubgraphParams, SupersedeParams, VerifyParams,
+    ActorIdParams, AddEvidenceParams, AssertParams, AssertionIdParams, CrawlParams, DisputeParams,
+    EdgeIdParams, EvidenceParam, HistoryParams, NodeIdParams, ResolveParams, RetractParams,
+    SearchParams, SubgraphParams, SupersedeParams, VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -287,6 +287,52 @@ impl OagMcpServer {
             let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
             let sources = self.graph.find_sources(node_id).await.map_err(map_err)?;
             Ok(Json(json!({ "sources": sources })))
+        })
+        .await
+    }
+
+    #[tool(description = "Get a single assertion by its id, with its evidence, verification observations, and disputes.")]
+    async fn graph_get_assertion(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<AssertionIdParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_get_assertion", async {
+            self.authenticate_read(&parts).await?;
+            let assertion_id = p
+                .assertion_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
+            let assertion = self
+                .graph
+                .get_assertion(assertion_id)
+                .await
+                .map_err(map_err)?
+                .ok_or_else(|| ErrorData::invalid_params(format!("not found: assertion {}", p.assertion_id), None))?;
+            let evidence = self.graph.list_evidence(assertion_id).await.map_err(map_err)?;
+            let observations = self.graph.list_observations(assertion_id).await.map_err(map_err)?;
+            let disputes = self.graph.list_disputes(assertion_id).await.map_err(map_err)?;
+            Ok(Json(json!({
+                "assertion": assertion,
+                "evidence": evidence,
+                "observations": observations,
+                "disputes": disputes,
+            })))
+        })
+        .await
+    }
+
+    #[tool(description = "List every assertion on any edge touching a node -- their status/actor/confidence, not just the evidence behind them (see graph_find_sources for that).")]
+    async fn graph_get_node_assertions(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<NodeIdParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_get_node_assertions", async {
+            self.authenticate_read(&parts).await?;
+            let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
+            let assertions = self.graph.list_assertions_for_node(node_id).await.map_err(map_err)?;
+            Ok(Json(json!({ "assertions": assertions })))
         })
         .await
     }

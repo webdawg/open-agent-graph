@@ -33,6 +33,11 @@ pub struct EdgeIdParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+pub struct AssertionIdParams {
+    pub assertion_id: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct SubgraphParams {
     pub node_id: String,
     pub depth: Option<u32>,

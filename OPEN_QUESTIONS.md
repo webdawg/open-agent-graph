@@ -185,6 +185,20 @@ Format: question, assumption I'm running with, status.
   convention here; the CLI's `assertion` subcommand stays read-only (`get`). Status: resolved
   (matches existing precedent, not a gap).
 
+## MCP surface parity audit
+
+- **`graph_get_assertion` and `graph_get_node_assertions` were missing entirely.** REST had
+  `GET /assertions/{id}` and `GET /nodes/{id}/assertions` from the start; MCP had no equivalent for
+  either -- an agent could `graph_assert`/`graph_dispute_assertion`/etc. but never fetch a single
+  assertion back, or list which assertions touch a node (`graph_find_sources` returns *evidence*,
+  a genuinely different shape, not assertions themselves). Both added, mirroring the REST handlers'
+  exact response shape. Status: resolved.
+- **`declare_alias` still has zero exposure anywhere** (not CLI, REST, or MCP) -- only the crawler
+  calls it internally. A caller wanting to directly say "this URL is also known as this name"
+  without crawling has no way to. Lower priority than the assertion-lookup gap above: aliases are
+  already populated automatically wherever the crawler runs, and no concrete need for standalone
+  alias declaration has come up yet. Status: open (revisit if a real use case shows up).
+
 ## Human Interface (spec section 80)
 
 - **Auth: reuses `graph:read` API keys via `?key=`, not a new permission type.** A plain browser

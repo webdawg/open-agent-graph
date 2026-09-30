@@ -110,6 +110,8 @@ tool per `GraphService` capability:
 | `graph_get_corroboration` | `GET /edges/{id}/corroboration` |
 | `graph_get_subgraph` | `GET /subgraph` |
 | `graph_find_sources` | No REST equivalent — evidence backing any assertion whose edge touches a node |
+| `graph_get_assertion` | `GET /assertions/{id}` |
+| `graph_get_node_assertions` | `GET /nodes/{id}/assertions` |
 | `graph_assert` | `POST /assertions` |
 | `graph_add_evidence` | `POST /assertions/{id}/evidence` |
 | `graph_verify_assertion` | `POST /assertions/{id}/verify` |
