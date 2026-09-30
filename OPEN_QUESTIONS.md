@@ -177,9 +177,10 @@ Format: question, assumption I'm running with, status.
   front of a real deployment might). A dedicated, narrower "viewer" permission was considered and
   deferred as bigger scope for a first version. Status: open (revisit if key-in-URL turns out to be
   a real operational problem, or if a narrower permission is wanted).
-- **No search/browse landing page.** `/ui/nodes/{id}` and `/ui/assertions/{id}` are direct-link only
-  -- reached via an id already known from `oag search`, REST, or MCP. A landing page with a search
-  box is a natural, separable follow-up. Status: open.
+- **Search/browse landing page: done as a same-day follow-up.** `GET /ui/search?key=&q=` -- a plain
+  GET form (so a query can be pre-filled via a shareable link, not just typed in) over the existing
+  `GraphService::search`, results linking into `/ui/nodes/{id}`. Both the node and assertion pages
+  link back to it. Same `?key=` auth as the other two pages. Status: resolved.
 - **No CSS.** Spec section 80 is about provenance being inspectable, not about visual design;
   minimal unstyled HTML only. Status: resolved (working as intended for v1).
 - **No pagination** on relationship/history/assertion lists on either page -- same "correct at

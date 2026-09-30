@@ -62,13 +62,14 @@ header (see `docs/security.md`).
 
 | Path | Purpose |
 |---|---|
+| `GET /ui/search?key=&q=` | Landing page: a search box over `GraphService::search`, results linking into node pages |
 | `GET /ui/nodes/{id}?key=` | Name, type, canonical identifier, aliases, relationships, assertions (with their evidence/disputes/last observation), history |
 | `GET /ui/assertions/{id}?key=` | Subject/predicate/object, actor, origin peer, event id, signature status, evidence, verification, disputes, supersession |
 
 Rendered via `askama` compile-time HTML templates with default autoescaping — every field is HTML-
 escaped, since several of them (crawled page titles, evidence excerpts, actor names) can contain
-attacker/crawler-controlled text. No CSS, no search/landing page, no pagination — see
-`OPEN_QUESTIONS.md`'s "Human Interface" section for the exact scope decisions.
+attacker/crawler-controlled text. No CSS, no pagination — see `OPEN_QUESTIONS.md`'s "Human Interface"
+section for the exact scope decisions.
 
 ## MCP tools
 

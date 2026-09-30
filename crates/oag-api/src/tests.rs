@@ -505,3 +505,49 @@ async fn human_interface_escapes_hostile_content() {
     assert!(html.contains("&#60;script&#62;"), "expected the escaped script tag to be present:\n{html}");
     assert!(html.contains("&#60;img src=x"), "expected the escaped img tag to be present:\n{html}");
 }
+
+#[tokio::test]
+async fn human_search_page_finds_nodes_and_links_to_them() {
+    let (app, key) = test_app("human-search").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/searchable-thing",
+        "predicate": "instance_of",
+        "object": "concept:searchable-thing",
+    });
+    app.clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    // No query yet -- just the search form, no results section.
+    let response = app
+        .clone()
+        .oneshot(Request::get(format!("/ui/search?key={key}")).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let html = body_text(response).await;
+    assert!(!html.contains("No matches"), "empty query shouldn't run a search at all:\n{html}");
+
+    // A real query finds the node and links to its /ui/nodes/{id} page.
+    let response = app
+        .oneshot(
+            Request::get(format!("/ui/search?key={key}&q=searchable-thing"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let html = body_text(response).await;
+    assert!(html.contains("concept:searchable-thing"), "expected the match to appear:\n{html}");
+    assert!(html.contains("/ui/nodes/"), "expected a link into the node page:\n{html}");
+}

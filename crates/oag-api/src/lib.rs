@@ -67,6 +67,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/subgraph", get(handlers::subgraph))
         .route("/api/v1/history/{object_type}/{id}", get(handlers::history))
         .route("/api/v1/status", get(handlers::status))
+        .route("/ui/search", get(human::search_page))
         .route("/ui/nodes/{id}", get(human::node_page))
         .route("/ui/assertions/{id}", get(human::assertion_page))
         .layer(middleware::from_fn_with_state(

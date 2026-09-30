@@ -147,6 +147,54 @@ struct HistoryEntryView {
     created_at: i64,
 }
 
+struct SearchResultView {
+    canonical_identifier: String,
+    name: Option<String>,
+    link: String,
+}
+
+#[derive(Template)]
+#[template(path = "search.html")]
+struct SearchTemplate {
+    key: String,
+    query: String,
+    has_searched: bool,
+    results: Vec<SearchResultView>,
+}
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    key: Option<String>,
+    q: Option<String>,
+}
+
+/// A landing/browse page (deferred at first alongside the Node/Assertion
+/// pages, per `OPEN_QUESTIONS.md`'s "Human Interface" section -- direct-link
+/// pages don't need a search box, but they're much less discoverable
+/// without one). Reuses `GraphService::search` exactly like `oag search`/
+/// `GET /api/v1/search`, just rendered as clickable links instead of JSON.
+pub async fn search_page(State(state): State<AppState>, Query(q): Query<SearchQuery>) -> Result<Response, HumanError> {
+    authenticate_query(&q.key, &state.graph).await?;
+    let key = q.key.unwrap_or_default();
+    let query = q.q.unwrap_or_default();
+    let has_searched = !query.trim().is_empty();
+
+    let results = if has_searched {
+        state
+            .graph
+            .search(&query, 50)
+            .await?
+            .into_iter()
+            .map(|n| SearchResultView { canonical_identifier: n.canonical_identifier, name: n.name, link: node_link(n.id, &key) })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let template = SearchTemplate { key, query, has_searched, results };
+    Ok(Html(template.render().map_err(|e| HumanError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?).into_response())
+}
+
 #[derive(Template)]
 #[template(path = "node.html")]
 struct NodeTemplate {
