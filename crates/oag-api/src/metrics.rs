@@ -17,7 +17,8 @@ use crate::state::AppState;
 
 pub async fn handler(State(state): State<AppState>) -> Result<Response, ApiError> {
     let snapshot = state.graph.metrics_snapshot().await?;
-    let body = render(&snapshot);
+    let crawl_counts = CrawlCounts { total: state.crawler.crawls_total(), failed: state.crawler.crawls_failed() };
+    let body = render(&snapshot, &crawl_counts);
     Ok((
         StatusCode::OK,
         [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
@@ -26,12 +27,22 @@ pub async fn handler(State(state): State<AppState>) -> Result<Response, ApiError
         .into_response())
 }
 
+/// `crawl_jobs`/`crawl_failures` (spec section 86) live on `CrawlerService`,
+/// not `GraphService::metrics_snapshot` -- `oag-graph` has no dependency on
+/// `oag-crawler` (correctly: the dependency runs the other way), so this
+/// small struct is how the handler above combines both sources into one
+/// rendered response.
+pub struct CrawlCounts {
+    pub total: u64,
+    pub failed: u64,
+}
+
 /// Pure text-exposition-format rendering, kept separate from `handler` so it's
 /// unit-testable against a known `MetricsSnapshot` without spinning up a
 /// server. One `# HELP` + `# TYPE` + value line per metric, per the
 /// Prometheus exposition format
 /// (<https://prometheus.io/docs/instrumenting/exposition_formats/>).
-pub fn render(snapshot: &MetricsSnapshot) -> String {
+pub fn render(snapshot: &MetricsSnapshot, crawl_counts: &CrawlCounts) -> String {
     let mut out = String::new();
     push_metric(
         &mut out,
@@ -82,6 +93,20 @@ pub fn render(snapshot: &MetricsSnapshot) -> String {
         "gauge",
         snapshot.sqlite_size_bytes,
     );
+    push_metric(
+        &mut out,
+        "crawl_jobs",
+        "Total crawl attempts this process has made (oag crawl, REST, or MCP), since process start.",
+        "counter",
+        crawl_counts.total as i64,
+    );
+    push_metric(
+        &mut out,
+        "crawl_failures",
+        "Of crawl_jobs, how many failed (blocked by SSRF/robots policy, fetch error, etc.).",
+        "counter",
+        crawl_counts.failed as i64,
+    );
     out
 }
 
@@ -105,6 +130,10 @@ mod tests {
             peer_count: 2,
             sqlite_size_bytes: 45056,
         }
+    }
+
+    fn crawl_counts() -> CrawlCounts {
+        CrawlCounts { total: 9, failed: 1 }
     }
 
     #[test]
@@ -131,13 +160,19 @@ peer_count 2
 # HELP sqlite_size_bytes Size in bytes of this peer's primary SQLite database (page_count * page_size).
 # TYPE sqlite_size_bytes gauge
 sqlite_size_bytes 45056
+# HELP crawl_jobs Total crawl attempts this process has made (oag crawl, REST, or MCP), since process start.
+# TYPE crawl_jobs counter
+crawl_jobs 9
+# HELP crawl_failures Of crawl_jobs, how many failed (blocked by SSRF/robots policy, fetch error, etc.).
+# TYPE crawl_failures counter
+crawl_failures 1
 ";
-        assert_eq!(render(&snapshot()), expected);
+        assert_eq!(render(&snapshot(), &crawl_counts()), expected);
     }
 
     #[test]
     fn every_metric_line_parses_as_prometheus_syntax() {
-        let text = render(&snapshot());
+        let text = render(&snapshot(), &crawl_counts());
         let mut value_lines = 0;
         for line in text.lines() {
             if line.starts_with("# HELP") || line.starts_with("# TYPE") {
@@ -151,6 +186,6 @@ sqlite_size_bytes 45056
             value.parse::<i64>().unwrap_or_else(|e| panic!("value '{value}' for {name} did not parse as a number: {e}"));
             value_lines += 1;
         }
-        assert_eq!(value_lines, 7, "expected exactly 7 in-scope metrics");
+        assert_eq!(value_lines, 9, "expected exactly 9 in-scope metrics");
     }
 }

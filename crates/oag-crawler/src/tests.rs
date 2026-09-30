@@ -326,3 +326,28 @@ async fn llm_extraction_candidates_are_asserted_with_correct_provenance() {
     assert_eq!(actor.name.as_deref(), Some("llm-extractor:fake-model-v1"));
     assert_eq!(actor.actor_type, oag_core::ActorType::Model);
 }
+
+/// Spec section 86: `crawls_total`/`crawls_failed` back the `crawl_jobs`/
+/// `crawl_failures` metrics -- every call counts toward the total, and a
+/// failing one (here, blocked by the default-deny SSRF policy) also counts
+/// toward failures.
+#[tokio::test]
+async fn crawl_counters_track_attempts_and_failures() {
+    let base = spawn_fixture(fixture_router()).await;
+    let url = Url::parse(&base).unwrap();
+
+    let graph = fresh_graph("crawl-counters").await;
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor));
+    assert_eq!(crawler.crawls_total(), 0);
+    assert_eq!(crawler.crawls_failed(), 0);
+
+    crawler.crawl(&url).await.unwrap();
+    assert_eq!(crawler.crawls_total(), 1);
+    assert_eq!(crawler.crawls_failed(), 0);
+
+    let blocked_crawler = CrawlerService::new(graph, CrawlerConfig::default(), Arc::new(DisabledExtractor));
+    let result = blocked_crawler.crawl(&url).await;
+    assert!(result.is_err(), "default config should block this loopback fixture");
+    assert_eq!(blocked_crawler.crawls_total(), 1);
+    assert_eq!(blocked_crawler.crawls_failed(), 1);
+}

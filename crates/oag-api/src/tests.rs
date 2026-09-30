@@ -394,6 +394,9 @@ async fn metrics_endpoint_needs_no_auth_and_reflects_seeded_data() {
     assert_eq!(value_of("evidence_total"), 1);
     assert!(value_of("events_total") > 0);
     assert!(value_of("sqlite_size_bytes") > 0);
+    // No crawl was triggered in this test.
+    assert_eq!(value_of("crawl_jobs"), 0);
+    assert_eq!(value_of("crawl_failures"), 0);
 }
 
 async fn body_text(response: axum::response::Response) -> String {
@@ -635,6 +638,7 @@ async fn crawl_endpoint_requires_graph_crawl_permission_and_populates_the_graph(
     assert!(body["facts_asserted"].as_u64().unwrap() > 0);
 
     let response = app
+        .clone()
         .oneshot(
             Request::post("/api/v1/resolve")
                 .header("authorization", format!("Bearer {key}"))
@@ -646,4 +650,10 @@ async fn crawl_endpoint_requires_graph_crawl_permission_and_populates_the_graph(
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(body_json(response).await["confidence"], 1.0);
+
+    // The one successful crawl above is reflected in /metrics.
+    let response = app.oneshot(Request::get("/metrics").body(Body::empty()).unwrap()).await.unwrap();
+    let text = body_text(response).await;
+    assert!(text.contains("crawl_jobs 1"), "expected crawl_jobs 1 in:\n{text}");
+    assert!(text.contains("crawl_failures 0"), "expected crawl_failures 0 in:\n{text}");
 }

@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use oag_core::{ActorType, ExtractionMethod, NodeId, Permission};
@@ -44,11 +45,33 @@ pub struct CrawlerService {
     graph: Arc<GraphService>,
     config: CrawlerConfig,
     llm_extractor: Arc<dyn LlmExtractor>,
+    /// Spec section 86's `crawl_jobs`/`crawl_failures` metrics. Process-
+    /// lifetime counters (reset on restart), same as every other Prometheus
+    /// counter -- there's no durable job queue (spec section 70) behind
+    /// these, just a count of how many times `crawl()` has actually been
+    /// called on this running `oag serve` process, whether via `oag crawl`,
+    /// REST, or MCP.
+    crawls_total: AtomicU64,
+    crawls_failed: AtomicU64,
 }
 
 impl CrawlerService {
     pub fn new(graph: Arc<GraphService>, config: CrawlerConfig, llm_extractor: Arc<dyn LlmExtractor>) -> Self {
-        Self { graph, config, llm_extractor }
+        Self {
+            graph,
+            config,
+            llm_extractor,
+            crawls_total: AtomicU64::new(0),
+            crawls_failed: AtomicU64::new(0),
+        }
+    }
+
+    pub fn crawls_total(&self) -> u64 {
+        self.crawls_total.load(Ordering::Relaxed)
+    }
+
+    pub fn crawls_failed(&self) -> u64 {
+        self.crawls_failed.load(Ordering::Relaxed)
     }
 
     /// Reuses a single, stable "crawler" actor across separate `oag crawl`
@@ -105,7 +128,18 @@ impl CrawlerService {
     /// `instance_of` assertion (guarantees the page's own node exists),
     /// then whatever JSON-LD/HTML-meta/llms.txt/ARD/A2A facts and aliases
     /// were found — each attached to the evidence it actually came from.
+    /// Every call (successful or not) counts toward `crawls_total`; a
+    /// failing one also counts toward `crawls_failed` (spec section 86).
     pub async fn crawl(&self, url: &Url) -> Result<CrawlSummary, CrawlError> {
+        self.crawls_total.fetch_add(1, Ordering::Relaxed);
+        let result = self.crawl_inner(url).await;
+        if result.is_err() {
+            self.crawls_failed.fetch_add(1, Ordering::Relaxed);
+        }
+        result
+    }
+
+    async fn crawl_inner(&self, url: &Url) -> Result<CrawlSummary, CrawlError> {
         let auth = self.crawler_auth().await?;
         let mut summary = CrawlSummary {
             page_url: url.to_string(),

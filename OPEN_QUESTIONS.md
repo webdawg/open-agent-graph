@@ -41,20 +41,19 @@ Format: question, assumption I'm running with, status.
 
 ## Metrics (spec section 86)
 
-- **Scope: cheap current-state snapshot only, not full spec compliance.** Implemented
-  `events_total`, `nodes_total`, `edges_total`, `assertions_total`, `evidence_total`, `peer_count`,
-  and `sqlite_size_bytes` -- the subset of the spec's suggested measurements that are simple
-  `COUNT(*)`/`PRAGMA` queries against tables that already exist. Deliberately NOT implemented this
-  milestone: `events_by_origin` (a labeled/vector metric -- needs a GROUP BY and a decision on label
-  cardinality), `events_pending_chain`, `peer_sync_lag`, `peer_sync_errors`,
+- **Scope: cheap current-state snapshot, plus crawl counters once crawling became remotely
+  triggerable.** Implemented `events_total`, `nodes_total`, `edges_total`, `assertions_total`,
+  `evidence_total`, `peer_count`, `sqlite_size_bytes` (simple `COUNT(*)`/`PRAGMA` queries), plus
+  `crawl_jobs`/`crawl_failures` (process-lifetime `AtomicU64` counters on `CrawlerService`,
+  incremented on every `crawl()` call regardless of caller -- CLI, REST, or MCP). Still NOT
+  implemented: `events_by_origin` (a labeled/vector metric -- needs a GROUP BY and a decision on
+  label cardinality), `events_pending_chain`, `peer_sync_lag`, `peer_sync_errors`,
   `replication_bytes_in`/`out`, `search_latency`, `api_latency` (all need request-duration
-  instrumentation -- a middleware/histogram layer, not a snapshot query), `crawl_jobs`/
-  `crawl_failures`, `verification_jobs`/`verification_failures` (need counters wired through the
-  crawler and verifier code paths), and `blob_store_size` (no blob store exists yet -- spec section
-  84's `blobs/<hash>` is itself unimplemented). Assumption: shipping the correct, cheap subset now is
-  better than blocking the whole endpoint on the request-timing/counter-wiring work the rest needs.
-  Status: open (revisit alongside whichever of request tracing, crawler/verifier job counters, or
-  the blob store lands first).
+  instrumentation -- a middleware/histogram layer, not a snapshot query), `verification_jobs`/
+  `verification_failures` (no counter wired through `verify_assertion` yet), and `blob_store_size`
+  (no blob store exists yet -- spec section 84's `blobs/<hash>` is itself unimplemented). Status:
+  open (revisit alongside whichever of request-latency histograms, a verification counter, or the
+  blob store lands first).
 - **Output format: hand-rolled Prometheus text exposition, no external crate.** `GET /metrics`
   returns `text/plain; version=0.0.4` built by a small pure `render()` function in `oag-api`, rather
   than pulling in `metrics`/`metrics-exporter-prometheus`. Assumption: spec section 86 explicitly

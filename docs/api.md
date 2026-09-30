@@ -46,10 +46,11 @@ Hand-rolled Prometheus exposition format, no external metrics platform required:
 
 ```
 events_total, nodes_total, edges_total, assertions_total, evidence_total   (counters)
+crawl_jobs, crawl_failures                                                 (counters, process-lifetime)
 peer_count, sqlite_size_bytes                                              (gauges)
 ```
 
-`events_by_origin`, request-latency histograms, replication throughput, and crawler/verification job
+`events_by_origin`, request-latency histograms, replication throughput, and verification job
 counters are not yet implemented — see `OPEN_QUESTIONS.md`'s "Metrics" section for the exact scope
 decision.
 
