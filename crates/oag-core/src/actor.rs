@@ -77,6 +77,14 @@ pub enum Permission {
     GraphAssert,
     GraphVerify,
     GraphRetractOwn,
+    /// Distinct from `GraphAssert`: triggering a crawl makes *this peer*
+    /// issue outbound HTTP requests to a caller-supplied URL. Even with SSRF
+    /// defenses (spec section 72) in place, that's a meaningfully different
+    /// risk than authoring a claim -- a remote caller who could otherwise
+    /// only assert things can now direct this peer's own network egress --
+    /// so it gets its own permission an operator must explicitly grant,
+    /// same reasoning as `Admin` being separate from `GraphAssert`.
+    GraphCrawl,
     Admin,
 }
 
@@ -87,6 +95,7 @@ impl Permission {
             Permission::GraphAssert => "graph:assert",
             Permission::GraphVerify => "graph:verify",
             Permission::GraphRetractOwn => "graph:retract-own",
+            Permission::GraphCrawl => "graph:crawl",
             Permission::Admin => "admin",
         }
     }
@@ -97,6 +106,7 @@ impl Permission {
             "graph:assert" => Permission::GraphAssert,
             "graph:verify" => Permission::GraphVerify,
             "graph:retract-own" => Permission::GraphRetractOwn,
+            "graph:crawl" => Permission::GraphCrawl,
             "admin" => Permission::Admin,
             _ => return None,
         })

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use oag_crawler::CrawlerService;
 use oag_graph::GraphService;
 
 use crate::rate_limit::RateLimiter;
@@ -9,14 +10,21 @@ pub struct AppState {
     pub graph: Arc<GraphService>,
     pub rate_limiter: Arc<RateLimiter>,
     pub embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider>,
+    pub crawler: Arc<CrawlerService>,
 }
 
 impl AppState {
     pub fn new(graph: Arc<GraphService>) -> Self {
+        let crawler = Arc::new(CrawlerService::new(
+            graph.clone(),
+            oag_crawler::CrawlerConfig::default(),
+            Arc::new(oag_crawler::DisabledExtractor),
+        ));
         Self {
             graph,
             rate_limiter: Arc::new(RateLimiter::default()),
             embedding_provider: Arc::new(oag_embeddings::DisabledProvider),
+            crawler,
         }
     }
 
@@ -25,6 +33,15 @@ impl AppState {
     /// into whatever provider `[search]` in config.toml resolves to.
     pub fn with_embedding_provider(mut self, provider: Arc<dyn oag_embeddings::EmbeddingProvider>) -> Self {
         self.embedding_provider = provider;
+        self
+    }
+
+    /// `new`'s default `CrawlerService` uses `CrawlerConfig::default()`
+    /// (SSRF defaults, no private networks) and `DisabledExtractor` -- this
+    /// opts a real `oag serve` process into whatever `[crawler]` in
+    /// config.toml actually resolves to.
+    pub fn with_crawler(mut self, crawler: Arc<CrawlerService>) -> Self {
+        self.crawler = crawler;
         self
     }
 }

@@ -25,8 +25,20 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | POST | `/assertions/{id}/retract` | `graph:retract-own` | Retract your own assertion |
 | GET | `/edges/{id}/corroboration` | `graph:read` | Every ranking signal for one edge (see `docs/data-model.md`) |
 | GET | `/history/{object_type}/{id}` | `graph:read` | Full event history for a node/edge/assertion |
+| POST | `/crawl` | `graph:crawl` | Crawl one URL and assert what's found (spec section 71) -- see below |
 | GET | `/status` | none | Peer id, identity, basic status |
 | GET | `/metrics` (top-level, not under `/api/v1`) | none | Prometheus text-format metrics (spec section 86) |
+
+### `/crawl` (spec section 71)
+
+`POST { "url": "https://..." }` triggers this peer's own crawler and returns the same summary
+`oag crawl` prints (facts asserted, aliases declared, llms.txt/ARD/A2A found). Gated by
+`graph:crawl`, a permission distinct from `graph:assert` -- crawling makes *this peer* issue an
+outbound HTTP request to a caller-supplied URL, a meaningfully different risk than authoring a
+claim, so an operator must grant it explicitly (`oag key create --permission graph:crawl`). There is
+no `allow_private_networks` request field: a REST/MCP caller can never widen this peer's own
+SSRF policy for their request -- only `[crawler].allow_private_networks` in `config.toml` can, and
+that has nothing to do with any individual request's permissions.
 
 ### `/metrics` (spec section 86)
 
@@ -91,6 +103,7 @@ tool per `GraphService` capability:
 | `graph_dispute_assertion` | `POST /assertions/{id}/dispute` |
 | `graph_retract_assertion` | `POST /assertions/{id}/retract` |
 | `graph_get_history` | `GET /history/{object_type}/{id}` |
+| `graph_crawl` | `POST /crawl` -- also requires `graph:crawl`, not just an authenticated key |
 
 ## CLI (`oag`)
 
@@ -114,7 +127,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag backup <path>` | Consistent whole-database snapshot (`VACUUM INTO`) |
 | `oag rebuild` | Wipe and replay every derived table from the event log |
 | `oag redact evidence/list/suppress-node/unsuppress-node` | Deletion and redaction — see `docs/security.md` |
-| `oag crawl <url>` | Fetch a URL, extract structured facts, assert them as evidence-backed claims |
+| `oag crawl <url>` | Fetch a URL, extract structured facts, assert them as evidence-backed claims (also available remotely as `POST /crawl` / `graph_crawl`, requiring `graph:crawl`) |
 | `oag doctor` | Local health checks |
 
 ## Configuration (`config.toml`, spec section 94)

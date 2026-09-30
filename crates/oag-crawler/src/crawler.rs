@@ -17,7 +17,7 @@ const CRAWLER_ACTOR_NAME: &str = "crawler";
 /// use this limit.
 const LLM_EXTRACTION_MAX_CHARS: usize = 8_000;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize)]
 pub struct CrawlSummary {
     pub page_url: String,
     pub facts_asserted: usize,

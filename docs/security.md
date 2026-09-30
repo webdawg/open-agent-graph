@@ -43,8 +43,7 @@ class of signature-malleability bugs that ad-hoc JSON serialization would introd
 
 REST and MCP share one auth path (`crates/oag-api/src/auth.rs`): `Authorization: Bearer <api-key>`.
 API keys are created locally via `oag key create` and bound to one actor and an explicit list of
-permissions — there is no separate "admin" superuser bypass; every credential is scoped to exactly
-the permissions it was issued.
+permissions.
 
 Permissions (`Permission` enum, `crates/oag-core/src/actor.rs`):
 
@@ -54,7 +53,17 @@ Permissions (`Permission` enum, `crates/oag-core/src/actor.rs`):
 | `graph:assert` | Create assertions, attach evidence |
 | `graph:verify` | Record verification observations |
 | `graph:retract-own` | Retract an assertion your own actor created |
+| `graph:crawl` | Trigger this peer's crawler against a caller-supplied URL (spec section 71) -- separate from `graph:assert` since it makes this peer issue outbound HTTP requests, not just author a claim |
 | `admin` | Evidence redaction, search suppression (spec section 85 — CLI-only today, see below) |
+
+**`admin` is a superuser bypass, not just its own scoped permission**: `AuthContext::require`
+(`crates/oag-graph/src/service.rs`) checks `self.permissions.contains(&permission) ||
+self.permissions.contains(&Permission::Admin)` -- a key holding `admin` satisfies *every* permission
+check in the system, including ones granted after `admin` was introduced (like `graph:crawl` above).
+The bootstrap key `oag serve` prints on first run is `admin`-only for exactly this reason: it's meant
+to be the one credential an operator uses locally to mint every other, narrower-scoped key via
+`oag key create`, not a key to hand out. Treat it accordingly — it is not "just" a redaction/
+suppression credential.
 
 A missing or invalid bearer token, or a token whose actor lacks the required permission, is
 rejected before any handler logic runs (`GraphError::InvalidApiKey` / `GraphError::PermissionDenied`).

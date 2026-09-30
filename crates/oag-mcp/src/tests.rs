@@ -39,6 +39,16 @@ fn temp_db_path(name: &str) -> std::path::PathBuf {
 /// real HTTP transport (not the in-memory duplex transport rmcp's own unit
 /// tests use).
 async fn spawn_mcp_server(name: &str) -> (String, String) {
+    spawn_mcp_server_with_crawler_config(name, oag_crawler::CrawlerConfig::default()).await
+}
+
+/// Like `spawn_mcp_server`, but lets a test allow private-network crawling
+/// so it can hit its own loopback fixture server (exactly the opt-in
+/// `oag-crawler`'s own tests use).
+async fn spawn_mcp_server_with_crawler_config(
+    name: &str,
+    crawler_config: oag_crawler::CrawlerConfig,
+) -> (String, String) {
     let pool = open_pool(&temp_db_path(name)).await.unwrap();
     let identity = PeerIdentity::generate();
     let graph = Arc::new(GraphService::new(pool, identity));
@@ -50,14 +60,19 @@ async fn spawn_mcp_server(name: &str) -> (String, String) {
     let raw_key = graph
         .create_key(
             actor_id,
-            vec![Permission::GraphRead, Permission::GraphAssert],
+            vec![Permission::GraphRead, Permission::GraphAssert, Permission::GraphCrawl],
         )
         .await
         .unwrap();
 
     let embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider> = Arc::new(oag_embeddings::DisabledProvider);
+    let crawler = Arc::new(oag_crawler::CrawlerService::new(
+        graph.clone(),
+        crawler_config,
+        Arc::new(oag_crawler::DisabledExtractor),
+    ));
     let app = axum::Router::new()
-        .route_service("/mcp", crate::streamable_http_service(graph, embedding_provider));
+        .route_service("/mcp", crate::streamable_http_service(graph, embedding_provider, crawler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -168,4 +183,82 @@ async fn missing_auth_header_is_rejected_over_real_http() {
         .await;
 
     assert!(result.is_err(), "expected tool call without auth to fail");
+}
+
+#[tokio::test]
+async fn graph_crawl_fetches_a_real_page_and_asserts_facts() {
+    let fixture = axum::Router::new().route(
+        "/",
+        axum::routing::get(|| async {
+            (
+                [(axum::http::header::CONTENT_TYPE, "text/html")],
+                "<html><head><title>MCP Crawl Fixture</title></head><body>hi</body></html>",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let fixture_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, fixture).await.unwrap();
+    });
+    let fixture_url = format!("http://{fixture_addr}/");
+
+    let crawler_config = oag_crawler::CrawlerConfig { allow_private_networks: true, ..Default::default() };
+    let (url, raw_key) = spawn_mcp_server_with_crawler_config("crawl", crawler_config).await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_crawl")
+                .with_arguments(json!({ "url": fixture_url }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let structured = result.structured_content.expect("graph_crawl returns structured content");
+    assert!(structured["facts_asserted"].as_u64().unwrap() > 0);
+}
+
+#[tokio::test]
+async fn graph_crawl_without_permission_is_rejected() {
+    let pool = open_pool(&temp_db_path("crawl-no-permission")).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let graph = Arc::new(GraphService::new(pool, identity));
+    let actor_id = graph
+        .declare_actor(ActorType::Agent, Some("no-crawl".into()), None, None)
+        .await
+        .unwrap();
+    // graph:assert but deliberately not graph:crawl.
+    let raw_key = graph.create_key(actor_id, vec![Permission::GraphAssert]).await.unwrap();
+
+    let embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider> = Arc::new(oag_embeddings::DisabledProvider);
+    let crawler = Arc::new(oag_crawler::CrawlerService::new(
+        graph.clone(),
+        oag_crawler::CrawlerConfig::default(),
+        Arc::new(oag_crawler::DisabledExtractor),
+    ));
+    let app = axum::Router::new().route_service("/mcp", crate::streamable_http_service(graph, embedding_provider, crawler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(format!("http://{addr}/mcp")).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_crawl")
+                .with_arguments(json!({ "url": "http://example.com/" }).as_object().unwrap().clone()),
+        )
+        .await;
+    assert!(result.is_err(), "expected graph_crawl without graph:crawl permission to fail");
 }

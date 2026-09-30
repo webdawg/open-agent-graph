@@ -42,12 +42,22 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     }
 
     let embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider> = Arc::from(config.embedding_provider);
+    let crawler = Arc::new(oag_crawler::CrawlerService::new(
+        graph.clone(),
+        config.crawler_config,
+        config.llm_extractor,
+    ));
 
-    let state = oag_api::AppState::new(graph.clone()).with_embedding_provider(embedding_provider.clone());
+    let state = oag_api::AppState::new(graph.clone())
+        .with_embedding_provider(embedding_provider.clone())
+        .with_crawler(crawler.clone());
     let rest_router = oag_api::build_router(state).merge(sync_router);
 
     let app = if config.mcp_enabled {
-        rest_router.route_service("/mcp", oag_mcp::streamable_http_service(graph.clone(), embedding_provider))
+        rest_router.route_service(
+            "/mcp",
+            oag_mcp::streamable_http_service(graph.clone(), embedding_provider, crawler),
+        )
     } else {
         rest_router
     };

@@ -1825,6 +1825,7 @@ dependencies = [
  "chrono",
  "http-body-util",
  "oag-core",
+ "oag-crawler",
  "oag-crypto",
  "oag-embeddings",
  "oag-events",
@@ -1838,6 +1839,7 @@ dependencies = [
  "tower",
  "tower-http 0.7.1",
  "tracing",
+ "url",
 ]
 
 [[package]]
@@ -1983,6 +1985,7 @@ dependencies = [
  "axum",
  "http",
  "oag-core",
+ "oag-crawler",
  "oag-crypto",
  "oag-embeddings",
  "oag-graph",
@@ -1995,6 +1998,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "url",
 ]
 
 [[package]]

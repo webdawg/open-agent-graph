@@ -345,6 +345,8 @@ pub struct ResolvedConfig {
     pub federation: oag_sync::FederationPolicy,
     pub reticulum: Option<oag_reticulum::ReticulumConfig>,
     pub embedding_provider: Box<dyn oag_embeddings::EmbeddingProvider>,
+    pub crawler_config: oag_crawler::CrawlerConfig,
+    pub llm_extractor: std::sync::Arc<dyn oag_crawler::LlmExtractor>,
 }
 
 pub fn resolve(
@@ -381,6 +383,15 @@ pub fn resolve(
         federation,
         reticulum: file.reticulum.to_reticulum_config(),
         embedding_provider: file.search.to_embedding_provider(),
+        // `false` here, always -- unlike `oag crawl`'s one-shot
+        // `--allow-private-networks` flag (an operator's own explicit,
+        // local, per-invocation opt-in), a running `oag serve` has no
+        // per-request override at all: only `[crawler].allow_private_networks`
+        // in config.toml can ever enable it. A REST/MCP-triggered crawl
+        // (spec section 71, exposed remotely) must never let a caller
+        // widen this peer's own SSRF policy for their request.
+        crawler_config: file.crawler.to_crawler_config(false),
+        llm_extractor: file.crawler.to_llm_extractor(),
     })
 }
 

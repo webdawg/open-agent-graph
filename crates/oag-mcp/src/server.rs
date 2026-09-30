@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use oag_core::Permission;
+use oag_crawler::CrawlerService;
 use oag_graph::{AssertInput, AuthContext, EvidenceInput, GraphError, GraphService};
 use rmcp::handler::server::tool::Extension;
 use rmcp::handler::server::wrapper::{Json, Parameters};
@@ -10,8 +11,9 @@ use serde_json::json;
 use tracing::Instrument;
 
 use crate::params::{
-    AddEvidenceParams, AssertParams, DisputeParams, EdgeIdParams, EvidenceParam, HistoryParams,
-    NodeIdParams, ResolveParams, RetractParams, SearchParams, SubgraphParams, VerifyParams,
+    AddEvidenceParams, AssertParams, CrawlParams, DisputeParams, EdgeIdParams, EvidenceParam,
+    HistoryParams, NodeIdParams, ResolveParams, RetractParams, SearchParams, SubgraphParams,
+    VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -25,6 +27,16 @@ fn map_err(e: GraphError) -> ErrorData {
         GraphError::Embedding(oag_embeddings::EmbeddingError::Disabled) => {
             ErrorData::invalid_params(e.to_string(), None)
         }
+        other => ErrorData::internal_error(other.to_string(), None),
+    }
+}
+
+fn map_crawl_err(e: oag_crawler::error::CrawlError) -> ErrorData {
+    use oag_crawler::error::CrawlError;
+    match e {
+        CrawlError::UnsupportedScheme(_) | CrawlError::NoHost => ErrorData::invalid_params(e.to_string(), None),
+        CrawlError::BlockedAddress(_) | CrawlError::RobotsDisallowed => ErrorData::invalid_params(e.to_string(), None),
+        CrawlError::Graph(inner) => map_err(inner),
         other => ErrorData::internal_error(other.to_string(), None),
     }
 }
@@ -57,11 +69,16 @@ fn evidence_input(p: EvidenceParam) -> EvidenceInput {
 pub struct OagMcpServer {
     graph: Arc<GraphService>,
     embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider>,
+    crawler: Arc<CrawlerService>,
 }
 
 impl OagMcpServer {
-    pub fn new(graph: Arc<GraphService>, embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider>) -> Self {
-        Self { graph, embedding_provider }
+    pub fn new(
+        graph: Arc<GraphService>,
+        embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider>,
+        crawler: Arc<CrawlerService>,
+    ) -> Self {
+        Self { graph, embedding_provider, crawler }
     }
 
     async fn authenticate(&self, parts: &http::request::Parts) -> Result<AuthContext, ErrorData> {
@@ -372,6 +389,23 @@ impl OagMcpServer {
             self.authenticate_read(&parts).await?;
             let entries = self.graph.get_history(&p.object_type, &p.id).await.map_err(map_err)?;
             Ok(Json(json!({ "history": entries })))
+        })
+        .await
+    }
+
+    #[tool(description = "Crawl one URL: fetch it safely (SSRF-guarded), extract structured facts (JSON-LD, llms.txt, ARD, A2A, HTML meta), and assert them as evidence-backed claims. Requires the graph:crawl permission, distinct from graph:assert -- this makes the peer itself issue an outbound HTTP request to the given URL.")]
+    async fn graph_crawl(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<CrawlParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_crawl", async {
+            let auth = self.authenticate(&parts).await?;
+            auth.require(Permission::GraphCrawl).map_err(map_err)?;
+            let url = url::Url::parse(&p.url).map_err(|e| ErrorData::invalid_params(format!("invalid url '{}': {e}", p.url), None))?;
+            let summary = self.crawler.crawl(&url).await.map_err(map_crawl_err)?;
+            let value = serde_json::to_value(summary).map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+            Ok(Json(value))
         })
         .await
     }

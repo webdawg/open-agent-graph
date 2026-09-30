@@ -86,3 +86,9 @@ pub struct HistoryParams {
     pub object_type: String,
     pub id: String,
 }
+
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CrawlParams {
+    pub url: String,
+}
+

@@ -193,3 +193,28 @@ Format: question, assumption I'm running with, status.
   a `<script>`/`<img onerror=...>` payload renders escaped (`&#60;script&#62;` -- askama's default
   escaper uses numeric character references, not named entities like `&lt;`) rather than as live
   markup. Status: resolved.
+
+## Remote crawl trigger (spec section 71, REST/MCP)
+
+- **New dedicated permission, not `graph:assert`.** `POST /api/v1/crawl` / MCP's `graph_crawl`
+  require `graph:crawl`, a permission distinct from `graph:assert`. Assumption: triggering a crawl
+  makes *this peer itself* issue an outbound HTTP request to a caller-supplied URL -- SSRF-guarded,
+  but still a meaningfully different capability than authoring a claim (it directs this peer's own
+  network egress) -- so an operator should have to grant it explicitly rather than it riding along
+  with `graph:assert`. Same reasoning that already justified `Admin` being separate from
+  `GraphAssert` for redaction. Status: resolved.
+- **No per-request SSRF override.** There is deliberately no `allow_private_networks` field on the
+  REST/MCP crawl request -- only `[crawler].allow_private_networks` in `config.toml` (an operator's
+  own local, deploy-time choice) can ever widen this peer's SSRF policy. Verified live against a
+  running peer: a `graph:crawl`-only key could not crawl the peer's own `127.0.0.1:.../metrics`.
+  Status: resolved.
+- **`Admin` bypasses `graph:crawl` too, same as every other permission.** Discovered (and then
+  documented properly in `docs/security.md`, which previously stated -- incorrectly -- that no admin
+  superuser bypass exists) while manually verifying this feature: `AuthContext::require` treats
+  `Permission::Admin` as satisfying every check. This isn't specific to crawl, but crawl is the
+  capability where an unintended superuser bypass would matter most (arbitrary outbound requests),
+  so it's called out here too. Status: resolved (now correctly documented; not a new behavior).
+- **Synchronous, not queued.** A REST/MCP-triggered crawl blocks the request until the crawl (one
+  page fetch + extraction) completes, exactly like `oag crawl` does today -- no job queue (spec
+  section 70) involved, since a single-page crawl is a bounded, fast operation. Status: resolved
+  (revisit only if crawl operations turn out not to be bounded/fast in practice).

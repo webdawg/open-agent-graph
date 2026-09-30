@@ -56,6 +56,36 @@ async fn test_app(name: &str) -> (axum::Router, String) {
     (build_router(state), raw_key)
 }
 
+/// Like `test_app`, but with `graph:crawl` granted and a crawler config that
+/// allows private networks -- needed to let the test hit its own loopback
+/// fixture server, exactly like `oag-crawler`'s own tests do.
+async fn test_app_with_crawler(name: &str) -> (axum::Router, String) {
+    let pool = open_pool(&temp_db_path(name)).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let graph = Arc::new(GraphService::new(pool, identity));
+
+    let actor_id = graph
+        .declare_actor(ActorType::Agent, Some("admin".into()), None, None)
+        .await
+        .unwrap();
+    let raw_key = graph
+        .create_key(
+            actor_id,
+            vec![Permission::GraphRead, Permission::GraphAssert, Permission::GraphCrawl],
+        )
+        .await
+        .unwrap();
+
+    let crawler_config = oag_crawler::CrawlerConfig { allow_private_networks: true, ..Default::default() };
+    let crawler = Arc::new(oag_crawler::CrawlerService::new(
+        graph.clone(),
+        crawler_config,
+        Arc::new(oag_crawler::DisabledExtractor),
+    ));
+    let state = AppState::new(graph).with_crawler(crawler);
+    (build_router(state), raw_key)
+}
+
 #[tokio::test]
 async fn full_rest_vertical_slice() {
     let (app, key) = test_app("vertical-slice").await;
@@ -550,4 +580,70 @@ async fn human_search_page_finds_nodes_and_links_to_them() {
     let html = body_text(response).await;
     assert!(html.contains("concept:searchable-thing"), "expected the match to appear:\n{html}");
     assert!(html.contains("/ui/nodes/"), "expected a link into the node page:\n{html}");
+}
+
+/// Spec section 71 exposed over REST: a caller with graph:crawl can trigger
+/// this peer's own crawler against a real fixture server, and the crawled
+/// facts land in the graph exactly like a CLI `oag crawl` would produce.
+#[tokio::test]
+async fn crawl_endpoint_requires_graph_crawl_permission_and_populates_the_graph() {
+    let fixture = axum::Router::new().route(
+        "/",
+        axum::routing::get(|| async {
+            (
+                [(axum::http::header::CONTENT_TYPE, "text/html")],
+                "<html><head><title>REST Crawl Fixture</title></head><body>hi</body></html>",
+            )
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let fixture_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, fixture).await.unwrap();
+    });
+    let fixture_url = format!("http://{fixture_addr}/");
+
+    // A key with graph:assert but not graph:crawl is rejected.
+    let (app_no_crawl, key_no_crawl) = test_app("crawl-no-permission").await;
+    let response = app_no_crawl
+        .oneshot(
+            Request::post("/api/v1/crawl")
+                .header("authorization", format!("Bearer {key_no_crawl}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "url": fixture_url }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    // A key with graph:crawl succeeds and the crawled facts are queryable.
+    let (app, key) = test_app_with_crawler("crawl-with-permission").await;
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/crawl")
+                .header("authorization", format!("Bearer {key}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "url": fixture_url }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    assert!(body["facts_asserted"].as_u64().unwrap() > 0);
+
+    let response = app
+        .oneshot(
+            Request::post("/api/v1/resolve")
+                .header("authorization", format!("Bearer {key}"))
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "value": fixture_url }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(body_json(response).await["confidence"], 1.0);
 }
