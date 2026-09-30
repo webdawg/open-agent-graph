@@ -107,6 +107,21 @@ pub async fn get_assertion(
     })))
 }
 
+pub async fn get_edge(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    authenticate_read(&headers, &state.graph).await?;
+    let edge_id = parse_edge_id(&id)?;
+    let edge = state
+        .graph
+        .get_edge(edge_id)
+        .await?
+        .ok_or_else(|| ApiError(oag_graph::GraphError::NotFound(format!("edge {id}"))))?;
+    Ok(Json(json!({ "edge": edge })))
+}
+
 pub async fn get_edge_corroboration(
     State(state): State<AppState>,
     headers: HeaderMap,

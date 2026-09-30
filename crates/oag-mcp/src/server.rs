@@ -223,6 +223,21 @@ impl OagMcpServer {
         .await
     }
 
+    #[tool(description = "Get a single edge by its id -- the subject/predicate/object triple. Remember an edge is not a truth declaration by itself; see graph_get_corroboration for how well-supported it is.")]
+    async fn graph_get_edge(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<EdgeIdParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_get_edge", async {
+            self.authenticate_read(&parts).await?;
+            let edge_id = p.edge_id.parse().map_err(|_| ErrorData::invalid_params("invalid edge_id", None))?;
+            let edge = self.graph.get_edge(edge_id).await.map_err(map_err)?;
+            Ok(Json(json!({ "edge": edge })))
+        })
+        .await
+    }
+
     #[tool(description = "Get corroboration signals for one edge: how many independent sources (not just how many assertions) back it, how strong the evidence is, and how much verification/dispute agreement it has. Never collapsed into one score — inspect each signal.")]
     async fn graph_get_corroboration(
         &self,

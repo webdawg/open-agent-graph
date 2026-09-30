@@ -244,6 +244,11 @@ enum ReplicationCommand {
 
 #[derive(Subcommand)]
 enum EdgeCommand {
+    Get {
+        id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
     /// Corroboration signals for one edge: source independence, evidence
     /// strength, and agreement — never collapsed into a single score.
     Corroboration {
@@ -390,6 +395,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Assertion { command: AssertionCommand::Get { id, data_dir } } => {
             commands::assertion_get(&data_dir, &id).await
         }
+        Command::Edge { command: EdgeCommand::Get { id, data_dir } } => commands::edge_get(&data_dir, &id).await,
         Command::Edge { command: EdgeCommand::Corroboration { id, data_dir } } => {
             commands::edge_corroboration(&data_dir, &id).await
         }

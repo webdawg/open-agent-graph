@@ -720,3 +720,64 @@ async fn get_actor_endpoint_returns_the_asserting_actor() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn get_edge_endpoint_returns_the_edge() {
+    let (app, key) = test_app("get-edge").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/edge-lookup-test",
+        "predicate": "implements",
+        "object": "concept:edge-lookup-test",
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let assertion_id = body_json(response).await["assertion_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/assertions/{assertion_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let edge_id = body_json(response).await["assertion"]["edge_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/edges/{edge_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    assert_eq!(body["edge"]["predicate"], "implements");
+
+    let response = app
+        .oneshot(
+            Request::get(format!("/api/v1/edges/{}", "0".repeat(64)))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}

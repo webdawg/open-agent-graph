@@ -270,6 +270,61 @@ async fn graph_get_actor_returns_the_asserting_actor() {
 }
 
 #[tokio::test]
+async fn graph_get_edge_returns_the_edge() {
+    let (url, raw_key) = spawn_mcp_server("get-edge").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let assert_result = client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({
+                "subject": "https://example.com/mcp-edge-test",
+                "predicate": "implements",
+                "object": "concept:mcp-edge-test",
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ))
+        .await
+        .unwrap();
+    let _assertion_id =
+        assert_result.structured_content.unwrap()["assertion_id"].as_str().unwrap().to_string();
+
+    let resolve_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_resolve")
+                .with_arguments(json!({ "value": "https://example.com/mcp-edge-test" }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let node_id = resolve_result.structured_content.unwrap()["node_id"].as_str().unwrap().to_string();
+
+    let edges_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_edges")
+                .with_arguments(json!({ "node_id": node_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let edge_id = edges_result.structured_content.unwrap()["edges"][0]["id"].as_str().unwrap().to_string();
+
+    let edge_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_edge")
+                .with_arguments(json!({ "edge_id": edge_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let edge = edge_result.structured_content.expect("graph_get_edge returns structured content");
+    assert_eq!(edge["edge"]["predicate"], "implements");
+}
+
+#[tokio::test]
 async fn graph_crawl_without_permission_is_rejected() {
     let pool = open_pool(&temp_db_path("crawl-no-permission")).await.unwrap();
     let identity = PeerIdentity::generate();

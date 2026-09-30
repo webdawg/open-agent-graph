@@ -24,6 +24,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | POST | `/assertions/{id}/verify` | `graph:verify` | Record a verification observation |
 | POST | `/assertions/{id}/dispute` | `graph:verify` | Dispute an assertion |
 | POST | `/assertions/{id}/retract` | `graph:retract-own` | Retract your own assertion |
+| GET | `/edges/{id}` | `graph:read` | Get an edge (subject/predicate/object) by id |
 | GET | `/edges/{id}/corroboration` | `graph:read` | Every ranking signal for one edge (see `docs/data-model.md`) |
 | GET | `/history/{object_type}/{id}` | `graph:read` | Full event history for a node/edge/assertion |
 | POST | `/crawl` | `graph:crawl` | Crawl one URL and assert what's found (spec section 71) -- see below |
@@ -104,6 +105,7 @@ tool per `GraphService` capability:
 | `graph_get_node` | `GET /nodes/{id}` |
 | `graph_get_actor` | `GET /actors/{id}` |
 | `graph_get_edges` | `GET /nodes/{id}/edges` |
+| `graph_get_edge` | `GET /edges/{id}` |
 | `graph_get_corroboration` | `GET /edges/{id}/corroboration` |
 | `graph_get_subgraph` | `GET /subgraph` |
 | `graph_find_sources` | No REST equivalent — evidence backing any assertion whose edge touches a node |
@@ -128,6 +130,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag node get <id>` | Get a node |
 | `oag actor get <id>` | Get an actor |
 | `oag assertion get <id>` | Get an assertion with its evidence |
+| `oag edge get <id>` | Get an edge |
 | `oag edge corroboration <id>` | Ranking signals for one edge |
 | `oag identity show/backup/restore` | Peer identity lifecycle — see `docs/security.md` |
 | `oag key create` | Issue a new API key scoped to specific permissions |

@@ -232,6 +232,16 @@ pub async fn assertion_get(data_dir: &Path, id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn edge_get(data_dir: &Path, id: &str) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let edge_id = id.parse().map_err(|_| anyhow::anyhow!("invalid edge id '{id}'"))?;
+    match graph.get_edge(edge_id).await? {
+        Some(edge) => println!("{}", serde_json::to_string_pretty(&edge)?),
+        None => println!("not found"),
+    }
+    Ok(())
+}
+
 pub async fn edge_corroboration(data_dir: &Path, id: &str) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
     let edge_id = id.parse().map_err(|_| anyhow::anyhow!("invalid edge id '{id}'"))?;
