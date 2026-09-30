@@ -133,6 +133,8 @@ enum Command {
     Doctor {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
+        #[arg(long)]
+        config: Option<PathBuf>,
     },
 }
 
@@ -416,6 +418,6 @@ async fn main() -> anyhow::Result<()> {
         Command::Crawl { url, data_dir, config, allow_private_networks } => {
             commands::crawl(&data_dir, &url, config, allow_private_networks).await
         }
-        Command::Doctor { data_dir } => commands::doctor(&data_dir).await,
+        Command::Doctor { data_dir, config } => commands::doctor(&data_dir, config).await,
     }
 }

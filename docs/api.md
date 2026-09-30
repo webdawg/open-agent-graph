@@ -136,7 +136,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag rebuild` | Wipe and replay every derived table from the event log |
 | `oag redact evidence/list/suppress-node/unsuppress-node` | Deletion and redaction — see `docs/security.md` |
 | `oag crawl <url>` | Fetch a URL, extract structured facts, assert them as evidence-backed claims (also available remotely as `POST /crawl` / `graph_crawl`, requiring `graph:crawl`) |
-| `oag doctor` | Local health checks |
+| `oag doctor [--config]` | Local health checks -- data dir, identity, database/migrations; validates `config.toml` (via the exact same resolver `oag serve` uses) if `--config` is given |
 
 ## Configuration (`config.toml`, spec section 94)
 

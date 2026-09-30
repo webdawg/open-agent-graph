@@ -402,8 +402,26 @@ pub async fn key_create(
     Ok(())
 }
 
-pub async fn doctor(data_dir: &Path) -> anyhow::Result<()> {
+pub async fn doctor(data_dir: &Path, config_path: Option<std::path::PathBuf>) -> anyhow::Result<()> {
     let mut ok = true;
+
+    print!("config... ");
+    match &config_path {
+        Some(path) => {
+            // Reuses the exact function `oag serve` itself calls to resolve
+            // config.toml -- no separate, potentially-divergent validation
+            // logic. A config that fails to resolve here would fail `oag
+            // serve` identically, just later and less conveniently.
+            match crate::config::resolve(Some(path.clone()), Some(data_dir.to_path_buf()), None) {
+                Ok(_) => println!("ok ({})", path.display()),
+                Err(e) => {
+                    println!("FAIL ({e})");
+                    ok = false;
+                }
+            }
+        }
+        None => println!("none specified, using defaults"),
+    }
 
     print!("data directory writable... ");
     match std::fs::create_dir_all(data_dir) {
@@ -612,5 +630,28 @@ mod tests {
         let redactions = graph.list_redactions(&cli_admin_auth()).await.unwrap();
         assert_eq!(redactions.len(), 1);
         assert_eq!(redactions[0].reason.as_deref(), Some("test reason"));
+    }
+
+    #[tokio::test]
+    async fn doctor_passes_with_no_config_specified() {
+        let data_dir = temp_dir("doctor-no-config");
+        doctor(&data_dir, None).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn doctor_passes_with_a_valid_config_file() {
+        let data_dir = temp_dir("doctor-valid-config");
+        let config_path = temp_dir("doctor-valid-config-file").join("config.toml");
+        std::fs::write(&config_path, "[server]\nlisten = \"127.0.0.1:9999\"\n").unwrap();
+        doctor(&data_dir, Some(config_path)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn doctor_fails_with_a_malformed_config_file() {
+        let data_dir = temp_dir("doctor-bad-config");
+        let config_path = temp_dir("doctor-bad-config-file").join("config.toml");
+        std::fs::write(&config_path, "this is not valid toml {{{").unwrap();
+        let result = doctor(&data_dir, Some(config_path)).await;
+        assert!(result.is_err(), "a malformed config.toml must fail oag doctor");
     }
 }
