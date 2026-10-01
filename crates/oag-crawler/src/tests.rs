@@ -74,6 +74,20 @@ async fn response_size_cap_is_enforced() {
 }
 
 #[tokio::test]
+async fn markdown_content_type_is_allowed() {
+    async fn markdown_handler() -> Response {
+        ([(header::CONTENT_TYPE, "text/markdown")], "# Title\n\nbody").into_response()
+    }
+    let router = Router::new().route("/", get(markdown_handler));
+    let base = spawn_fixture(router).await;
+    let url = Url::parse(&base).unwrap();
+
+    let page = safe_fetch(&url, &allowing_config()).await.unwrap();
+    assert_eq!(page.content_type, "text/markdown");
+    assert_eq!(page.body, b"# Title\n\nbody");
+}
+
+#[tokio::test]
 async fn disallowed_content_type_is_rejected() {
     async fn binary_handler() -> Response {
         ([(header::CONTENT_TYPE, "application/octet-stream")], Body::from(vec![0u8, 1, 2, 3])).into_response()

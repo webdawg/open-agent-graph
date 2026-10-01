@@ -77,3 +77,97 @@ same idea already captured in `future_ephemeral_peer_trust.md` (session-scoped i
 earned through sustained connection rather than a persisted key) — this entry reinforces and
 slightly extends it (the *network* itself is temporary/reconfiguring, not just any one peer's
 identity within it). Cross-linked there.
+
+---
+
+## Entry 2 — 2026-10-01
+
+> we need to intake the md files at hackspherelabs.com http site, record that we intaked them, and
+> add them to some sort of software architecutre space inside of this project, it will eventually be
+> a blockchain, but only for the sake of public record - anyone can try to commit a block to the
+> chain to fight for what should be built next - this code should always be changing, and part of
+> what we will store inside of the actual storage service we have created is the code itself i
+> guess? - we do not want to follow the .md files inside of hackspherelabs.com but istead use it as
+> an example of an architecture around running the type of sofware we are building - small ant like
+> software almost like creatures building and linking together - clusters of mutually cooperating
+> nodes and groups of nodes that are distributed and do things to help the real world make tech work
+> possible or physical things possible - commit this to the user input too, but think and plan on
+> this - lets see what you come up with
+
+### Response
+
+**The intake itself**: fetched all nine markdown files live from `https://hackspherelabs.com/md/`
+(`The_HACK_COMMANDMENTS.md`, `REQUIREMENTS.md`, `DO.md`, `LAW.md`, `UTOPIA.md`, `COLLECTIVE.md`,
+`GLASS_HOUSE.md`, `BOOK.md`, `GOALS.md`) on 2026-10-01. Worth noting plainly: `hackspherelabs.com`
+links directly to `github.com/webdawg` on its own front page — this is not a stranger's site, it's
+the project creator's own parallel philosophical/collective project. The nine files split roughly
+into two groups: broader ethical/political philosophy not really about software architecture at all
+(`LAW.md`'s surveillance-accountability and direct-democracy proposals, `UTOPIA.md` and `GOALS.md`'s
+supply-chain and climate ethics, `The_HACK_COMMANDMENTS.md`'s seven-point ethical manifesto), and a
+smaller set that *is* about how software/work gets organized (`DO.md` — a living "what's being
+worked on" list, explicitly "spec for an AI"; `COLLECTIVE.md` — individuals not organizations,
+transparent/broadcast-live operation, work within-but-testing legal bounds; `GLASS_HOUSE.md` — all
+code public and readable, deployment pipelines inspectable, test/prod parity; `REQUIREMENTS.md` — a
+competitive, non-monopolistic internet root where "whoever registers a TLD first maintains the
+compute resources behind it, for a small maintenance fee" and anyone can take over by offering
+better terms).
+
+Per the user's explicit instruction, none of this is being adopted as a spec — "we do not want to
+follow the .md files... but instead use it as an example of an architecture." Per the user's
+instruction, it's been ingested as actual graph data inside OAG itself (not copied into `docs/`) —
+see the `software-architecture-reference` concept node described below, which is the literal
+"software architecture space inside of this project" the user asked for: a durable, hash-verified,
+provenance-tracked record that this intake happened, living in the same signed event log as every
+other fact OAG holds, rather than a special-cased markdown dump.
+
+**On "it will eventually be a blockchain... anyone can commit a block to fight for what should be
+built next"**: recommend *against* building a second, separate chain for this. OAG's own event log
+is already a per-peer hash-chained, signed, append-only structure (spec sections 27-30) — a second
+blockchain bolted on for roadmap governance would duplicate machinery that already exists one layer
+down. What this proposal actually wants — a public, permissionless, non-monetary record where
+competing proposals for "what gets built next" are visible and can be judged on their merits — maps
+directly onto assertions the project already knows how to make about itself: anyone holding a
+`graph:assert` key could assert a roadmap-proposal node (e.g. predicate `proposed_next`, object a
+concept node describing the proposed work), back it with evidence (a design doc, a working
+prototype, a link), and the *existing* corroboration machinery (`source_independence`,
+`identity_assurance`, `evidence_strength` — already computed, already public) does the "fighting for
+it" ranking work a bespoke voting chain would otherwise have to build from scratch. This is also the
+more legacy-compatible path (Entry 1): reuse the standard already built rather than inventing a
+second one. Concretely this would mean OAG governing its own development *using its own graph* —
+genuinely interesting, consistent with "the code itself" idea below, and worth treating as a real
+future-work candidate rather than pure speculation. Not building it now; recorded as a future
+direction (memory + `docs/architecture.md`).
+
+**On "part of what we will store inside of the actual storage service we have created is the code
+itself"**: this is less speculative than it sounds — nothing about `oag-crawler`'s fetch pipeline
+cares whether a URL serves HTML, JSON-LD, or a plain-text source file, and `oag-storage`'s
+content-hash-per-evidence model (already built) is naturally a versioning mechanism for *any* text
+artifact, source code included, and ties directly into Entry 1's granular-versioning idea: each
+commit/version of a source file is just another evidence blob with its own content hash, hung off a
+node representing the file or module. Not building this now either (no reason to duplicate git), but
+worth keeping in view as a concrete, already-mostly-supported capability rather than a hypothetical
+one, should the project ever want to make its own source history queryable through the same graph it
+uses for everything else.
+
+**On "small ant like software... clusters of mutually cooperating nodes... help the real world make
+tech work possible or physical things possible"**: this extends, rather than introduces, two things
+already tracked. First, [[future_ephemeral_peer_trust]]: an ant colony's trust model is exactly
+"identity is disposable, only the colony's accumulated behavior matters" — individual ants are
+expendable and interchangeable, but the colony's structures (built over many ant-lifetimes) persist.
+That is precisely the shape already captured there (session-scoped identity, trust earned through
+behavior/uptime, not a persisted key) — this image is a strong confirming metaphor for a direction
+already queued, not a new one. Second, genuinely new: today's peer model (spec section 3) treats
+peers as a flat set — there's no notion of a *cluster* or *group* of peers that cooperate as a unit
+distinct from the network as a whole. "Clusters of mutually cooperating nodes... doing physical
+things" implies peer *grouping* as a first-class future concept (a sensor cluster on one traffic
+intersection, say, cooperating tightly with each other and more loosely with the rest of the graph) —
+recorded as a new, distinct future-work memory, cross-linked to ephemeral-peer-trust rather than
+folded into it, since grouping/clustering and identity-lifetime are separable concerns.
+
+**Connection to existing memory**: reinforces [[future_ephemeral_peer_trust]] (ant-colony framing of
+disposable identity / persistent collective behavior) and [[future_long_word_subdomain_addressing]]
+(`REQUIREMENTS.md`'s competitive-registrar proposal is close kin to the subdomain-addressing idea —
+both are about minting/governing address space without a single permanent gatekeeper). Introduces
+two new future-work threads, recorded separately: self-hosted roadmap governance via the existing
+assertion/corroboration machinery instead of a second blockchain, and peer clustering/grouping as a
+concept distinct from flat peer identity.

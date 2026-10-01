@@ -15,6 +15,7 @@ const ALLOWED_CONTENT_TYPES: &[&str] = &[
     "application/json",
     "application/ld+json",
     "text/plain",
+    "text/markdown",
 ];
 
 #[derive(Debug, Clone)]

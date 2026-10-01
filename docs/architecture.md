@@ -149,9 +149,19 @@ section 87) carrying `request_id`/`peer_id`/`route or tool`/`actor_id`/`status`/
 `result`; every ingested replication event logs `event_id`/`origin_peer`/`result`
 (`docs/replication.md`). See `docs/api.md` for the exact metric names and log fields.
 
+## Software architecture reference space
+
+The graph itself holds a dedicated hub node, `concept:software-architecture-reference`, under which
+externally-sourced architectural *inspiration* is recorded via the `example_of` predicate — never
+followed as a spec, only kept as a durable, hash-verified, provenance-tracked record that the intake
+happened (see `USER_INPUT_RECORD.md`, Entry 2). The first contents: all nine markdown files from
+`hackspherelabs.com/md/` (the project creator's own parallel collective site), crawled and asserted
+on 2026-10-01. This is deliberately *data inside OAG*, not a `docs/` copy — the same signed event log
+and evidence model used for everything else, applied reflexively to the project's own inspirations.
+
 ## What's deliberately not built yet
 
-Four larger directions are tracked as future work, not yet implemented. None changes anything
+Six larger directions are tracked as future work, not yet implemented. None changes anything
 described in this document today:
 
 - Ephemeral, session-scoped peer identity with data/uptime-driven trust (inspired by the PKT
@@ -169,3 +179,12 @@ described in this document today:
   space (tens of millions of subdomains, each mapping to a `NodeId`/`PeerId`) as a way to mint vast
   numbers of addressable identities on top of DNS's existing, already-deployed namespace, the same
   "use an existing substrate in a way its designers didn't require" spirit as `oag-reticulum`.
+- Self-hosted roadmap governance: rather than a second, separate blockchain for "what should be built
+  next" (`USER_INPUT_RECORD.md`, Entry 2), reuse OAG's own assertion/evidence/corroboration machinery
+  pointed at itself — a roadmap proposal is just an assertion backed by evidence, ranked by the same
+  `source_independence`/`identity_assurance`/`evidence_strength` signals every other claim already
+  gets, with no new consensus mechanism to build.
+- First-class peer clustering: groups of mutually cooperating peers (an "ant colony" of small,
+  cooperating units doing real-world physical work — sensors, traffic lights, smart objects) as a
+  concept distinct from today's flat peer set, separate from the ephemeral-identity direction above
+  since it's a topology/trust-radius question, not an identity-lifetime one.
