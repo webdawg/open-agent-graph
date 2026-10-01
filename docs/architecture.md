@@ -10,6 +10,19 @@ declarations of truth (spec sections 21-22). There is no global consensus, no le
 no requirement that every peer agree — each peer maintains its own locally-consistent view, built by
 replaying the events it has received (spec sections 5-7).
 
+## Legacy compatibility
+
+A permanent, binding principle (see `USER_INPUT_RECORD.md`, Entry 1): **OAG never becomes its own
+gatekeeper.** No future version is allowed to require that old data, old clients, or old protocols
+be upgraded or abandoned to keep working — legacy must always be allowed to flow. This is already
+true by construction in several places: `Predicate` is an open string, not a closed enum a future
+version could outgrow (spec section 20); `canonicalize_value` passes an already-scheme-prefixed
+identifier through unchanged rather than forcing it into a house format; the event log never
+deletes or rewrites anything (spec section 106 invariant 3), so nothing a peer has ever accepted can
+later be invalidated by a protocol change. Any future schema or protocol evolution must add a new
+path alongside the old one, never replace it — see "What's deliberately not built yet" below for
+the granular data-versioning mechanism this implies.
+
 ## One program, many peers
 
 `oag` is one binary with subcommands (`serve`, `search`, `crawl`, `backup`, `rebuild`, `redact`,
@@ -138,7 +151,21 @@ section 87) carrying `request_id`/`peer_id`/`route or tool`/`actor_id`/`status`/
 
 ## What's deliberately not built yet
 
-Two larger directions are tracked as future work, not yet implemented: ephemeral, session-scoped
-peer identity with data/uptime-driven trust (inspired by the PKT Network paper — see
-`ENVIRONMENT.md`), and native IPFS integration for large evidence blobs and static exports (spec
-section 84's `blobs/<hash>` concept). Neither changes anything described in this document today.
+Four larger directions are tracked as future work, not yet implemented. None changes anything
+described in this document today:
+
+- Ephemeral, session-scoped peer identity with data/uptime-driven trust (inspired by the PKT
+  Network paper — see `ENVIRONMENT.md`).
+- Native IPFS integration for large evidence blobs and static exports (spec section 84's
+  `blobs/<hash>` concept).
+- Granular, per-artifact data versioning: an explicit version number on every projected artifact
+  (and on `EventPayload` variants themselves), with two access modes at read time — migrate a row
+  to the current version in place, or keep serving an old version forever through an API-layer
+  adapter. Follows directly from the legacy-compatibility principle above (`USER_INPUT_RECORD.md`,
+  Entry 1) — without it, a future schema change would eventually force a choice between breaking
+  old data and never evolving the format at all.
+- Long-word, subdomain-based node addressing: extending `oag-petname`'s existing deterministic
+  word-based peer *display* names into actual *addressing* — using one domain's enormous subdomain
+  space (tens of millions of subdomains, each mapping to a `NodeId`/`PeerId`) as a way to mint vast
+  numbers of addressable identities on top of DNS's existing, already-deployed namespace, the same
+  "use an existing substrate in a way its designers didn't require" spirit as `oag-reticulum`.
