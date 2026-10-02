@@ -838,3 +838,54 @@ async fn supersede_endpoint_flags_the_old_assertion_without_deleting_it() {
     let body = body_json(response).await;
     assert_eq!(body["assertion"]["status"], "superseded", "old assertion must be flagged, still fully present");
 }
+
+#[tokio::test]
+async fn get_node_sources_returns_evidence_from_touching_edges() {
+    let (app, key) = test_app("node-sources").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/sources-test",
+        "predicate": "implements",
+        "object": "concept:sources-test",
+        "evidence": [{"type": "documentation", "uri": "https://example.com/sources-docs"}]
+    });
+    app.clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let resolve_response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/resolve")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "value": "https://example.com/sources-test" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let node_id = body_json(resolve_response).await["node_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .oneshot(
+            Request::get(format!("/api/v1/nodes/{node_id}/sources"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_json(response).await;
+    let sources = body["sources"].as_array().unwrap();
+    assert_eq!(sources.len(), 1);
+    assert_eq!(sources[0]["uri"], "https://example.com/sources-docs");
+}

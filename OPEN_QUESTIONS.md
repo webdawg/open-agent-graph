@@ -198,6 +198,13 @@ Format: question, assumption I'm running with, status.
   without crawling has no way to. Lower priority than the assertion-lookup gap above: aliases are
   already populated automatically wherever the crawler runs, and no concrete need for standalone
   alias declaration has come up yet. Status: open (revisit if a real use case shows up).
+- **`graph_find_sources` had no REST equivalent** -- `docs/api.md` had explicitly flagged this gap
+  ("No REST equivalent") rather than it being an undocumented oversight, but a REST-only caller
+  doing explainability work (spec section 81 -- "why is this relationship here") genuinely couldn't
+  do what an MCP agent could. Added `GET /nodes/{id}/sources`, exact same response shape
+  (`{"sources": [...]}`) as the MCP tool, reusing the same `GraphService::find_sources` call.
+  Deliberately not added to the CLI -- `subgraph`/`history` are also REST/MCP-only today with no CLI
+  equivalent, so this isn't a new asymmetry, just matching the existing split. Status: resolved.
 
 ## Human Interface (spec section 80)
 

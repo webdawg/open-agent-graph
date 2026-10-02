@@ -17,6 +17,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | GET | `/actors/{id}` | `graph:read` | Get an actor by id |
 | GET | `/nodes/{id}/edges` | `graph:read` | List edges touching a node |
 | GET | `/nodes/{id}/assertions` | `graph:read` | List assertions on any edge touching a node |
+| GET | `/nodes/{id}/sources` | `graph:read` | All evidence backing any assertion whose edge touches this node (explainability, spec section 81) |
 | GET | `/subgraph?node=&depth=` | `graph:read` | Compact neighborhood traversal around a node |
 | GET | `/assertions/{id}` | `graph:read` | Get one assertion plus its evidence/disputes/observations |
 | POST | `/assertions` | `graph:assert` | Create an assertion, optionally with evidence attached |
@@ -109,7 +110,7 @@ tool per `GraphService` capability:
 | `graph_get_edge` | `GET /edges/{id}` |
 | `graph_get_corroboration` | `GET /edges/{id}/corroboration` |
 | `graph_get_subgraph` | `GET /subgraph` |
-| `graph_find_sources` | No REST equivalent — evidence backing any assertion whose edge touches a node |
+| `graph_find_sources` | `GET /nodes/{id}/sources` |
 | `graph_get_assertion` | `GET /assertions/{id}` |
 | `graph_get_node_assertions` | `GET /nodes/{id}/assertions` |
 | `graph_assert` | `POST /assertions` |

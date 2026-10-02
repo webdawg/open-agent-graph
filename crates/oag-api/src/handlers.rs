@@ -84,6 +84,22 @@ pub async fn get_node_assertions(
     Ok(Json(json!({ "assertions": assertions })))
 }
 
+/// REST counterpart of MCP's `graph_find_sources` tool (spec section 81's
+/// explainability requirement) -- all evidence backing any assertion whose
+/// edge touches this node, in one call. Previously MCP-only with no stated
+/// reason; a REST caller doing the same "why is this relationship here"
+/// explainability work had no equivalent.
+pub async fn get_node_sources(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    authenticate_read(&headers, &state.graph).await?;
+    let node_id = parse_node_id(&id)?;
+    let sources = state.graph.find_sources(node_id).await?;
+    Ok(Json(json!({ "sources": sources })))
+}
+
 pub async fn get_assertion(
     State(state): State<AppState>,
     headers: HeaderMap,
