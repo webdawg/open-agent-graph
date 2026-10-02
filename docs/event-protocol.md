@@ -102,6 +102,7 @@ projected successfully once, in exactly the order it was inserted.
 | `SUPERSEDE_ASSERTION` | old assertion id + new assertion id | A row in `assertion_supersessions` + old assertion's `status = Superseded` |
 | `ACTOR_DECLARE` | actor type, name, identity_uri, optional public-key proof | An `Actor` row |
 | `ACTOR_KEY_ADD` | actor id + public key + possession proof | Updates the actor's `public_key` |
+| `ACTOR_KEY_REVOKE` | actor id + key hash | Flags that key `revoked`; past events it already signed stay valid, it just can't authenticate new requests |
 | `NODE_ALIAS` | node identifier + alias + alias type | A row in `node_aliases` |
 
 None of these events ever delete a row. "Softening" a claim (dispute/retract/supersede) always means
