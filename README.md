@@ -11,7 +11,8 @@ this implementation follows.
 Status: signed event log, REST API, MCP server, and peer-to-peer replication (`oag-sync`, plus an
 optional Reticulum mesh transport) are all implemented and share one service layer. Also built:
 corroboration/ranking signals, semantic search, an LLM-extraction fallback for the crawler,
-Prometheus-style metrics, structured request logging, and local evidence redaction. See `docs/` for
+Prometheus-style metrics, structured request logging, local evidence redaction, and a minimal
+human-browsable HTML view (`/ui/search`, `/ui/nodes/{id}`, `/ui/assertions/{id}`). See `docs/` for
 the full picture — start with `docs/architecture.md`.
 
 ## Documentation
