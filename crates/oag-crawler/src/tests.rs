@@ -264,6 +264,28 @@ async fn full_crawl_populates_graph_via_all_extractors() {
     assert!(second_summary.facts_asserted > 0);
 }
 
+#[tokio::test]
+async fn crawling_markdown_declares_h1_as_name_alias() {
+    async fn markdown_handler() -> Response {
+        ([(header::CONTENT_TYPE, "text/markdown")], "# My Markdown Doc\n\nSome body text.").into_response()
+    }
+    let router = Router::new().route("/", get(markdown_handler));
+    let base = spawn_fixture(router).await;
+    let url = Url::parse(&base).unwrap();
+
+    let graph = fresh_graph("markdown-crawl").await;
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor));
+
+    let summary = crawler.crawl(&url).await.unwrap();
+    assert!(summary.facts_asserted > 0);
+
+    let ResolveOutcome::Found { node, .. } = graph.resolve(&base).await.unwrap() else {
+        panic!("expected the crawled markdown page's own node to resolve");
+    };
+    let aliases = graph.list_aliases(node.id).await.unwrap();
+    assert!(aliases.iter().any(|a| a.alias == "My Markdown Doc"));
+}
+
 /// Same fixture, default config: the crawl must fail with a blocked-address
 /// error rather than silently succeeding — proves the SSRF default-deny
 /// posture actually holds for the whole orchestrated crawl, not just the

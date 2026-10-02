@@ -196,6 +196,9 @@ impl CrawlerService {
             "application/ld+json" => {
                 page_extracted.merge(extract::json_ld::extract_from_json(&body_str, &final_url));
             }
+            "text/markdown" => {
+                page_extracted.merge(extract::markdown::extract(&body_str, &final_url));
+            }
             _ => {}
         }
         self.assert_extracted(&auth, &page_extracted, page_evidence.clone(), 0.7, &mut summary).await;

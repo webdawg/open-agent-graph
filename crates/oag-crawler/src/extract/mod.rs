@@ -3,6 +3,7 @@ pub mod ard;
 pub mod html_meta;
 pub mod json_ld;
 pub mod llms_txt;
+pub mod markdown;
 
 /// `scheme://host[:port]` for `url`, with no path/query/fragment — the
 /// "site" a page belongs to, as opposed to the one page itself. Shared by
