@@ -91,6 +91,20 @@ to stop one misbehaving credential from monopolizing a peer. This is deliberatel
 per-process, not distributed) — it is not a substitute for a real edge/WAF rate limiter on a
 publicly exposed deployment.
 
+## Response/request size caps
+
+Every HTTP boundary in this codebase caps body size before fully buffering it, so no single
+request or response can exhaust memory regardless of what the other side claims (spec section 61 —
+"disk exhaustion," "event flooding"): REST request bodies are capped at 4 MiB
+(`MAX_REQUEST_BODY_BYTES`, `crates/oag-api/src/lib.rs`); incoming `oag-sync` event pushes likewise
+(`MAX_PUSH_BODY_BYTES`, `crates/oag-sync/src/server.rs`); the crawler streams a fetched page with
+an explicit cap rather than buffering it whole (`crates/oag-crawler/src/fetch.rs`). `oag-sync`'s
+own HTTP *client* (`crates/oag-sync/src/client.rs`) gets the identical treatment for the other
+direction — a peer this node syncs *with* is exactly as untrusted as a peer syncing with it, so a
+malicious or compromised peer's `/hello`/`/heads`/`/events`/`/peers` response is streamed with the
+same 4 MiB cap rather than buffered unbounded before `discover_peers`'s own item-count caps
+(`MAX_PEERS_PER_RESPONSE`/`MAX_ADDRESSES_PER_PEER`) ever get a chance to run.
+
 ## Crawler / SSRF defenses
 
 `oag crawl` fetches arbitrary operator-supplied URLs, which is exactly the shape of request that

@@ -2052,6 +2052,7 @@ name = "oag-sync"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-util",
  "hex",
  "oag-core",
  "oag-crypto",
