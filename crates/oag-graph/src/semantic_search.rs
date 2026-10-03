@@ -19,6 +19,14 @@ use oag_storage::repo::{node_embeddings as node_embeddings_repo, nodes as nodes_
 use crate::error::GraphError;
 use crate::service::GraphService;
 
+/// Same cap and reasoning as `search::MAX_SEARCH_LIMIT` -- `limit.max(0)`
+/// already prevented the SQLite-specific "negative LIMIT means unlimited"
+/// bypass this path doesn't even have (there's no raw SQL LIMIT here, just
+/// a `Vec::truncate`-style take), but a huge positive limit was still only
+/// bounded by the total number of embedded nodes, not by an explicit cap --
+/// closing that for the same uniform guarantee both search paths should give.
+const MAX_SEMANTIC_SEARCH_LIMIT: i64 = 1000;
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EmbeddingSummary {
     pub nodes_embedded: usize,
@@ -93,7 +101,7 @@ impl GraphService {
 
         let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
         let candidates = node_embeddings_repo::list_all(&mut conn).await?;
-        let ranked = oag_embeddings::rank(&query_embedding, &candidates, limit.max(0) as usize);
+        let ranked = oag_embeddings::rank(&query_embedding, &candidates, limit.clamp(0, MAX_SEMANTIC_SEARCH_LIMIT) as usize);
 
         let mut results = Vec::with_capacity(ranked.len());
         for (node_id, score) in ranked {

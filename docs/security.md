@@ -117,6 +117,13 @@ malicious or compromised peer's `/hello`/`/heads`/`/events`/`/peers` response is
 same 4 MiB cap rather than buffered unbounded before `discover_peers`'s own item-count caps
 (`MAX_PEERS_PER_RESPONSE`/`MAX_ADDRESSES_PER_PEER`) ever get a chance to run.
 
+A caller's own `limit` parameter is the same class of boundary, from the other direction: SQLite
+treats a negative `LIMIT` as "no limit at all," not as zero or an error — confirmed live, `GET
+/api/v1/search?q=...&limit=-1` returned *every* matching row rather than being rejected or clamped,
+with no cap on the way out to bound the response either. `GraphService::search` and
+`::semantic_search` (`crates/oag-graph/src/search.rs`/`semantic_search.rs`) now clamp `limit` to
+`[0, 1000]` before it ever reaches a query, at the one service layer REST/MCP/CLI all call through.
+
 ## Crawler / SSRF defenses
 
 `oag crawl` fetches arbitrary operator-supplied URLs, which is exactly the shape of request that

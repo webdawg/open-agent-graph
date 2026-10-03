@@ -1011,6 +1011,25 @@ impl oag_embeddings::EmbeddingProvider for FakeEmbeddingProvider {
 }
 
 #[tokio::test]
+async fn search_with_a_negative_limit_returns_nothing_not_everything() {
+    // SQLite treats a negative SQL LIMIT as "no limit at all" -- confirmed
+    // live over REST before this was fixed: `limit=-1` returned every
+    // matching row instead of being clamped. Regression test: seed several
+    // matching nodes, confirm a negative limit returns none of them rather
+    // than all of them.
+    let (service, auth) = service_with_admin("search-negative-limit").await;
+    for i in 0..5 {
+        service.assert(&auth, sample_input(&format!("Negative Limit Target {i}"))).await.unwrap();
+    }
+
+    let normal = service.search("Negative Limit Target", 20).await.unwrap();
+    assert_eq!(normal.len(), 5, "sanity check: all 5 should be findable with a normal limit");
+
+    let negative = service.search("Negative Limit Target", -1).await.unwrap();
+    assert!(negative.is_empty(), "a negative limit must not bypass the cap and return everything, got {negative:?}");
+}
+
+#[tokio::test]
 async fn semantic_search_ranks_topically_similar_nodes_above_unrelated_ones() {
     let (service, auth) = service_with_admin("semantic-search-ranking").await;
 
