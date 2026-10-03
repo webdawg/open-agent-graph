@@ -349,7 +349,10 @@ mod tests {
         signed.signature = chars.into_iter().collect();
 
         let result = ingest_remote_event(&pool, remote_identity.verifying_key(), signed, 1_700_000_002).await;
-        assert!(result.is_err(), "a tampered signature must be rejected, not accepted");
+        assert!(
+            matches!(result, Err(EventsError::InvalidSignature(_))),
+            "a tampered signature must be rejected as InvalidSignature specifically, got {result:?}"
+        );
     }
 
     #[tokio::test]
@@ -368,6 +371,31 @@ mod tests {
         signed.signature = "not-a-real-signature".to_string();
 
         let result = ingest_remote_event(&pool, remote_identity.verifying_key(), signed, 1_700_000_002).await;
-        assert!(result.is_err(), "a malformed signature encoding must be rejected, not accepted");
+        assert!(
+            matches!(result, Err(EventsError::Hex(_))),
+            "a non-hex signature must be rejected as a hex-decode error specifically, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn wrong_length_signature_is_rejected_as_bad_signature_length() {
+        let (pool, remote_identity, actor_event_id, actor_id_hex) = seeded_pool("wrong-length-signature").await;
+        let (mut signed, _) = build_and_sign(
+            &remote_identity,
+            2,
+            Some(actor_event_id),
+            1_700_000_001,
+            assert_payload(&actor_id_hex),
+        )
+        .unwrap();
+
+        // Valid hex, but too short to decode to the required 64 bytes.
+        signed.signature = hex::encode([0u8; 32]);
+
+        let result = ingest_remote_event(&pool, remote_identity.verifying_key(), signed, 1_700_000_002).await;
+        assert!(
+            matches!(result, Err(EventsError::BadSignatureLength(32))),
+            "valid hex of the wrong byte length must be rejected as BadSignatureLength specifically, got {result:?}"
+        );
     }
 }
