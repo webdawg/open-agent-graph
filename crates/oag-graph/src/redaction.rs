@@ -18,10 +18,17 @@
 use oag_core::{EventId, NodeId, Permission};
 use oag_storage::repo::{redactions as redactions_repo, search_suppressions as search_suppressions_repo};
 
+use crate::assert::check_opt_len;
 use crate::error::GraphError;
 use crate::service::{AuthContext, GraphService};
 
 pub use oag_storage::repo::redactions::Redaction;
+
+// Same spec section 61 rationale as assert.rs's MAX_REASON_LEN (which this
+// matches) -- an unbounded `reason` here isn't a signed event, so it can't
+// bloat the replicated log, but it's still a permanent, unbounded write to
+// this peer's own database with no guard at all.
+const MAX_REASON_LEN: usize = 2048;
 
 impl GraphService {
     /// Blanks `title`/`excerpt` on the evidence identified by `evidence_id`
@@ -40,6 +47,7 @@ impl GraphService {
         reason: Option<String>,
     ) -> Result<(), GraphError> {
         auth.require(Permission::Admin)?;
+        check_opt_len("reason", &reason, MAX_REASON_LEN)?;
 
         let mut tx = self.pool().begin().await.map_err(oag_storage::StorageError::from)?;
 
@@ -190,6 +198,20 @@ mod tests {
         service.redact_evidence(&auth, evidence_id, None).await.unwrap();
         let err = service.redact_evidence(&auth, evidence_id, None).await.unwrap_err();
         assert!(matches!(err, GraphError::AlreadyRedacted(id) if id == evidence_id));
+    }
+
+    #[tokio::test]
+    async fn redacting_with_an_oversized_reason_is_rejected() {
+        let (service, auth) = service_with_admin("redact-oversized-reason").await;
+        let evidence_id = assert_with_evidence(&service, &auth).await;
+
+        let huge_reason = "x".repeat(10_000);
+        let err = service.redact_evidence(&auth, evidence_id, Some(huge_reason)).await.unwrap_err();
+        assert!(matches!(err, GraphError::InvalidInput(_)), "got {err:?}");
+
+        // Must be rejected before any write -- a second attempt with a
+        // valid reason should still succeed, not hit AlreadyRedacted.
+        service.redact_evidence(&auth, evidence_id, Some("valid reason".to_string())).await.unwrap();
     }
 
     #[tokio::test]
