@@ -94,6 +94,15 @@ exists to stop one misbehaving credential from monopolizing a peer. This is deli
 (in-memory, per-process, not distributed) — it is not a substitute for a real edge/WAF rate limiter
 on a publicly exposed deployment.
 
+`oag-sync`'s own HTTP endpoints (`/oag/sync/v1/*`, deliberately unauthenticated — see "Federation
+trust vs. data trust" below) have a separate, global 600-requests/60s counter
+(`SyncRateLimiter`, `crates/oag-sync/src/rate_limit.rs`), since there's no per-caller identity to
+key by. `oag-reticulum`'s listener (`crates/oag-reticulum/src/listener.rs`) answers the identical
+three calls over a Reticulum `Link` instead of HTTP, and — also found and fixed live — initially had
+no rate limiting on that path at all. `listen_tcp` means this transport isn't inherently
+bandwidth-capped by radio the way a pure mesh-radio deployment might be, so it now reuses the exact
+same `SyncRateLimiter` directly rather than reimplementing the logic.
+
 ## Response/request size caps
 
 Every HTTP boundary in this codebase caps body size before fully buffering it, so no single

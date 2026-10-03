@@ -39,7 +39,11 @@ impl Default for SyncRateLimiter {
 }
 
 impl SyncRateLimiter {
-    fn check(&self) -> bool {
+    /// `pub`, not `pub(crate)`, so `oag-reticulum`'s listener loop (not an
+    /// axum `Service`, so it can't use `rate_limit_middleware` below) can
+    /// still share this same global-counter logic directly rather than
+    /// reimplementing it.
+    pub fn check(&self) -> bool {
         let mut window = self.window.lock().unwrap();
         let now = Instant::now();
         if now.duration_since(window.0) > WINDOW {

@@ -21,7 +21,7 @@ use tracing::{debug, info, warn};
 use crate::framing::{encode_message, Reassembler, CHUNK_SIZE};
 use crate::handlers::handle_request;
 use crate::identity::derive_reticulum_identity;
-use crate::wire::RnRequest;
+use crate::wire::{RnRequest, RnResponse};
 
 #[derive(Debug, Clone)]
 pub struct ReticulumConfig {
@@ -85,6 +85,14 @@ pub async fn run_listener(pool: SqlitePool, peer_identity: PeerIdentity, config:
     let self_public_key = peer_identity.verifying_key().to_bytes();
     let mut events = transport.in_link_events();
     let mut buffers: HashMap<AddressHash, Reassembler> = HashMap::new();
+    // Same threat `oag-sync`'s own HTTP endpoints guard against with
+    // `SyncRateLimiter` (spec section 61 — "a valid signature alone must
+    // never guarantee unlimited replication"): these requests are
+    // deliberately unauthenticated, same as the HTTP sync endpoints they
+    // mirror, and `listen_tcp` means this transport isn't inherently
+    // bandwidth-capped by radio -- it can run over plain TCP too. Reusing
+    // `oag-sync`'s own global counter rather than reimplementing it.
+    let rate_limiter = oag_sync::rate_limit::SyncRateLimiter::default();
 
     loop {
         let event = match events.recv().await {
@@ -124,7 +132,14 @@ pub async fn run_listener(pool: SqlitePool, peer_identity: PeerIdentity, config:
                     }
                 };
 
-                let response = handle_request(&pool, self_peer_id, &self_public_key, request).await;
+                let response = rate_limited_handle_request(
+                    &pool,
+                    self_peer_id,
+                    &self_public_key,
+                    request,
+                    &rate_limiter,
+                )
+                .await;
 
                 let Some(link) = transport.find_in_link(&event.id).await else {
                     warn!("oag-reticulum: no link found for id {} when replying", event.id);
@@ -149,5 +164,62 @@ pub async fn run_listener(pool: SqlitePool, peer_identity: PeerIdentity, config:
                 }
             }
         }
+    }
+}
+
+/// Pulled out of `run_listener`'s loop body specifically so it's
+/// unit-testable without a real Reticulum transport/TCP link -- driving
+/// 600+ real round-trips through a live `Link` just to prove the counter
+/// trips would be slow and mostly test the transport, not this logic.
+async fn rate_limited_handle_request(
+    pool: &SqlitePool,
+    self_peer_id: oag_crypto::PeerId,
+    self_public_key: &[u8; 32],
+    request: RnRequest,
+    rate_limiter: &oag_sync::rate_limit::SyncRateLimiter,
+) -> RnResponse {
+    if rate_limiter.check() {
+        handle_request(pool, self_peer_id, self_public_key, request).await
+    } else {
+        warn!("oag-reticulum: rate limit exceeded, rejecting request");
+        RnResponse::Error("rate limit exceeded".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use oag_storage::pool::open_pool;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn requests_beyond_the_window_get_a_rate_limit_error_instead_of_being_handled() {
+        let dir = std::env::temp_dir().join(format!(
+            "oag-reticulum-listener-test-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = open_pool(&dir.join("oag.sqlite")).await.unwrap();
+        let identity = PeerIdentity::generate();
+        let self_peer_id = identity.peer_id();
+        let self_public_key = identity.verifying_key().to_bytes();
+        let rate_limiter = oag_sync::rate_limit::SyncRateLimiter::default();
+
+        let mut saw_rate_limit_error = false;
+        for _ in 0..601 {
+            let response =
+                rate_limited_handle_request(&pool, self_peer_id, &self_public_key, RnRequest::Hello, &rate_limiter)
+                    .await;
+            match response {
+                RnResponse::Hello(_) => {}
+                RnResponse::Error(msg) => {
+                    assert_eq!(msg, "rate limit exceeded");
+                    saw_rate_limit_error = true;
+                    break;
+                }
+                other => panic!("unexpected response: {other:?}"),
+            }
+        }
+        assert!(saw_rate_limit_error, "expected the 601st request within the window to be rate limited");
     }
 }
