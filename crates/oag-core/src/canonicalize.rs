@@ -21,8 +21,16 @@ const TRACKING_PARAMS: &[&str] = &[
 
 /// Normalize a URL per spec section 9: lowercase scheme/host, strip default
 /// ports, strip empty paths down to `/`, resolve dot-segments (handled by the
-/// `url` crate's parser), and drop known tracking parameters. The caller is
-/// responsible for keeping both `original_url` and this canonical form.
+/// `url` crate's parser), drop known tracking parameters, and drop an empty
+/// fragment (`#` with nothing after it — `url::Url` keeps this as
+/// `Some("")` rather than `None`, which would otherwise make
+/// `https://example.com/page` and `https://example.com/page#` canonicalize
+/// to two different strings, hence two different `NodeId`s, for what's the
+/// same resource). A *non-empty* fragment is left alone — `#/route`-style
+/// client-side routing can be a meaningfully different resource, and the
+/// spec warns against aggressively collapsing URLs when semantic
+/// equivalence is uncertain. The caller is responsible for keeping both
+/// `original_url` and this canonical form.
 pub fn canonicalize_url(raw: &str) -> Result<String, CanonicalizeError> {
     let mut url = Url::parse(raw)?;
 
@@ -31,6 +39,10 @@ pub fn canonicalize_url(raw: &str) -> Result<String, CanonicalizeError> {
     // params and empty fragments.
     if url.path().is_empty() {
         url.set_path("/");
+    }
+
+    if url.fragment() == Some("") {
+        url.set_fragment(None);
     }
 
     let filtered_query: Vec<(String, String)> = url
@@ -94,5 +106,18 @@ mod tests {
         let a = canonicalize_url("https://example.com/a?utm_campaign=x&z=1&a=2").unwrap();
         let b = canonicalize_url("https://example.com/a?utm_campaign=y&z=1&a=2").unwrap();
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn empty_fragment_is_stripped_so_it_matches_the_plain_url() {
+        let with_empty_fragment = canonicalize_url("https://example.com/page#").unwrap();
+        let plain = canonicalize_url("https://example.com/page").unwrap();
+        assert_eq!(with_empty_fragment, plain);
+    }
+
+    #[test]
+    fn non_empty_fragment_is_preserved() {
+        let got = canonicalize_url("https://example.com/app#/route").unwrap();
+        assert_eq!(got, "https://example.com/app#/route");
     }
 }
