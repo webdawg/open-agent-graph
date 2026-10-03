@@ -165,6 +165,18 @@ history is caught by fork detection (`crates/oag-events/src/ingest.rs`) — two 
 claiming the same `(origin_peer, sequence)` are both recorded, flagged in `peer_forks`, and neither
 is silently trusted over the other.
 
+`PeerId` being *derived* from a public key rather than independently chosen (spec section 12) is
+only as strong as every path that stores a `(peer_id, public_key)` pairing actually checking the two
+derive from each other. `sync_with_peer`'s own `hello` handshake always has; `discover_peers` (the
+`/peers`-gossip path, used to learn a peer transitively through a relay) didn't until found and
+fixed here — a malicious relay could offer a real third party's `peer_id` paired with the
+*attacker's own* public key, and this peer would store that pairing with nothing to say otherwise.
+From that point on, any future event claiming to be from that `peer_id` would verify successfully
+against the attacker's key, letting the attacker forge events attributed to a peer whose real
+private key it never had. Both paths now validate the pairing identically
+(`crates/oag-sync/src/service.rs`), confirmed with a test that plays the relay role and checks the
+poisoned pairing is never adopted.
+
 ## Deletion and redaction — what it actually does, and doesn't (spec section 85)
 
 **This is the single most important thing to understand before running a public-facing peer.**

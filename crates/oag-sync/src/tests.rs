@@ -131,6 +131,62 @@ async fn two_peer_replication() {
     assert!(second.errors.is_empty());
 }
 
+/// Spec section 12/40's whole identity model rests on `PeerId` being
+/// *derived* from a public key, never independently chosen -- `discover_peers`
+/// (the `/peers`-gossip path) previously stored whatever `(peer_id,
+/// public_key)` pairing a relay offered with no check that the pairing was
+/// even internally consistent, unlike `sync_with_peer`'s own `hello` path a
+/// few lines above it in the same file, which already validated this. A
+/// malicious relay could poison a victim's local `peers` table with a real
+/// third party's `peer_id` paired with the *attacker's own* key -- after
+/// which any future event claiming to be from that `peer_id` would verify
+/// successfully against the attacker's key, letting the attacker forge
+/// events attributed to a peer whose real private key it never had.
+///
+/// This test plays the role of a relay ("attacker") that has poisoned its
+/// *own* `peers` table with exactly that kind of mismatched pairing (which
+/// a real attacker could arrange identically -- nothing stops a peer from
+/// inserting whatever it wants into its own database), then has a fresh
+/// peer ("victim") sync with it and confirms the poisoned entry was never
+/// adopted.
+#[tokio::test]
+async fn gossip_with_a_mismatched_peer_id_and_public_key_is_rejected() {
+    let attacker = spawn_peer("gossip-poison-attacker").await;
+    let victim = spawn_peer("gossip-poison-victim").await;
+
+    let real_third_party_identity = PeerIdentity::generate();
+    let claimed_victim_of_spoofing = real_third_party_identity.peer_id();
+    // The attacker's own key -- deliberately paired with a peer_id it does
+    // not derive from.
+    let attackers_own_public_key = attacker.sync.self_public_key();
+
+    {
+        let mut conn = attacker.graph.pool().acquire().await.unwrap();
+        oag_storage::repo::peers::upsert_peer(
+            &mut conn,
+            claimed_victim_of_spoofing.as_bytes(),
+            &attackers_own_public_key,
+            None,
+            0,
+        )
+        .await
+        .unwrap();
+        oag_storage::repo::peers::add_address(&mut conn, claimed_victim_of_spoofing.as_bytes(), "http://127.0.0.1:1")
+            .await
+            .unwrap();
+    }
+
+    victim.sync.sync_with_peer(&attacker.addr).await.unwrap();
+
+    let mut victim_conn = victim.graph.pool().acquire().await.unwrap();
+    let stored =
+        oag_storage::repo::peers::get_peer(&mut victim_conn, claimed_victim_of_spoofing.as_bytes()).await.unwrap();
+    assert!(
+        stored.is_none(),
+        "victim must never adopt a peer_id/public_key pairing that doesn't derive correctly"
+    );
+}
+
 /// Durability visibility: nothing assumes any one peer's storage is safe on
 /// its own — `replication_status()` should show the real, monitored picture
 /// of how many *other* peers are known to have caught up with this peer's

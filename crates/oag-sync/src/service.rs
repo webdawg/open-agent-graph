@@ -234,6 +234,24 @@ impl SyncService {
             if pid == self.self_peer_id {
                 continue;
             }
+            // Same check `sync_with_peer`'s own `hello` path makes before
+            // its own `upsert_peer` call (just above) -- without it, a
+            // malicious `/peers` response could claim an arbitrary victim's
+            // real peer_id paired with the *attacker's own* public key.
+            // This peer would then store that pairing and, from then on,
+            // verify any future event claiming to be from that peer_id
+            // against the attacker's key -- accepting forged events as if
+            // genuinely signed by a victim whose real private key the
+            // attacker never had. A peer_id that doesn't actually derive
+            // from its claimed public key is never a relay's own key
+            // confusion; it's exactly this attack, so it's dropped outright
+            // rather than merely skipped as a parse failure.
+            let Ok(verifying_key) = VerifyingKey::from_bytes(&pk) else {
+                continue;
+            };
+            if pid != PeerId::from_public_key(&verifying_key) {
+                continue;
+            }
             if peers_repo::upsert_peer(&mut conn, pid.as_bytes(), &pk, None, now).await.is_err() {
                 continue;
             }
