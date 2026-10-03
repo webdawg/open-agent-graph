@@ -734,6 +734,26 @@ async fn declare_actor_rejects_a_public_key_that_did_not_produce_the_signature()
 }
 
 #[tokio::test]
+async fn declare_actor_rejects_an_oversized_name() {
+    let (service, _) = service_with_admin("actor-oversized-name").await;
+    let huge_name = "x".repeat(10_000);
+
+    let result = service.declare_actor(oag_core::ActorType::Agent, Some(huge_name), None, None).await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+}
+
+#[tokio::test]
+async fn declare_actor_rejects_an_oversized_identity_uri() {
+    let (service, _) = service_with_admin("actor-oversized-identity-uri").await;
+    let huge_uri = format!("https://example.com/{}", "x".repeat(10_000));
+
+    let result = service
+        .declare_actor(oag_core::ActorType::Agent, None, Some(huge_uri), None)
+        .await;
+    assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
+}
+
+#[tokio::test]
 async fn same_public_key_dedups_to_the_same_actor_id() {
     let (service, _) = service_with_admin("actor-proof-dedup").await;
     let signing_key = oag_crypto::SigningKey::from_bytes(&oag_crypto::random_bytes_32());

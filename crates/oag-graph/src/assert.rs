@@ -26,7 +26,7 @@ const MAX_REASON_LEN: usize = 2048;
 const MAX_EVIDENCE_PER_ASSERTION: usize = 20;
 const MAX_ALIAS_LEN: usize = 512;
 
-fn check_len(field: &'static str, value: &str, max: usize) -> Result<(), GraphError> {
+pub(crate) fn check_len(field: &'static str, value: &str, max: usize) -> Result<(), GraphError> {
     if value.len() > max {
         Err(GraphError::InvalidInput(format!(
             "{field} is {} bytes, exceeds the {max}-byte limit",
@@ -37,7 +37,7 @@ fn check_len(field: &'static str, value: &str, max: usize) -> Result<(), GraphEr
     }
 }
 
-fn check_opt_len(field: &'static str, value: &Option<String>, max: usize) -> Result<(), GraphError> {
+pub(crate) fn check_opt_len(field: &'static str, value: &Option<String>, max: usize) -> Result<(), GraphError> {
     match value {
         Some(v) => check_len(field, v, max),
         None => Ok(()),

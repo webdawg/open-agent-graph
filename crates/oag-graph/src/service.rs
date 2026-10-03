@@ -6,12 +6,20 @@ use oag_storage::repo::actors;
 use oag_storage::SqlitePool;
 use serde::Serialize;
 
+use crate::assert::check_opt_len;
 use crate::error::GraphError;
 
 /// Domain prefix for the message an actor signs to prove possession of the
 /// private key behind a `PublicKeyProof` (spec section 13's domain
 /// separation, same pattern as event signing).
 pub(crate) const ACTOR_KEY_PROOF_DOMAIN: &str = "OAG:ACTOR_KEY_PROOF:v1:";
+
+// Same spec section 61 rationale as assert.rs's MAX_* constants: an
+// unbounded `name`/`identity_uri` would otherwise permanently bloat the
+// event log with no guard at all, unlike every other text field this
+// service layer accepts.
+const MAX_ACTOR_NAME_LEN: usize = 512;
+const MAX_IDENTITY_URI_LEN: usize = 2048;
 
 /// `pub(crate)` (not just `pub`) so tests can construct the exact same
 /// message a real caller's tooling would sign, without duplicating and
@@ -137,6 +145,9 @@ impl GraphService {
         identity_uri: Option<String>,
         public_key_proof: Option<PublicKeyProof>,
     ) -> Result<ActorId, GraphError> {
+        check_opt_len("name", &name, MAX_ACTOR_NAME_LEN)?;
+        check_opt_len("identity_uri", &identity_uri, MAX_IDENTITY_URI_LEN)?;
+
         let public_key_hex = match &public_key_proof {
             Some(proof) => {
                 let verifying_key = VerifyingKey::from_bytes(&proof.public_key)
