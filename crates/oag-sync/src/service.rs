@@ -237,15 +237,21 @@ impl SyncService {
             // Same check `sync_with_peer`'s own `hello` path makes before
             // its own `upsert_peer` call (just above) -- without it, a
             // malicious `/peers` response could claim an arbitrary victim's
-            // real peer_id paired with the *attacker's own* public key.
-            // This peer would then store that pairing and, from then on,
-            // verify any future event claiming to be from that peer_id
-            // against the attacker's key -- accepting forged events as if
-            // genuinely signed by a victim whose real private key the
-            // attacker never had. A peer_id that doesn't actually derive
-            // from its claimed public key is never a relay's own key
-            // confusion; it's exactly this attack, so it's dropped outright
-            // rather than merely skipped as a parse failure.
+            // real peer_id paired with the *attacker's own* public key, and
+            // this peer would store that pairing. `ingest_remote_event`'s
+            // own `OriginKeyMismatch` check (derived purely from the key
+            // bytes, never trusted from storage) independently blocks the
+            // attacker from getting a *forged* event accepted under that
+            // peer_id either way -- what a wrong pairing actually breaks is
+            // *this* peer's ability to accept the real victim's own
+            // legitimate events, which would fail signature verification
+            // against the wrong key. A denial-of-replication effect against
+            // the victim, not an impersonation one, but still not something
+            // an untrusted relay should ever get to inflict. A peer_id that
+            // doesn't actually derive from its claimed public key is never
+            // a relay's own key confusion; it's exactly this, so it's
+            // dropped outright rather than merely skipped as a parse
+            // failure.
             let Ok(verifying_key) = VerifyingKey::from_bytes(&pk) else {
                 continue;
             };

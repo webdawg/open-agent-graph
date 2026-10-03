@@ -171,11 +171,20 @@ derive from each other. `sync_with_peer`'s own `hello` handshake always has; `di
 `/peers`-gossip path, used to learn a peer transitively through a relay) didn't until found and
 fixed here — a malicious relay could offer a real third party's `peer_id` paired with the
 *attacker's own* public key, and this peer would store that pairing with nothing to say otherwise.
-From that point on, any future event claiming to be from that `peer_id` would verify successfully
-against the attacker's key, letting the attacker forge events attributed to a peer whose real
-private key it never had. Both paths now validate the pairing identically
-(`crates/oag-sync/src/service.rs`), confirmed with a test that plays the relay role and checks the
-poisoned pairing is never adopted.
+
+That pairing alone does **not** let the attacker forge an *accepted* event under the victim's
+identity — `ingest_remote_event`'s own `OriginKeyMismatch` check derives the verifying peer id
+purely from the key's own bytes, never from what a local table claims it maps to, so an event lying
+about its `origin_peer` relative to whoever actually signed it is rejected regardless of which key
+was looked up to check it. What the bad pairing actually breaks is this peer's ability to accept the
+*real* victim's own legitimate events going forward — they'd fail signature verification against
+the wrong key — a denial-of-replication effect against whichever peer's identity got poisoned, not
+an impersonation one. Still a real bug (an untrusted relay should never get to break a third party's
+replication reaching you, and a local identity cache should never adopt an internally-inconsistent
+entry at all), just not the more severe impersonation issue an earlier draft of this note claimed.
+Both paths now validate the pairing identically (`crates/oag-sync/src/service.rs`), confirmed with
+three tests: one plays the relay role and checks a poisoned pairing is never adopted; the other two
+pin down exactly what a bad pairing does and doesn't enable, directly (`crates/oag-sync/src/tests.rs`).
 
 ## Deletion and redaction — what it actually does, and doesn't (spec section 85)
 

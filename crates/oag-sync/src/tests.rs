@@ -136,12 +136,13 @@ async fn two_peer_replication() {
 /// (the `/peers`-gossip path) previously stored whatever `(peer_id,
 /// public_key)` pairing a relay offered with no check that the pairing was
 /// even internally consistent, unlike `sync_with_peer`'s own `hello` path a
-/// few lines above it in the same file, which already validated this. A
-/// malicious relay could poison a victim's local `peers` table with a real
-/// third party's `peer_id` paired with the *attacker's own* key -- after
-/// which any future event claiming to be from that `peer_id` would verify
-/// successfully against the attacker's key, letting the attacker forge
-/// events attributed to a peer whose real private key it never had.
+/// few lines above it in the same file, which already validated this. See
+/// `forged_event_lying_about_its_origin_peer_is_rejected` and
+/// `a_wrong_key_on_file_for_a_peer_blocks_their_real_events_rather_than_accepting_forgeries`
+/// below for exactly what adopting a bad pairing would and wouldn't have
+/// cost (denial-of-replication against the real peer, not impersonation --
+/// `ingest_remote_event`'s own `OriginKeyMismatch` check is a second,
+/// independent backstop against the forgery case regardless of this fix).
 ///
 /// This test plays the role of a relay ("attacker") that has poisoned its
 /// *own* `peers` table with exactly that kind of mismatched pairing (which
@@ -376,4 +377,104 @@ async fn peer_restart_resumes_and_converges() {
     // ...and the network still converges around it post-restart.
     a.sync.sync_with_peer(&b.addr).await.unwrap();
     assert!(a.graph.get_assertion(after_restart).await.unwrap().is_some(), "A should see B's post-restart event");
+}
+
+/// `ingest_remote_event`'s own `OriginKeyMismatch` check is a second,
+/// independent backstop against exactly the attack the `discover_peers`
+/// fix above closes one path to: even if a wrong `(peer_id, public_key)`
+/// pairing ever *did* end up on file for some origin (via this bug, or any
+/// other means), an event lying about its own `origin_peer` relative to
+/// whatever key actually signed it is still rejected here, regardless of
+/// what any local table says -- `derived_peer_id` is computed purely from
+/// the verifying key's own bytes, never trusted from storage.
+#[tokio::test]
+async fn forged_event_lying_about_its_origin_peer_is_rejected() {
+    let attacker_identity = PeerIdentity::generate();
+    let victim_identity = PeerIdentity::generate();
+    let victim_id = victim_identity.peer_id();
+
+    // Manually build an envelope that lies: origin_peer claims to be the
+    // victim, but it's signed with the attacker's own key (build_and_sign
+    // can't produce this -- it always sets origin_peer to the signing
+    // identity's own true id, so forging the claim requires going one
+    // layer lower, the same way a real attacker would have to).
+    let unsigned = oag_events::envelope::UnsignedEvent {
+        version: 1,
+        origin_peer: victim_id.to_string(),
+        sequence: 1,
+        previous_event: None,
+        created_at: 1_700_000_000,
+        payload: oag_events::payload::EventPayload::ActorDeclare(oag_events::payload::ActorDeclarePayload {
+            actor_type: "agent".into(),
+            name: Some("forged".into()),
+            public_key: None,
+            identity_uri: None,
+        }),
+    };
+    let canonical_unsigned = oag_core::canonical_json_bytes(&unsigned).unwrap();
+    let signature = oag_crypto::sign_with_domain(
+        attacker_identity.signing_key(),
+        oag_events::envelope::EVENT_ID_DOMAIN,
+        &canonical_unsigned,
+    );
+    let signed = oag_events::envelope::SignedEvent {
+        unsigned,
+        signature: hex::encode(signature.to_bytes()),
+    };
+
+    let pool = open_pool(&fresh_temp_dir("forged-origin-peer").join("oag.sqlite")).await.unwrap();
+
+    // Exactly what post_events does: verify using whatever key is on file
+    // for the event's own claimed origin_peer -- using the attacker's real
+    // key directly here, as if some wrong entry had handed it back for
+    // victim_id, isolates the question to this function's own internal
+    // check, independent of how the key was looked up.
+    let result = oag_events::ingest_remote_event(&pool, attacker_identity.verifying_key(), signed, 1_700_000_001).await;
+    assert!(
+        matches!(result, Err(oag_events::EventsError::OriginKeyMismatch { .. })),
+        "an event lying about its own origin_peer must be rejected regardless of which key verifies it, got {result:?}"
+    );
+}
+
+/// What a wrong `(peer_id, public_key)` entry actually costs, precisely
+/// characterized (worth keeping as the record of this, since it's easy to
+/// overstate): it does **not** let an attacker's forged event be accepted
+/// as the real peer's -- `OriginKeyMismatch` above blocks that regardless.
+/// What it *does* do is block the real peer's own legitimate events from
+/// ever being accepted, since they'd be verified against the wrong key and
+/// fail signature verification -- a denial-of-replication effect against
+/// whichever real peer's identity got poisoned, not an impersonation one.
+#[tokio::test]
+async fn a_wrong_key_on_file_for_a_peer_blocks_their_real_events_rather_than_accepting_forgeries() {
+    let victim_identity = PeerIdentity::generate();
+    let attacker_identity = PeerIdentity::generate();
+
+    // The victim signs a perfectly real, legitimate event with their own key.
+    let (signed, _) = oag_events::builder::build_and_sign(
+        &victim_identity,
+        1,
+        None,
+        1_700_000_000,
+        oag_events::payload::EventPayload::ActorDeclare(oag_events::payload::ActorDeclarePayload {
+            actor_type: "agent".into(),
+            name: Some("real-victim-actor".into()),
+            public_key: None,
+            identity_uri: None,
+        }),
+    )
+    .unwrap();
+
+    let pool = open_pool(&fresh_temp_dir("wrong-key-blocks-real-events").join("oag.sqlite")).await.unwrap();
+
+    // A peer with the wrong (attacker's) key on file for this origin can't
+    // accept the victim's real event at all.
+    let blocked =
+        oag_events::ingest_remote_event(&pool, attacker_identity.verifying_key(), signed.clone(), 1_700_000_001).await;
+    assert!(matches!(blocked, Err(oag_events::EventsError::InvalidSignature(_))), "got {blocked:?}");
+
+    // The same event, verified against the victim's actual real key, must
+    // still succeed -- confirming the above wasn't blocked for some other
+    // reason.
+    let applied = oag_events::ingest_remote_event(&pool, victim_identity.verifying_key(), signed, 1_700_000_002).await;
+    assert!(matches!(applied, Ok(oag_events::IngestOutcome::Applied(_, _))), "got {applied:?}");
 }
