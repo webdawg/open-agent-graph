@@ -6,7 +6,7 @@ use crate::commit::commit_local_event;
 use crate::payload::{
     ActorDeclarePayload, ActorKeyAddPayload, ActorKeyRevokePayload, AddEvidencePayload,
     AssertRelationPayload, DisputeAssertionPayload, EventPayload, NodeAliasPayload,
-    RetractAssertionPayload,
+    RetractAssertionPayload, SupersedeAssertionPayload,
 };
 use crate::projector::ProjectionOutcome;
 
@@ -289,6 +289,90 @@ async fn node_alias_for_nonexistent_node_is_not_found() {
     )
     .await;
     assert!(matches!(result, Err(crate::error::EventsError::NotFound(_))), "got {result:?}");
+}
+
+/// A SUPERSEDE_ASSERTION naming a nonexistent id on either side must be
+/// rejected atomically -- same one-transaction guarantee as every other
+/// event type (architecture.md: "projection failure rolls back the event
+/// insert too"), confirmed here rather than just assumed: the real
+/// assertion's status must come back untouched, not partially superseded.
+#[tokio::test]
+async fn supersede_assertion_with_an_unknown_id_on_either_side_is_rejected_atomically() {
+    let pool = open_pool(&temp_db_path("supersede-unknown-id")).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let now = 1_700_000_000;
+
+    let (_, outcome) = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::ActorDeclare(ActorDeclarePayload {
+            actor_type: "agent".into(),
+            name: Some("supersede-unknown-id-test".into()),
+            public_key: None,
+            identity_uri: None,
+        }),
+        now,
+    )
+    .await
+    .unwrap();
+    let ProjectionOutcome::ActorDeclared { actor_id } = outcome else {
+        panic!("expected ActorDeclared outcome");
+    };
+
+    let (real_assertion_id, _) = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::AssertRelation(AssertRelationPayload {
+            subject_identifier: "url:https://example.com/supersede-unknown-id".into(),
+            subject_type: "document".into(),
+            predicate: "instance_of".into(),
+            object_identifier: "concept:supersede-unknown-id-test".into(),
+            object_type: "concept".into(),
+            actor_id: actor_id.to_hex(),
+            actor_confidence: Some(0.9),
+            observed_at: Some(now),
+            extraction_method: "direct".into(),
+        }),
+        now,
+    )
+    .await
+    .unwrap();
+
+    let fake_id = oag_core::AssertionId::derive(b"never-actually-asserted");
+
+    let old_id_fake = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::SupersedeAssertion(SupersedeAssertionPayload {
+            old_assertion_id: fake_id.to_hex(),
+            new_assertion_id: real_assertion_id.to_hex(),
+            actor_id: actor_id.to_hex(),
+        }),
+        now,
+    )
+    .await;
+    assert!(matches!(old_id_fake, Err(crate::error::EventsError::NotFound(_))), "got {old_id_fake:?}");
+
+    let new_id_fake = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::SupersedeAssertion(SupersedeAssertionPayload {
+            old_assertion_id: real_assertion_id.to_hex(),
+            new_assertion_id: fake_id.to_hex(),
+            actor_id: actor_id.to_hex(),
+        }),
+        now,
+    )
+    .await;
+    assert!(matches!(new_id_fake, Err(crate::error::EventsError::NotFound(_))), "got {new_id_fake:?}");
+
+    let mut conn = pool.acquire().await.unwrap();
+    let fetched = oag_storage::repo::assertions::get_by_id(&mut conn, real_assertion_id).await.unwrap().unwrap();
+    assert_eq!(
+        fetched.status,
+        AssertionStatus::Active,
+        "the real assertion must come back untouched -- neither failed attempt may have partially applied"
+    );
 }
 
 #[tokio::test]

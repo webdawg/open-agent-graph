@@ -184,6 +184,15 @@ Format: question, assumption I'm running with, status.
   assertion retract` CLI commands either -- assertion mutations are REST/MCP-only by established
   convention here; the CLI's `assertion` subcommand stays read-only (`get`). Status: resolved
   (matches existing precedent, not a gap).
+- **No existence check anywhere had test coverage.** `GraphService::supersede_assertion` itself
+  does no existence check on either id (by design -- it just builds and commits the event), but
+  the projector (`project_supersede_assertion`) does validate both old and new ids exist before
+  writing anything, and the whole event is rejected atomically (one-transaction guarantee) if
+  either is missing -- confirmed already correct by reading the code, but nothing anywhere actually
+  tested it. Added `supersede_assertion_with_an_unknown_id_on_either_side_is_rejected_atomically`
+  (`crates/oag-events/src/tests.rs`), which also confirms the real assertion's status comes back
+  `Active`, not partially superseded, after both failed attempts. Status: resolved (test-coverage
+  gap, not a behavior bug).
 
 ## MCP surface parity audit
 
