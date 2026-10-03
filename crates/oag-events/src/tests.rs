@@ -434,6 +434,35 @@ async fn verify_and_dispute_assertion_for_a_nonexistent_assertion_are_both_rejec
     assert!(matches!(dispute_result, Err(crate::error::EventsError::NotFound(_))), "got {dispute_result:?}");
 }
 
+/// Same gap as the two tests above, for the fifth and last
+/// `EventsError::NotFound`-returning projector case: `project_add_evidence`.
+#[tokio::test]
+async fn add_evidence_for_a_nonexistent_assertion_is_not_found() {
+    let pool = open_pool(&temp_db_path("add-evidence-unknown-id")).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let now = 1_700_000_000;
+
+    let fake_id = oag_core::AssertionId::derive(b"never-actually-asserted-add-evidence");
+
+    let result = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::AddEvidence(AddEvidencePayload {
+            assertion_id: fake_id.to_hex(),
+            evidence_type: "documentation".into(),
+            uri: Some("https://example.com/docs".into()),
+            title: None,
+            excerpt: None,
+            content_hash: None,
+            observed_at: Some(now),
+            retrieved_at: Some(now),
+        }),
+        now,
+    )
+    .await;
+    assert!(matches!(result, Err(crate::error::EventsError::NotFound(_))), "got {result:?}");
+}
+
 #[tokio::test]
 async fn actor_key_revoke_deactivates_the_key() {
     let pool = open_pool(&temp_db_path("key-revoke")).await.unwrap();
