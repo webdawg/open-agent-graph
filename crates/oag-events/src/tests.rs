@@ -6,7 +6,7 @@ use crate::commit::commit_local_event;
 use crate::payload::{
     ActorDeclarePayload, ActorKeyAddPayload, ActorKeyRevokePayload, AddEvidencePayload,
     AssertRelationPayload, DisputeAssertionPayload, EventPayload, NodeAliasPayload,
-    RetractAssertionPayload, SupersedeAssertionPayload,
+    RetractAssertionPayload, SupersedeAssertionPayload, VerifyAssertionPayload,
 };
 use crate::projector::ProjectionOutcome;
 
@@ -373,6 +373,65 @@ async fn supersede_assertion_with_an_unknown_id_on_either_side_is_rejected_atomi
         AssertionStatus::Active,
         "the real assertion must come back untouched -- neither failed attempt may have partially applied"
     );
+}
+
+/// Same missing-test-coverage gap as the supersede case above, for the two
+/// other event types that reference an assertion by id without the
+/// `GraphService` layer checking existence itself first (`verify_assertion`/
+/// `dispute_assertion` both rely on the projector, same as
+/// `supersede_assertion`) -- confirms the projector actually rejects a
+/// fake assertion id for these two as well, not just assumed by analogy.
+#[tokio::test]
+async fn verify_and_dispute_assertion_for_a_nonexistent_assertion_are_both_rejected() {
+    let pool = open_pool(&temp_db_path("verify-dispute-unknown-id")).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let now = 1_700_000_000;
+
+    let (_, outcome) = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::ActorDeclare(ActorDeclarePayload {
+            actor_type: "agent".into(),
+            name: Some("verify-dispute-unknown-id-test".into()),
+            public_key: None,
+            identity_uri: None,
+        }),
+        now,
+    )
+    .await
+    .unwrap();
+    let ProjectionOutcome::ActorDeclared { actor_id } = outcome else {
+        panic!("expected ActorDeclared outcome");
+    };
+
+    let fake_id = oag_core::AssertionId::derive(b"never-actually-asserted-verify-dispute");
+
+    let verify_result = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::VerifyAssertion(VerifyAssertionPayload {
+            assertion_id: fake_id.to_hex(),
+            observer_actor_id: actor_id.to_hex(),
+            result: "confirmed".into(),
+            observed_at: now,
+        }),
+        now,
+    )
+    .await;
+    assert!(matches!(verify_result, Err(crate::error::EventsError::NotFound(_))), "got {verify_result:?}");
+
+    let dispute_result = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::DisputeAssertion(DisputeAssertionPayload {
+            disputed_assertion_id: fake_id.to_hex(),
+            disputing_actor_id: actor_id.to_hex(),
+            reason: None,
+        }),
+        now,
+    )
+    .await;
+    assert!(matches!(dispute_result, Err(crate::error::EventsError::NotFound(_))), "got {dispute_result:?}");
 }
 
 #[tokio::test]
