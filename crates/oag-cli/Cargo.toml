@@ -34,3 +34,7 @@ clap.workspace = true
 figment.workspace = true
 sqlx.workspace = true
 axum.workspace = true
+tower.workspace = true
+
+[dev-dependencies]
+reqwest.workspace = true

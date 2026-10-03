@@ -51,16 +51,11 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     let state = oag_api::AppState::new(graph.clone())
         .with_embedding_provider(embedding_provider.clone())
         .with_crawler(crawler.clone());
+    let rate_limit_state = state.clone();
     let rest_router = oag_api::build_router(state).merge(sync_router);
-
-    let app = if config.mcp_enabled {
-        rest_router.route_service(
-            "/mcp",
-            oag_mcp::streamable_http_service(graph.clone(), embedding_provider, crawler),
-        )
-    } else {
-        rest_router
-    };
+    let mcp_service =
+        config.mcp_enabled.then(|| oag_mcp::streamable_http_service(graph.clone(), embedding_provider, crawler));
+    let app = build_app(rest_router, mcp_service, rate_limit_state);
 
     println!("oag: peer_id = {peer_id}");
     println!("oag: data dir = {}", config.data_dir.display());
@@ -84,6 +79,37 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Mounts `/mcp` (if `mcp_service` is `Some`) onto `rest_router`, with its
+/// own `rate_limit_middleware` layer applied directly to a small router
+/// containing only that one route.
+///
+/// This is its own function, separate from `run`, specifically so it's
+/// unit-testable without a real server/TCP listener: a router built, then
+/// `.route_service`'d onto *after* merging, would silently miss whatever
+/// layers `rest_router` already carries from its own construction (its
+/// `rate_limit_middleware`/body-limit layers only ever applied to the
+/// routes that existed when they were added) -- confirmed live, a key that
+/// gets 429'd on REST after 120 requests/60s previously sailed through
+/// 130+ consecutive `/mcp` calls with no rate limiting at all. Giving
+/// `/mcp` its own small router with its own layer, merged in afterward,
+/// sidesteps that ordering question entirely rather than relying on it.
+fn build_app<S>(rest_router: axum::Router, mcp_service: Option<S>, rate_limit_state: oag_api::AppState) -> axum::Router
+where
+    S: tower::Service<axum::extract::Request, Error = std::convert::Infallible> + Clone + Send + Sync + 'static,
+    S::Response: axum::response::IntoResponse,
+    S::Future: Send + 'static,
+{
+    match mcp_service {
+        Some(mcp_service) => {
+            let mcp_router = axum::Router::new().route_service("/mcp", mcp_service).layer(
+                axum::middleware::from_fn_with_state(rate_limit_state, oag_api::rate_limit::rate_limit_middleware),
+            );
+            rest_router.merge(mcp_router)
+        }
+        None => rest_router,
+    }
+}
+
 async fn bootstrap_admin(graph: &GraphService) -> anyhow::Result<()> {
     let actor_id = graph
         .declare_actor(ActorType::Service, Some("admin".to_string()), None, None)
@@ -101,4 +127,76 @@ async fn bootstrap_admin(graph: &GraphService) -> anyhow::Result<()> {
     println!("=================================================================");
     println!();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use oag_core::{ActorType, Permission};
+
+    use super::*;
+
+    async fn spawn_test_app(name: &str) -> (String, String) {
+        let dir = std::env::temp_dir().join(format!(
+            "oag-cli-serve-test-{name}-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = oag_storage::open_pool(&dir.join("oag.sqlite")).await.unwrap();
+        let identity = PeerIdentity::generate();
+        let graph = Arc::new(GraphService::new(pool, identity));
+
+        let actor_id =
+            graph.declare_actor(ActorType::Agent, Some("serve-test".into()), None, None).await.unwrap();
+        let raw_key = graph.create_key(actor_id, vec![Permission::GraphRead]).await.unwrap();
+
+        let embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider> = Arc::new(oag_embeddings::DisabledProvider);
+        let crawler = Arc::new(oag_crawler::CrawlerService::new(
+            graph.clone(),
+            oag_crawler::CrawlerConfig::default(),
+            Arc::new(oag_crawler::DisabledExtractor),
+        ));
+        let state = oag_api::AppState::new(graph.clone());
+        let rate_limit_state = state.clone();
+        let rest_router = oag_api::build_router(state);
+        let mcp_service = Some(oag_mcp::streamable_http_service(graph, embedding_provider, crawler));
+        let app = build_app(rest_router, mcp_service, rate_limit_state);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        (format!("http://{addr}"), raw_key)
+    }
+
+    /// Regression test for the exact gap found and fixed live: `/mcp`,
+    /// mounted via `route_service` after `rest_router` already had its own
+    /// `rate_limit_middleware` layer applied, silently never got that
+    /// protection -- a key that gets 429'd on REST after 120 requests/60s
+    /// could otherwise hammer `/mcp` without limit. `build_app` fixes this
+    /// by giving `/mcp` its own layer on its own small router; this proves
+    /// that actually holds over real HTTP, not just REST's own endpoints.
+    #[tokio::test]
+    async fn mcp_endpoint_is_rate_limited_same_as_rest() {
+        let (base, key) = spawn_test_app("mcp-rate-limit").await;
+        let client = reqwest::Client::new();
+
+        let mut saw_429 = false;
+        for i in 0..130 {
+            let response = client
+                .post(format!("{base}/mcp"))
+                .header("authorization", format!("Bearer {key}"))
+                .header("content-type", "application/json")
+                .header("accept", "application/json, text/event-stream")
+                .body(format!(r#"{{"jsonrpc":"2.0","id":{i},"method":"tools/list"}}"#))
+                .send()
+                .await
+                .unwrap();
+            if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                saw_429 = true;
+                break;
+            }
+        }
+        assert!(saw_429, "expected /mcp to start returning 429 well within 130 requests, same as REST does");
+    }
 }

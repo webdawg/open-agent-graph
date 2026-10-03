@@ -85,11 +85,14 @@ Peer-to-peer replication (`oag-sync`) is a *separate* trust boundary from actor 
 ## Rate limiting
 
 A basic per-API-key fixed-window limiter (`crates/oag-api/src/rate_limit.rs`) caps each key to 120
-requests per 60-second window (spec sections 58/61/90). Anonymous/unauthenticated requests share a
-single bucket — they're rejected by auth before doing real work regardless, so this mainly exists
-to stop one misbehaving credential from monopolizing a peer. This is deliberately simple (in-memory,
-per-process, not distributed) — it is not a substitute for a real edge/WAF rate limiter on a
-publicly exposed deployment.
+requests per 60-second window (spec sections 58/61/90), applied identically to REST and MCP (same
+key, same shared counter — `crates/oag-cli/src/serve.rs::build_app` gives `/mcp` its own copy of
+this layer rather than relying on `rest_router`'s own, which — found and fixed live — never actually
+covered a route merged in after `build_router` already returned). Anonymous/unauthenticated requests
+share a single bucket — they're rejected by auth before doing real work regardless, so this mainly
+exists to stop one misbehaving credential from monopolizing a peer. This is deliberately simple
+(in-memory, per-process, not distributed) — it is not a substitute for a real edge/WAF rate limiter
+on a publicly exposed deployment.
 
 ## Response/request size caps
 
