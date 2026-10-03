@@ -268,3 +268,14 @@ Format: question, assumption I'm running with, status.
   page fetch + extraction) completes, exactly like `oag crawl` does today -- no job queue (spec
   section 70) involved, since a single-page crawl is a bounded, fast operation. Status: resolved
   (revisit only if crawl operations turn out not to be bounded/fast in practice).
+
+## Fork evidence (spec section 55)
+
+- **`peer_forks` was "evidence" in name only.** Its own migration comment said "retained... never
+  silently resolved," but only the two conflicting events' bare ids were ever stored -- the
+  already-accepted event's content is retrievable the normal way from `events`, but the incoming
+  (rejected) event's content was never inserted anywhere else at all, so only an unusable hash
+  survived. Added an `event_b_signed_json` column (migration `0007_fork_evidence.sql`) storing the
+  rejected event's full signed JSON, and `oag peer forks <peer_id>` to actually view it --
+  `list_forks` (the storage-layer query) already existed but, like several other capabilities found
+  this session, had zero exposure above its own unit test. Status: resolved.

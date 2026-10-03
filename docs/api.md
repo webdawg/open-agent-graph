@@ -142,6 +142,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag key list` | List every key ever issued (active and revoked), by hash -- never the raw key |
 | `oag key revoke <hash>` | Revoke a key by the hash `oag key list` shows for it |
 | `oag peer add/list/remove/sync` | Manage known peer addresses and trigger one-shot sync |
+| `oag peer forks <peer_id>` | Show recorded fork evidence (spec section 55) -- both conflicting event ids, plus the rejected event's full signed JSON |
 | `oag peer reticulum-address` | Print this peer's Reticulum destination address, to share out-of-band |
 | `oag peer add-reticulum <address_hash> <via_tcp>` | One-shot sync with a peer reachable over Reticulum instead of HTTP |
 | `oag replication status` | Durability view — see `docs/replication.md` |

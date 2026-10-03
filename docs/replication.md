@@ -58,9 +58,12 @@ primary key, so a duplicate insert is simply rejected without disturbing anythin
 A **fork** is different: two distinct events both claiming the same `(origin_peer, sequence)`. This
 can only happen if an origin peer signed two different events at the same chain position — either a
 bug, or a peer deliberately trying to present different histories to different peers. OAG does not
-try to silently pick a winner: both events are kept, the fork is recorded in `peer_forks`, and
-neither is projected into the graph until an operator investigates (spec section 55). This is a
-direct consequence of per-peer hash chains rather than a global order — see `docs/event-protocol.md`.
+try to silently pick a winner: both events' full content is kept inspectable (the first, already-
+accepted one in `events` as usual; the second, rejected one as signed JSON directly in `peer_forks`,
+since it's never otherwise inserted anywhere), the fork is recorded in `peer_forks`, and neither
+version is (re-)projected into the graph until an operator investigates (spec section 55) — see
+`oag peer forks <peer_id>`. This is a direct consequence of per-peer hash chains rather than a
+global order — see `docs/event-protocol.md`.
 
 ## Clock independence
 

@@ -105,6 +105,30 @@ pub async fn peer_remove(data_dir: &Path, peer_id: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn peer_forks(data_dir: &Path, peer_id: &str) -> anyhow::Result<()> {
+    let sync = open_sync(data_dir).await?;
+    let peer_id: oag_crypto::PeerId = peer_id
+        .parse()
+        .map_err(|_| anyhow::anyhow!("invalid peer id '{peer_id}'"))?;
+    let mut conn = sync.pool().acquire().await?;
+    let forks = oag_storage::repo::peers::list_forks(&mut conn, peer_id.as_bytes()).await?;
+    if forks.is_empty() {
+        println!("no recorded forks for {peer_id}");
+        return Ok(());
+    }
+    for fork in forks {
+        println!(
+            "sequence={} event_id_a={} event_id_b={} detected_at={}",
+            fork.sequence,
+            hex::encode(&fork.event_id_a),
+            hex::encode(&fork.event_id_b),
+            fork.detected_at
+        );
+        println!("  event_b_signed_json={}", fork.event_b_signed_json);
+    }
+    Ok(())
+}
+
 pub async fn peer_reticulum_address(data_dir: &Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(data_dir)?;
     let identity = PeerIdentity::load_or_generate(&data_dir.join("identity.key"))?;

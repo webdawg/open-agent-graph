@@ -93,6 +93,7 @@ pub async fn ingest_remote_event(
             received_at,
         )
         .await?;
+        let event_b_signed_json = serde_json::to_string(&signed)?;
         oag_storage::repo::peers::record_fork(
             &mut tx,
             &origin_peer_id,
@@ -100,6 +101,7 @@ pub async fn ingest_remote_event(
             existing.as_hash().as_bytes(),
             event_id.as_hash().as_bytes(),
             received_at,
+            &event_b_signed_json,
         )
         .await?;
         oag_storage::repo::peers::mark_forked(&mut tx, &origin_peer_id).await?;
@@ -324,6 +326,19 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(info.forked);
+
+        // The incoming event's full content must actually be retained, not
+        // just its bare id -- otherwise "fork evidence" isn't evidence of
+        // anything inspectable.
+        let forks = oag_storage::repo::peers::list_forks(&mut conn, &peer_id_bytes).await.unwrap();
+        assert_eq!(forks.len(), 1);
+        assert_eq!(forks[0].event_id_b, second_id.as_hash().as_bytes());
+        let stored: crate::envelope::SignedEvent = serde_json::from_str(&forks[0].event_b_signed_json).unwrap();
+        assert_eq!(stored.unsigned.sequence, 2);
+        let crate::payload::EventPayload::AssertRelation(stored_payload) = stored.unsigned.payload else {
+            panic!("expected the retained fork evidence to be the AssertRelation payload that was actually rejected");
+        };
+        assert_eq!(stored_payload.predicate, "contradicts", "must be the conflicting (rejected) event, not the original");
     }
 
     /// Spec section 104's "invalid signature" / "malformed event" replication

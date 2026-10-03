@@ -82,7 +82,7 @@ async fn peer_repo_round_trip_and_fork_recording() {
     assert_eq!(info.name.as_deref(), Some("peer-a"));
     assert_eq!(info.last_seen, Some(200));
 
-    repo::peers::record_fork(&mut conn, &peer_id, 5, &[1u8; 32], &[2u8; 32], 300)
+    repo::peers::record_fork(&mut conn, &peer_id, 5, &[1u8; 32], &[2u8; 32], 300, r#"{"fake":"signed-event"}"#)
         .await
         .unwrap();
     repo::peers::mark_forked(&mut conn, &peer_id).await.unwrap();
@@ -91,6 +91,7 @@ async fn peer_repo_round_trip_and_fork_recording() {
     assert!(info.forked);
     let forks = repo::peers::list_forks(&mut conn, &peer_id).await.unwrap();
     assert_eq!(forks.len(), 1);
+    assert_eq!(forks[0].event_b_signed_json, r#"{"fake":"signed-event"}"#);
 }
 
 #[tokio::test]

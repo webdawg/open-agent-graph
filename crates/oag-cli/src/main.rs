@@ -345,6 +345,15 @@ enum PeerCommand {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
+    /// Show recorded fork evidence for a peer (spec section 55) -- both
+    /// conflicting event ids at each forked sequence, plus the full signed
+    /// JSON of the incoming event that triggered detection (the
+    /// already-accepted side is retrievable the normal way, by its id).
+    Forks {
+        peer_id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
     /// Sync with a previously-known peer (by id) or a fresh URL.
     Sync {
         peer_id_or_url: String,
@@ -445,6 +454,9 @@ async fn main() -> anyhow::Result<()> {
         Command::Peer { command: PeerCommand::List { data_dir } } => commands::peer_list(&data_dir).await,
         Command::Peer { command: PeerCommand::Remove { peer_id, data_dir } } => {
             commands::peer_remove(&data_dir, &peer_id).await
+        }
+        Command::Peer { command: PeerCommand::Forks { peer_id, data_dir } } => {
+            commands::peer_forks(&data_dir, &peer_id).await
         }
         Command::Peer { command: PeerCommand::Sync { peer_id_or_url, data_dir } } => {
             commands::peer_sync(&data_dir, &peer_id_or_url).await

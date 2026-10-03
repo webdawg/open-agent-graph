@@ -134,16 +134,19 @@ pub async fn record_fork(
     event_id_a: &[u8; 32],
     event_id_b: &[u8; 32],
     detected_at: i64,
+    event_b_signed_json: &str,
 ) -> Result<(), StorageError> {
     sqlx::query(
-        "INSERT OR IGNORE INTO peer_forks (peer_id, sequence, event_id_a, event_id_b, detected_at) \
-         VALUES (?, ?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO peer_forks \
+         (peer_id, sequence, event_id_a, event_id_b, detected_at, event_b_signed_json) \
+         VALUES (?, ?, ?, ?, ?, ?)",
     )
     .bind(peer_id.to_vec())
     .bind(sequence)
     .bind(event_id_a.to_vec())
     .bind(event_id_b.to_vec())
     .bind(detected_at)
+    .bind(event_b_signed_json)
     .execute(&mut *conn)
     .await?;
     Ok(())

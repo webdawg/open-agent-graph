@@ -160,6 +160,7 @@ pub struct PeerForkRow {
     pub event_id_a: Vec<u8>,
     pub event_id_b: Vec<u8>,
     pub detected_at: i64,
+    pub event_b_signed_json: String,
 }
 
 #[derive(Debug, FromRow)]
