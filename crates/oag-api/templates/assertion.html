@@ -92,6 +92,17 @@
 </ul>
 {% endif %}
 
+<h2>Retraction</h2>
+{% if retractions.is_empty() %}
+<p>(not retracted)</p>
+{% else %}
+<ul>
+{% for r in retractions %}
+  <li>{% if let Some(reason) = r.reason %}{{ reason }}{% else %}(no reason given){% endif %} at {{ r.created_at }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+
 <h2>Supersession</h2>
 {% if let Some(s) = supersession %}
 <p>Superseded by <a href="{{ s.link }}">{{ s.new_assertion_id }}</a> at {{ s.created_at }}</p>

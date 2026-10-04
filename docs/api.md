@@ -19,7 +19,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | GET | `/nodes/{id}/assertions` | `graph:read` | List assertions on any edge touching a node |
 | GET | `/nodes/{id}/sources` | `graph:read` | All evidence backing any assertion whose edge touches this node (explainability, spec section 81) |
 | GET | `/subgraph?node=&depth=` | `graph:read` | Compact neighborhood traversal around a node |
-| GET | `/assertions/{id}` | `graph:read` | Get one assertion plus its evidence/disputes/observations |
+| GET | `/assertions/{id}` | `graph:read` | Get one assertion plus its evidence/disputes/retractions/observations |
 | POST | `/assertions` | `graph:assert` | Create an assertion, optionally with evidence attached |
 | POST | `/assertions/{id}/evidence` | `graph:assert` | Attach evidence to an existing assertion |
 | POST | `/assertions/{id}/verify` | `graph:verify` | Record a verification observation |
@@ -87,8 +87,8 @@ header (see `docs/security.md`).
 | Path | Purpose |
 |---|---|
 | `GET /ui/search?key=&q=` | Landing page: a search box over `GraphService::search`, results linking into node pages |
-| `GET /ui/nodes/{id}?key=` | Name, type, canonical identifier, aliases, relationships, assertions (with their evidence/disputes/last observation), history |
-| `GET /ui/assertions/{id}?key=` | Subject/predicate/object, actor, origin peer, event id, signature status, evidence, verification, disputes, supersession |
+| `GET /ui/nodes/{id}?key=` | Name, type, canonical identifier, aliases, relationships, assertions (with their evidence/disputes/retraction/last observation), history |
+| `GET /ui/assertions/{id}?key=` | Subject/predicate/object, actor, origin peer, event id, signature status, evidence, verification, disputes, retraction, supersession |
 
 Rendered via `askama` compile-time HTML templates with default autoescaping — every field is HTML-
 escaped, since several of them (crawled page titles, evidence excerpts, actor names) can contain

@@ -115,11 +115,13 @@ pub async fn get_assertion(
     let evidence = state.graph.list_evidence(assertion_id).await?;
     let observations = state.graph.list_observations(assertion_id).await?;
     let disputes = state.graph.list_disputes(assertion_id).await?;
+    let retractions = state.graph.list_retractions(assertion_id).await?;
     Ok(Json(json!({
         "assertion": assertion,
         "evidence": evidence,
         "observations": observations,
         "disputes": disputes,
+        "retractions": retractions,
     })))
 }
 

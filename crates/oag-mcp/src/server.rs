@@ -312,11 +312,13 @@ impl OagMcpServer {
             let evidence = self.graph.list_evidence(assertion_id).await.map_err(map_err)?;
             let observations = self.graph.list_observations(assertion_id).await.map_err(map_err)?;
             let disputes = self.graph.list_disputes(assertion_id).await.map_err(map_err)?;
+            let retractions = self.graph.list_retractions(assertion_id).await.map_err(map_err)?;
             Ok(Json(json!({
                 "assertion": assertion,
                 "evidence": evidence,
                 "observations": observations,
                 "disputes": disputes,
+                "retractions": retractions,
             })))
         })
         .await

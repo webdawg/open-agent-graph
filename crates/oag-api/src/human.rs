@@ -120,6 +120,15 @@ fn dispute_view(d: &oag_storage::repo::assertions::Dispute) -> DisputeView {
     DisputeView { reason: d.reason.clone(), created_at: d.created_at }
 }
 
+struct RetractionView {
+    reason: Option<String>,
+    created_at: i64,
+}
+
+fn retraction_view(r: &oag_storage::repo::assertions::Retraction) -> RetractionView {
+    RetractionView { reason: r.reason.clone(), created_at: r.created_at }
+}
+
 struct ObservationView {
     result: String,
     observed_at: i64,
@@ -138,6 +147,7 @@ struct AssertionSummaryView {
     actor_confidence: Option<f32>,
     evidence: Vec<EvidenceView>,
     disputes: Vec<DisputeView>,
+    retractions: Vec<RetractionView>,
     last_observation: Option<ObservationView>,
 }
 
@@ -251,6 +261,7 @@ pub async fn node_page(
             state.graph.get_node(edge.object).await?.map(|n| n.canonical_identifier).unwrap_or_else(|| edge.object.to_hex());
         let evidence = state.graph.list_evidence(a.id).await?.iter().map(evidence_view).collect();
         let disputes = state.graph.list_disputes(a.id).await?.iter().map(dispute_view).collect();
+        let retractions = state.graph.list_retractions(a.id).await?.iter().map(retraction_view).collect();
         let last_observation = state
             .graph
             .list_observations(a.id)
@@ -267,6 +278,7 @@ pub async fn node_page(
             actor_confidence: a.actor_confidence,
             evidence,
             disputes,
+            retractions,
             last_observation,
         });
     }
@@ -320,6 +332,7 @@ struct AssertionTemplate {
     observed_at: Option<i64>,
     observations: Vec<ObservationView>,
     disputes: Vec<DisputeView>,
+    retractions: Vec<RetractionView>,
     supersession: Option<SupersessionView>,
     status: String,
 }
@@ -351,6 +364,7 @@ pub async fn assertion_page(
     let evidence = state.graph.list_evidence(assertion_id).await?.iter().map(evidence_view).collect();
     let observations = state.graph.list_observations(assertion_id).await?.iter().map(observation_view).collect();
     let disputes = state.graph.list_disputes(assertion_id).await?.iter().map(dispute_view).collect();
+    let retractions = state.graph.list_retractions(assertion_id).await?.iter().map(retraction_view).collect();
 
     let supersession = state
         .graph
@@ -390,6 +404,7 @@ pub async fn assertion_page(
         observed_at: assertion.observed_at,
         observations,
         disputes,
+        retractions,
         supersession,
         status: assertion.status.as_str().to_string(),
     };

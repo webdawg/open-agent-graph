@@ -204,12 +204,25 @@ pub async fn list_disputes(
     rows.into_iter().map(row_to_dispute).collect()
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct Retraction {
     pub id: oag_core::EventId,
     pub retracted_assertion_id: AssertionId,
     pub actor_id: ActorId,
     pub reason: Option<String>,
     pub created_at: i64,
+}
+
+fn row_to_retraction(row: RetractionRow) -> Result<Retraction, StorageError> {
+    Ok(Retraction {
+        id: oag_core::EventId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.id)?)),
+        retracted_assertion_id: AssertionId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(
+            &row.retracted_assertion_id,
+        )?)),
+        actor_id: ActorId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.actor_id)?)),
+        reason: row.reason,
+        created_at: row.created_at,
+    })
 }
 
 pub async fn insert_retraction(
@@ -233,13 +246,13 @@ pub async fn insert_retraction(
 pub async fn list_retractions(
     conn: &mut SqliteConnection,
     assertion_id: AssertionId,
-) -> Result<Vec<RetractionRow>, StorageError> {
+) -> Result<Vec<Retraction>, StorageError> {
     let rows: Vec<RetractionRow> =
         sqlx::query_as("SELECT * FROM assertion_retractions WHERE retracted_assertion_id = ?")
             .bind(assertion_id.as_hash().as_bytes().to_vec())
             .fetch_all(&mut *conn)
             .await?;
-    Ok(rows)
+    rows.into_iter().map(row_to_retraction).collect()
 }
 
 pub struct Supersession {

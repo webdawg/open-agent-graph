@@ -277,6 +277,8 @@ async fn full_rest_vertical_slice() {
     assert_eq!(body["observations"][0]["result"], "confirmed");
     assert_eq!(body["disputes"].as_array().unwrap().len(), 1);
     assert_eq!(body["disputes"][0]["reason"], "outdated");
+    assert_eq!(body["retractions"].as_array().unwrap().len(), 1);
+    assert_eq!(body["retractions"][0]["reason"], serde_json::Value::Null, "retracted with no reason given");
 }
 
 #[tokio::test]

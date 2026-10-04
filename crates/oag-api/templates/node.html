@@ -84,6 +84,17 @@
     </ul>
     {% endif %}
 
+    <h3>Retraction</h3>
+    {% if a.retractions.is_empty() %}
+    <p>(not retracted)</p>
+    {% else %}
+    <ul>
+    {% for r in a.retractions %}
+      <li>{% if let Some(reason) = r.reason %}{{ reason }}{% else %}(no reason given){% endif %} at {{ r.created_at }}</li>
+    {% endfor %}
+    </ul>
+    {% endif %}
+
     <h3>Last observation</h3>
     {% if let Some(o) = a.last_observation %}
     <p>{{ o.result }} at {{ o.observed_at }}</p>

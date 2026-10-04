@@ -376,4 +376,20 @@ impl GraphService {
             .map_err(oag_storage::StorageError::from)?;
         Ok(oag_storage::repo::assertions::list_disputes(&mut conn, assertion_id).await?)
     }
+
+    /// Same shape as `list_disputes`, for an assertion's retraction record
+    /// (who retracted it, when, and why) -- previously only visible as the
+    /// bare `status: "retracted"` flag, unlike a dispute's full reason/actor
+    /// detail, which `get_assertion` already surfaced.
+    pub async fn list_retractions(
+        &self,
+        assertion_id: AssertionId,
+    ) -> Result<Vec<oag_storage::repo::assertions::Retraction>, GraphError> {
+        let mut conn = self
+            .pool()
+            .acquire()
+            .await
+            .map_err(oag_storage::StorageError::from)?;
+        Ok(oag_storage::repo::assertions::list_retractions(&mut conn, assertion_id).await?)
+    }
 }

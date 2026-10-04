@@ -279,3 +279,15 @@ Format: question, assumption I'm running with, status.
   rejected event's full signed JSON, and `oag peer forks <peer_id>` to actually view it --
   `list_forks` (the storage-layer query) already existed but, like several other capabilities found
   this session, had zero exposure above its own unit test. Status: resolved.
+
+## Retraction detail missing from get_assertion (REST/MCP/Human Interface)
+
+- **`get_assertion` showed full dispute detail (reason/actor/when) but only a bare `status:
+  "retracted"` flag** -- same information asymmetry already fixed once this session for other
+  capabilities. Root cause: `oag_storage::repo::assertions::Retraction` wasn't even `Serialize`,
+  and `list_retractions` returned the raw, unconverted `RetractionRow` (byte-array ids) instead of
+  the typed struct `list_disputes`'s sibling function already converted to -- so this wasn't just
+  unexposed, the storage layer itself was incomplete relative to its own `Dispute` pattern. Fixed
+  the conversion, added `GraphService::list_retractions`, and wired it into REST's `get_assertion`,
+  MCP's `graph_get_assertion`, and both Human Interface templates (node and assertion pages) that
+  already showed dispute detail the same way. Status: resolved.
