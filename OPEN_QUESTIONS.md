@@ -303,3 +303,15 @@ Format: question, assumption I'm running with, status.
   bare redactions array). Also removed `events::event_exists` in the same sweep -- a redundant,
   genuinely dead convenience wrapper around what `events::get_by_id(...).is_some()` already does,
   with zero callers anywhere including its own tests. Status: resolved.
+
+## Rate limiter's own tracking map was unbounded (spec section 61)
+
+- **`RateLimiter`'s per-key `HashMap` never evicted anything**, and is keyed by the raw
+  `Authorization` header string with no validation before the rate-limit check runs -- found while
+  auditing the rate-limit mechanism itself after the `/mcp` bypass fix earlier this session.
+  Confirmed live: 30,000 requests, each with a different never-valid bogus key, grew this peer's
+  RSS from ~6 MB to ~22.7 MB with zero valid credentials required at any point -- the cheapest,
+  most severe resource-exhaustion vector found this session (every other one needed at least a
+  minimally-privileged key or an already-admitted peer). Fixed with a threshold-triggered sweep
+  (`crates/oag-api/src/rate_limit.rs`) -- confirmed live that doubling the request count past the
+  sweep threshold added no further measurable growth. Status: resolved.

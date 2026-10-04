@@ -88,11 +88,19 @@ A basic per-API-key fixed-window limiter (`crates/oag-api/src/rate_limit.rs`) ca
 requests per 60-second window (spec sections 58/61/90), applied identically to REST and MCP (same
 key, same shared counter — `crates/oag-cli/src/serve.rs::build_app` gives `/mcp` its own copy of
 this layer rather than relying on `rest_router`'s own, which — found and fixed live — never actually
-covered a route merged in after `build_router` already returned). Anonymous/unauthenticated requests
-share a single bucket — they're rejected by auth before doing real work regardless, so this mainly
-exists to stop one misbehaving credential from monopolizing a peer. This is deliberately simple
-(in-memory, per-process, not distributed) — it is not a substitute for a real edge/WAF rate limiter
-on a publicly exposed deployment.
+covered a route merged in after `build_router` already returned). Requests with *no* `Authorization`
+header at all share a single `"anonymous"` bucket; a request *with* a header — even a garbage,
+never-valid one — gets its own bucket keyed by that exact string, since the limiter runs before any
+handler validates the key. This is deliberately simple (in-memory, per-process, not distributed) —
+it is not a substitute for a real edge/WAF rate limiter on a publicly exposed deployment.
+
+That per-string keying was itself an unbounded-growth vector, found and fixed live: the tracking
+map previously never evicted anything, so a caller sending a different bogus `Authorization` value
+on every request — no valid credentials needed at all — grew it forever. Confirmed: 30,000 requests
+each with a unique garbage key grew this peer's RSS from ~6 MB to ~22.7 MB with no bound in sight.
+Fixed with a threshold-triggered sweep — once the map exceeds 10,000 tracked keys, entries whose
+window has already expired are purged — confirmed live that doubling the request count (60,000,
+well past the threshold) added no further measurable growth (~23.5 MB, essentially flat).
 
 `oag-sync`'s own HTTP endpoints (`/oag/sync/v1/*`, deliberately unauthenticated — see "Federation
 trust vs. data trust" below) have a separate, global 600-requests/60s counter
