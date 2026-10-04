@@ -41,17 +41,6 @@ pub async fn insert_event(
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn event_exists(
-    conn: &mut SqliteConnection,
-    event_id: EventId,
-) -> Result<bool, StorageError> {
-    let row: Option<(i64,)> = sqlx::query_as("SELECT 1 FROM events WHERE event_id = ?")
-        .bind(event_id.as_hash().as_bytes().to_vec())
-        .fetch_optional(&mut *conn)
-        .await?;
-    Ok(row.is_some())
-}
-
 /// The one raw event row for `event_id`, if this peer has it. Backs
 /// `oag_graph::provenance::get_event_provenance` (spec sections 80-81 --
 /// showing an assertion's origin peer and signature status requires the

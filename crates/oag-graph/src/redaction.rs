@@ -23,6 +23,7 @@ use crate::error::GraphError;
 use crate::service::{AuthContext, GraphService};
 
 pub use oag_storage::repo::redactions::Redaction;
+pub use oag_storage::repo::search_suppressions::SuppressedNode;
 
 // Same spec section 61 rationale as assert.rs's MAX_REASON_LEN (which this
 // matches) -- an unbounded `reason` here isn't a signed event, so it can't
@@ -72,6 +73,15 @@ impl GraphService {
         auth.require(Permission::Admin)?;
         let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
         Ok(redactions_repo::list_all(&mut conn).await?)
+    }
+
+    /// Every currently-suppressed node (spec section 85), for `oag redact
+    /// list`'s audit view -- the parallel capability `list_redactions` has
+    /// always had, previously missing for suppression entirely.
+    pub async fn list_suppressed_nodes(&self, auth: &AuthContext) -> Result<Vec<SuppressedNode>, GraphError> {
+        auth.require(Permission::Admin)?;
+        let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(search_suppressions_repo::list_all(&mut conn).await?)
     }
 
     /// Hides `node_id` from `Self::search` results without touching the
@@ -255,13 +265,20 @@ mod tests {
 
         assert!(!service.search("redaction-test", 10).await.unwrap().is_empty());
 
+        assert!(service.list_suppressed_nodes(&auth).await.unwrap().is_empty());
+
         service.suppress_node_from_search(&auth, node.id).await.unwrap();
         assert!(service.search("redaction-test", 10).await.unwrap().is_empty());
         // Direct lookup and edges are completely untouched.
         assert!(service.get_node(node.id).await.unwrap().is_some());
 
+        let suppressed = service.list_suppressed_nodes(&auth).await.unwrap();
+        assert_eq!(suppressed.len(), 1);
+        assert_eq!(suppressed[0].node_id, node.id);
+
         service.unsuppress_node_from_search(&auth, node.id).await.unwrap();
         assert!(!service.search("redaction-test", 10).await.unwrap().is_empty());
+        assert!(service.list_suppressed_nodes(&auth).await.unwrap().is_empty());
     }
 
     #[tokio::test]

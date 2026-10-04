@@ -291,3 +291,15 @@ Format: question, assumption I'm running with, status.
   the conversion, added `GraphService::list_retractions`, and wired it into REST's `get_assertion`,
   MCP's `graph_get_assertion`, and both Human Interface templates (node and assertion pages) that
   already showed dispute detail the same way. Status: resolved.
+
+## Suppressed-node listing missing (found during an unused-function sweep)
+
+- **`search_suppressions` had `suppress`/`unsuppress`/`is_suppressed` but no way to list what's
+  currently suppressed**, unlike `redactions`, whose `list_all` backs `oag redact list`'s audit
+  view. An operator could suppress a node and then have no way to later see the full list of
+  what's suppressed without guessing node ids one at a time. Added
+  `search_suppressions::list_all`, `GraphService::list_suppressed_nodes`, and folded it into `oag
+  redact list`'s existing output (`{"redactions": [...], "suppressed_nodes": [...]}` instead of a
+  bare redactions array). Also removed `events::event_exists` in the same sweep -- a redundant,
+  genuinely dead convenience wrapper around what `events::get_by_id(...).is_some()` already does,
+  with zero callers anywhere including its own tests. Status: resolved.

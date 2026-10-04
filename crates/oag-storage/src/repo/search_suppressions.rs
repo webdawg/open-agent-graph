@@ -8,7 +8,13 @@
 use oag_core::NodeId;
 use sqlx::SqliteConnection;
 
-use crate::error::StorageError;
+use crate::error::{bytes_to_array, StorageError};
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SuppressedNode {
+    pub node_id: NodeId,
+    pub suppressed_at: i64,
+}
 
 pub async fn suppress(
     conn: &mut SqliteConnection,
@@ -37,6 +43,24 @@ pub async fn is_suppressed(conn: &mut SqliteConnection, node_id: NodeId) -> Resu
         .fetch_optional(&mut *conn)
         .await?;
     Ok(row.is_some())
+}
+
+/// Every currently-suppressed node (spec section 85's audit view) --
+/// `search_suppressions` had `suppress`/`unsuppress`/`is_suppressed` but no
+/// way to list what's actually suppressed right now, unlike `redactions`'
+/// own `list` (`crate::repo::redactions::list`), used by `oag redact list`.
+pub async fn list_all(conn: &mut SqliteConnection) -> Result<Vec<SuppressedNode>, StorageError> {
+    let rows: Vec<(Vec<u8>, i64)> = sqlx::query_as("SELECT node_id, suppressed_at FROM search_suppressions")
+        .fetch_all(&mut *conn)
+        .await?;
+    rows.into_iter()
+        .map(|(node_id, suppressed_at)| {
+            Ok(SuppressedNode {
+                node_id: NodeId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&node_id)?)),
+                suppressed_at,
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]

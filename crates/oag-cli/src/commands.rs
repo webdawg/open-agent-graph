@@ -383,8 +383,13 @@ pub async fn redact_evidence(
 
 pub async fn redact_list(data_dir: &Path) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
-    let redactions = graph.list_redactions(&cli_admin_auth()).await?;
-    println!("{}", serde_json::to_string_pretty(&redactions)?);
+    let auth = cli_admin_auth();
+    let redactions = graph.list_redactions(&auth).await?;
+    let suppressed_nodes = graph.list_suppressed_nodes(&auth).await?;
+    println!("{}", serde_json::to_string_pretty(&serde_json::json!({
+        "redactions": redactions,
+        "suppressed_nodes": suppressed_nodes,
+    }))?);
     Ok(())
 }
 
@@ -688,6 +693,28 @@ mod tests {
         let redactions = graph.list_redactions(&cli_admin_auth()).await.unwrap();
         assert_eq!(redactions.len(), 1);
         assert_eq!(redactions[0].reason.as_deref(), Some("test reason"));
+    }
+
+    #[tokio::test]
+    async fn redact_suppress_node_shows_up_in_list_suppressed_nodes() {
+        let data_dir = temp_dir("redact-suppress-list");
+        seed_evidence(&data_dir).await;
+
+        let graph = open_graph(&data_dir).await.unwrap();
+        let oag_graph::ResolveOutcome::Found { node, .. } =
+            graph.resolve("https://example.com/redact-cli-target").await.unwrap()
+        else {
+            panic!("expected the seeded subject to resolve");
+        };
+
+        redact_suppress_node(&data_dir, &node.id.to_hex()).await.unwrap();
+
+        let suppressed = graph.list_suppressed_nodes(&cli_admin_auth()).await.unwrap();
+        assert_eq!(suppressed.len(), 1);
+        assert_eq!(suppressed[0].node_id, node.id);
+
+        redact_unsuppress_node(&data_dir, &node.id.to_hex()).await.unwrap();
+        assert!(graph.list_suppressed_nodes(&cli_admin_auth()).await.unwrap().is_empty());
     }
 
     #[tokio::test]
