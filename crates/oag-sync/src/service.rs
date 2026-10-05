@@ -223,9 +223,23 @@ impl SyncService {
         // record per claimed peer.
         const MAX_PEERS_PER_RESPONSE: usize = 200;
         const MAX_ADDRESSES_PER_PEER: usize = 5;
+        // The per-response cap above doesn't bound the *total* peers table
+        // size on its own -- the gossip loop re-syncs with every known
+        // address forever (`gossip.rs`), so a single malicious relay
+        // feeding 200 fresh, cheaply-generated-but-cryptographically-valid
+        // fake identities every round would otherwise grow `peers`/
+        // `peer_addresses` on disk without bound. A peer_id/public_key pair
+        // that doesn't derive correctly is rejected regardless (see below),
+        // but generating a real keypair costs an attacker nothing, so that
+        // check alone doesn't stop this. Global cap, checked once per call
+        // rather than per-candidate-peer to avoid an extra query per entry.
+        const MAX_TOTAL_KNOWN_PEERS: i64 = 10_000;
 
         let Ok(peers) = self.client.fetch_peers(addr).await else { return };
         let Ok(mut conn) = self.pool.acquire().await else { return };
+        if matches!(peers_repo::count_peers(&mut conn).await, Ok(count) if count >= MAX_TOTAL_KNOWN_PEERS) {
+            return;
+        }
         let now = now_ts();
         for p in peers.peers.into_iter().take(MAX_PEERS_PER_RESPONSE) {
             let (Ok(pid), Some(pk)) = (p.peer_id.parse::<PeerId>(), decode_hex32(&p.public_key)) else {

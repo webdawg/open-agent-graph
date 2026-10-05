@@ -63,6 +63,14 @@ pub async fn get_peer(
     row.map(row_to_info).transpose()
 }
 
+/// Total known-peer count, independent of any one query's row limit --
+/// backs a global cap on how many distinct peers this peer will ever learn
+/// about via gossip (spec section 61 -- "disk exhaustion").
+pub async fn count_peers(conn: &mut SqliteConnection) -> Result<i64, StorageError> {
+    let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM peers").fetch_one(&mut *conn).await?;
+    Ok(count)
+}
+
 pub async fn list_peers(conn: &mut SqliteConnection) -> Result<Vec<PeerInfo>, StorageError> {
     let rows: Vec<PeerRow> = sqlx::query_as("SELECT * FROM peers ORDER BY first_seen")
         .fetch_all(&mut *conn)

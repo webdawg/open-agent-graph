@@ -315,3 +315,17 @@ Format: question, assumption I'm running with, status.
   minimally-privileged key or an already-admitted peer). Fixed with a threshold-triggered sweep
   (`crates/oag-api/src/rate_limit.rs`) -- confirmed live that doubling the request count past the
   sweep threshold added no further measurable growth. Status: resolved.
+
+## No global cap on total known peers (spec section 61)
+
+- **`discover_peers`'s `MAX_PEERS_PER_RESPONSE` only ever bounded one gossip round**, not the
+  `peers` table's total size -- found while checking for other instances of the same
+  unbounded-growth shape as the rate limiter fix above. The gossip loop re-syncs with every known
+  address forever, so one malicious relay feeding 200 fresh identities every round would grow
+  `peers`/`peer_addresses` on disk without bound; generating a real keypair is free for an
+  attacker, so the peer_id/public_key consistency check (an earlier fix this session) doesn't stop
+  it either -- that only catches lying about an existing pairing, not minting unlimited new valid
+  ones. Added a global `MAX_TOTAL_KNOWN_PEERS` (10,000) cap, checked once per `discover_peers` call
+  rather than once per candidate peer. Confirmed with a test that fills a peer's table to the cap
+  and checks a real, legitimate peer introduced via gossip is still correctly rejected once full;
+  the 50-peer chaos convergence test (well under the cap) still passes unaffected. Status: resolved.

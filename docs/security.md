@@ -125,6 +125,16 @@ malicious or compromised peer's `/hello`/`/heads`/`/events`/`/peers` response is
 same 4 MiB cap rather than buffered unbounded before `discover_peers`'s own item-count caps
 (`MAX_PEERS_PER_RESPONSE`/`MAX_ADDRESSES_PER_PEER`) ever get a chance to run.
 
+Those per-response caps bound one gossip round, not the *total* `peers` table size on their own —
+the gossip loop re-syncs with every known address forever (`crates/oag-sync/src/gossip.rs`), so a
+single malicious relay feeding 200 fresh identities every round would otherwise grow `peers`/
+`peer_addresses` on disk without bound. Generating a real Ed25519 keypair costs an attacker nothing,
+so the peer_id/public_key consistency check above doesn't stop this either — it only catches lying
+about an *existing* pairing, not minting endless new, individually-valid ones. `discover_peers` now
+also checks a global cap (`MAX_TOTAL_KNOWN_PEERS`, 10,000) before learning any new peer from a
+gossip response at all, confirmed with a test that fills a peer's table to the cap and checks a
+real, legitimate peer introduced via gossip is still correctly rejected once full.
+
 A caller's own `limit` parameter is the same class of boundary, from the other direction: SQLite
 treats a negative `LIMIT` as "no limit at all," not as zero or an error — confirmed live, `GET
 /api/v1/search?q=...&limit=-1` returned *every* matching row rather than being rejected or clamped,

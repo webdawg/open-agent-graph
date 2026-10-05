@@ -283,6 +283,55 @@ async fn relay_without_origin_dependency() {
     assert_eq!(fetched.unwrap().status, AssertionStatus::Active);
 }
 
+/// Regression test for the exact bug found live: `discover_peers`'
+/// per-response cap (`MAX_PEERS_PER_RESPONSE`) doesn't bound the *total*
+/// peers table size on its own, since the gossip loop re-syncs with every
+/// known address forever -- a single malicious relay feeding fresh,
+/// cheaply-generated-but-cryptographically-valid fake identities every
+/// round would otherwise grow `peers`/`peer_addresses` on disk without
+/// bound. Seeds a victim already at the global cap, then confirms a
+/// *real, legitimate* peer introduced via gossip is still correctly
+/// rejected -- not because anything about the introduction is wrong, but
+/// purely because the table is already full.
+#[tokio::test]
+async fn discover_peers_does_not_grow_the_table_past_the_global_cap() {
+    let a = spawn_peer("cap-a").await;
+    let b = spawn_peer("cap-b").await;
+    let victim = spawn_peer("cap-victim").await;
+
+    // B genuinely knows about A (direct hello-handshake contact).
+    b.sync.sync_with_peer(&a.addr).await.unwrap();
+
+    // Fill victim's own table up to the same cap used in service.rs.
+    const MAX_TOTAL_KNOWN_PEERS: usize = 10_000;
+    {
+        let mut conn = victim.graph.pool().acquire().await.unwrap();
+        for _ in 0..MAX_TOTAL_KNOWN_PEERS {
+            let filler_identity = PeerIdentity::generate();
+            oag_storage::repo::peers::upsert_peer(
+                &mut conn,
+                filler_identity.peer_id().as_bytes(),
+                &filler_identity.verifying_key().to_bytes(),
+                None,
+                0,
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    // Victim syncs with B -- B's own /peers response will include A.
+    victim.sync.sync_with_peer(&b.addr).await.unwrap();
+
+    let mut conn = victim.graph.pool().acquire().await.unwrap();
+    let learned_a =
+        oag_storage::repo::peers::get_peer(&mut conn, a.sync.self_peer_id().as_bytes()).await.unwrap();
+    assert!(
+        learned_a.is_none(),
+        "a real, legitimate peer introduced via gossip must still be rejected once the victim is already at the global cap"
+    );
+}
+
 fn one_signed_event_json() -> serde_json::Value {
     let identity = PeerIdentity::generate();
     let (signed, _id) = oag_events::build_and_sign(
