@@ -236,7 +236,9 @@ pin down exactly what a bad pairing does and doesn't enable, directly (`crates/o
 `oag redact suppress-node`/`unsuppress-node` is a *much* weaker, fully reversible intervention: it
 hides a node from search results only. The node, its edges, and every assertion about it remain
 fully intact and directly retrievable by id — this is a UI-layer omission, not a data-minimization
-control, and should not be relied on to keep anything actually private.
+control, and should not be relied on to keep anything actually private. `oag redact list` shows
+both audit views together — every redaction tombstone and every currently-suppressed node — rather
+than just the former.
 
 **Bottom line**: OAG's redaction tooling minimizes what *this* peer keeps and serves going forward.
 It is not, and cannot be, a mechanism for retracting data from a network you don't fully control —
