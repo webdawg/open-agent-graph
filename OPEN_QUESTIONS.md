@@ -329,3 +329,20 @@ Format: question, assumption I'm running with, status.
   rather than once per candidate peer. Confirmed with a test that fills a peer's table to the cap
   and checks a real, legitimate peer introduced via gossip is still correctly rejected once full;
   the 50-peer chaos convergence test (well under the cap) still passes unaffected. Status: resolved.
+
+## Concurrent local commits from the same peer could race (spec section 38)
+
+- **`commit_local_event`'s own doc comment claimed concurrent calls "serialize correctly against
+  SQLite's writer lock," which doesn't hold in WAL mode.** Each call reads the current head under
+  its own snapshot, then writes based on it; two interleaved calls can make the second writer hit
+  `SQLITE_BUSY_SNAPSHOT`, which `busy_timeout` cannot resolve by waiting (a stale read snapshot
+  needs the whole read-then-write restarted, not a retry of the same write). Confirmed live: 10-13
+  of 20 concurrent `GraphService` commits for the same peer failed outright with a raw "database is
+  locked" error -- a real reliability bug reachable by completely ordinary concurrent REST/MCP
+  usage, not just a contrived attack. Fixed with a serialization lock on `GraphService`
+  (`commit_event`, the one path every mutation method now goes through) rather than inside
+  `commit_local_event` itself, since a given peer has exactly one identity and therefore exactly
+  one logical writer of its own chain ever. Verified both ways: the fix removed and confirmed the
+  test fails (10-13/20 errors), then restored and confirmed it passes; the 50-peer chaos
+  convergence test (a different scenario -- remote ingest contention across peers, already
+  tolerated by its own retry sweeps) still passes unaffected. Status: resolved.

@@ -14,8 +14,16 @@ use crate::projector::{project, ProjectionOutcome};
 /// leave a projected event that doesn't exist in the local event log).
 ///
 /// Sequence/`previous_event` are read from `event_origins` for our own
-/// `peer_id` inside the same transaction, so concurrent calls serialize
-/// correctly against SQLite's writer lock.
+/// `peer_id` inside the same transaction. **This function is *not* safe to
+/// call concurrently for the same peer on its own** -- confirmed live,
+/// WAL mode's `SQLITE_BUSY_SNAPSHOT` means two interleaved calls can make
+/// the second one fail outright rather than simply wait (see
+/// `oag_events::tests::commit_local_event_itself_is_not_safe_for_concurrent_same_peer_calls`).
+/// Every real caller goes through `oag_graph::GraphService::commit_event`,
+/// which serializes calls with its own lock one layer up -- a given peer
+/// has exactly one identity and therefore exactly one logical writer of
+/// its own chain ever, so there's no reason to allow concurrent attempts
+/// at the SQLite level at all.
 pub async fn commit_local_event(
     pool: &SqlitePool,
     identity: &PeerIdentity,

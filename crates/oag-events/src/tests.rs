@@ -527,3 +527,57 @@ async fn actor_key_revoke_deactivates_the_key() {
     assert_eq!(keys.len(), 1);
     assert!(keys[0].revoked_at.is_some(), "list_keys must still show the key, flagged as revoked");
 }
+
+/// `commit_local_event` itself is **not** safe to call concurrently for the
+/// same peer -- found live, not assumed: this function's own doc comment
+/// claimed "concurrent calls serialize correctly against SQLite's writer
+/// lock," which doesn't hold in WAL mode. Each call reads the current head
+/// under its own snapshot, then writes based on it; when two calls
+/// interleave, the second to attempt its write hits `SQLITE_BUSY_SNAPSHOT`
+/// (surfaced here as a generic "database is locked" error) rather than
+/// waiting (a `busy_timeout` can't fix a stale read snapshot by waiting --
+/// only restarting the whole read-then-write can). This test exists to
+/// document that fact and guard against someone "fixing" it by deleting
+/// this test rather than understanding why it fails: the real fix is a
+/// serialization lock one layer up, in `oag_graph::GraphService::
+/// commit_event` (every `GraphService` method goes through it, there is
+/// no direct caller of this function outside that one wrapper), verified
+/// by the analogous test in `oag-graph`.
+#[tokio::test]
+async fn commit_local_event_itself_is_not_safe_for_concurrent_same_peer_calls() {
+    let pool = open_pool(&temp_db_path("concurrent-commits-raw")).await.unwrap();
+    let identity = PeerIdentity::generate();
+
+    let mut tasks = Vec::new();
+    for i in 0..20 {
+        let pool = pool.clone();
+        let identity = identity.clone();
+        tasks.push(tokio::spawn(async move {
+            commit_local_event(
+                &pool,
+                &identity,
+                EventPayload::ActorDeclare(ActorDeclarePayload {
+                    actor_type: "agent".into(),
+                    name: Some(format!("concurrent-actor-{i}")),
+                    public_key: None,
+                    identity_uri: None,
+                }),
+                1_700_000_000,
+            )
+            .await
+        }));
+    }
+
+    let mut errors = 0;
+    for task in tasks {
+        if task.await.unwrap().is_err() {
+            errors += 1;
+        }
+    }
+    assert!(
+        errors > 0,
+        "expected at least some of these 20 unserialized concurrent calls to race and fail -- if this \
+         now passes, something about SQLite's own locking behavior changed, and GraphService::commit_event's \
+         serialization lock may no longer be load-bearing (or this test got lucky; rerun before concluding that)"
+    );
+}

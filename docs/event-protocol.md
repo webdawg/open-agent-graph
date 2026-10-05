@@ -60,7 +60,8 @@ to validate the next incoming event from that origin without re-scanning the who
 
 ### Committing a local event
 
-`oag_events::commit::commit_local_event` (called by every `GraphService` write method):
+`oag_events::commit::commit_local_event`, called through exactly one path —
+`GraphService::commit_event` — which every write method goes through:
 
 1. Read this peer's own `event_origins` row for its `highest_contiguous_sequence`/`head_event_id`.
 2. Build `UnsignedEvent { sequence: head + 1, previous_event: head_event_id, ... }`, canonicalize,
@@ -73,6 +74,15 @@ Steps 3-5 happen inside **one SQLite transaction**. If projection fails for any 
 transaction — including the event insert — rolls back. This is the invariant that makes `oag
 rebuild` safe: every event that currently exists in the `events` table, by construction, already
 projected successfully once, in exactly the order it was inserted.
+
+**`commit_local_event` itself is not safe to call concurrently for the same peer** — found live,
+not assumed: steps 1 and 2-5 are a read-then-write across one transaction, and in WAL mode two
+interleaved calls can make the second one hit SQLite's `SQLITE_BUSY_SNAPSHOT` outright rather than
+simply wait for the first (a stale read snapshot needs the whole read-then-write restarted, which
+`busy_timeout` cannot do on the caller's behalf). Confirmed: 10-13 of 20 concurrent calls failed
+this way before the fix. `GraphService::commit_event` is the single serialization point — a given
+peer has exactly one identity and therefore exactly one logical writer of its own chain ever, so
+every mutation method is routed through it rather than calling `commit_local_event` directly.
 
 ### Ingesting a remote event
 

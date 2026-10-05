@@ -753,6 +753,35 @@ async fn declare_actor_rejects_an_oversized_identity_uri() {
     assert!(matches!(result, Err(crate::error::GraphError::InvalidInput(_))), "got {result:?}");
 }
 
+/// The real regression test for the race `oag_events`' own
+/// `commit_local_event_itself_is_not_safe_for_concurrent_same_peer_calls`
+/// documents at the function level: `GraphService::commit_event`'s
+/// serialization lock is what actually has to make concurrent same-peer
+/// commits safe, since every `GraphService` method goes through it.
+/// Confirmed live before this lock existed: 10 of 20 concurrent calls here
+/// failed outright with a raw "database is locked" SQLite error.
+#[tokio::test]
+async fn concurrent_graph_service_commits_from_the_same_peer_all_succeed() {
+    let (service, _) = service_with_admin("concurrent-graph-service-commits").await;
+    let service = std::sync::Arc::new(service);
+
+    let mut tasks = Vec::new();
+    for i in 0..20 {
+        let service = service.clone();
+        tasks.push(tokio::spawn(async move {
+            service.declare_actor(oag_core::ActorType::Agent, Some(format!("concurrent-actor-{i}")), None, None).await
+        }));
+    }
+
+    let mut errors = Vec::new();
+    for task in tasks {
+        if let Err(e) = task.await.unwrap() {
+            errors.push(format!("{e}"));
+        }
+    }
+    assert!(errors.is_empty(), "every concurrent GraphService commit should succeed, got errors: {errors:?}");
+}
+
 #[tokio::test]
 async fn same_public_key_dedups_to_the_same_actor_id() {
     let (service, _) = service_with_admin("actor-proof-dedup").await;

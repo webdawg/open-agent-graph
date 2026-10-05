@@ -49,11 +49,24 @@ pub struct PublicKeyProof {
 pub struct GraphService {
     pool: SqlitePool,
     identity: PeerIdentity,
+    /// Serializes every local commit (spec section 38's one-transaction
+    /// guarantee is necessary but not sufficient on its own): confirmed
+    /// live that concurrent calls into `commit_local_event` for the same
+    /// peer -- e.g. two simultaneous REST requests -- can hit SQLite's
+    /// `SQLITE_BUSY_SNAPSHOT` in WAL mode, which `busy_timeout` does not
+    /// resolve by waiting (a stale read snapshot can't be fixed by
+    /// retrying the same write; the whole read-then-write needs to
+    /// restart). A given peer has exactly one identity and therefore
+    /// exactly one logical writer of its own event chain ever -- there's
+    /// no reason local commits should ever race at the SQLite level at
+    /// all, so this makes that true in-process rather than hoping the
+    /// database's own locking happens to cover it.
+    commit_lock: tokio::sync::Mutex<()>,
 }
 
 impl GraphService {
     pub fn new(pool: SqlitePool, identity: PeerIdentity) -> Self {
-        Self { pool, identity }
+        Self { pool, identity, commit_lock: tokio::sync::Mutex::new(()) }
     }
 
     pub fn pool(&self) -> &SqlitePool {
@@ -66,6 +79,17 @@ impl GraphService {
 
     pub(crate) fn now(&self) -> i64 {
         chrono_now()
+    }
+
+    /// The only path any `GraphService` method should use to commit a
+    /// local event -- see `commit_lock`'s own doc comment for why.
+    pub(crate) async fn commit_event(
+        &self,
+        payload: EventPayload,
+        created_at: i64,
+    ) -> Result<(oag_core::EventId, ProjectionOutcome), oag_events::EventsError> {
+        let _guard = self.commit_lock.lock().await;
+        commit_local_event(&self.pool, &self.identity, payload, created_at).await
     }
 }
 
@@ -168,18 +192,17 @@ impl GraphService {
         };
 
         let now = self.now();
-        let (_, outcome) = commit_local_event(
-            &self.pool,
-            &self.identity,
-            EventPayload::ActorDeclare(ActorDeclarePayload {
-                actor_type: actor_type.as_str().to_string(),
-                name,
-                public_key: public_key_hex,
-                identity_uri,
-            }),
-            now,
-        )
-        .await?;
+        let (_, outcome) = self
+            .commit_event(
+                EventPayload::ActorDeclare(ActorDeclarePayload {
+                    actor_type: actor_type.as_str().to_string(),
+                    name,
+                    public_key: public_key_hex,
+                    identity_uri,
+                }),
+                now,
+            )
+            .await?;
         match outcome {
             ProjectionOutcome::ActorDeclared { actor_id } => Ok(actor_id),
             _ => unreachable!("ActorDeclare always yields ActorDeclared"),
@@ -198,9 +221,7 @@ impl GraphService {
         let raw_key = format!("oagk_{}", hex::encode(raw));
         let key_hash = blake3::hash(raw_key.as_bytes());
 
-        commit_local_event(
-            &self.pool,
-            &self.identity,
+        self.commit_event(
             EventPayload::ActorKeyAdd(ActorKeyAddPayload {
                 actor_id: actor_id.to_hex(),
                 key_hash: key_hash.to_hex().to_string(),
@@ -247,9 +268,7 @@ impl GraphService {
             return Err(GraphError::NotFound(format!("active key {key_hash_hex}")));
         };
 
-        commit_local_event(
-            &self.pool,
-            &self.identity,
+        self.commit_event(
             EventPayload::ActorKeyRevoke(oag_events::payload::ActorKeyRevokePayload {
                 actor_id: existing.actor_id.to_hex(),
                 key_hash: key_hash_hex.to_string(),

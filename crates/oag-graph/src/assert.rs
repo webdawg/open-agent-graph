@@ -3,7 +3,7 @@ use oag_events::payload::{
     AddEvidencePayload, AssertRelationPayload, DisputeAssertionPayload, NodeAliasPayload,
     RetractAssertionPayload, SupersedeAssertionPayload, VerifyAssertionPayload,
 };
-use oag_events::{commit_local_event, EventPayload};
+use oag_events::EventPayload;
 
 use crate::error::GraphError;
 use crate::identifier::canonicalize_value;
@@ -121,27 +121,26 @@ impl GraphService {
             .unwrap_or_else(|| "unknown".to_string());
 
         let now = self.now();
-        let (assertion_id, _) = commit_local_event(
-            self.pool(),
-            self.identity(),
-            EventPayload::AssertRelation(AssertRelationPayload {
-                subject_identifier,
-                subject_type,
-                predicate: input.predicate,
-                object_identifier,
-                object_type,
-                actor_id: auth.actor_id.to_hex(),
-                actor_confidence: input.actor_confidence,
-                observed_at: input.observed_at,
-                extraction_method: input
-                    .extraction_method
-                    .unwrap_or(ExtractionMethod::Direct)
-                    .as_str()
-                    .to_string(),
-            }),
-            now,
-        )
-        .await?;
+        let (assertion_id, _) = self
+            .commit_event(
+                EventPayload::AssertRelation(AssertRelationPayload {
+                    subject_identifier,
+                    subject_type,
+                    predicate: input.predicate,
+                    object_identifier,
+                    object_type,
+                    actor_id: auth.actor_id.to_hex(),
+                    actor_confidence: input.actor_confidence,
+                    observed_at: input.observed_at,
+                    extraction_method: input
+                        .extraction_method
+                        .unwrap_or(ExtractionMethod::Direct)
+                        .as_str()
+                        .to_string(),
+                }),
+                now,
+            )
+            .await?;
 
         for evidence in input.evidence {
             self.add_evidence_internal(assertion_id, evidence).await?;
@@ -169,9 +168,7 @@ impl GraphService {
         assertion_id: AssertionId,
         evidence: EvidenceInput,
     ) -> Result<(), GraphError> {
-        commit_local_event(
-            self.pool(),
-            self.identity(),
+        self.commit_event(
             EventPayload::AddEvidence(AddEvidencePayload {
                 assertion_id: assertion_id.to_hex(),
                 evidence_type: evidence.evidence_type.unwrap_or_else(|| "other".to_string()),
@@ -204,9 +201,7 @@ impl GraphService {
         auth.require(Permission::GraphAssert)?;
         check_len("alias", &alias, MAX_ALIAS_LEN)?;
 
-        commit_local_event(
-            self.pool(),
-            self.identity(),
+        self.commit_event(
             EventPayload::NodeAlias(NodeAliasPayload {
                 node_id: node_id.to_hex(),
                 alias,
@@ -230,9 +225,7 @@ impl GraphService {
         observed_at: i64,
     ) -> Result<(), GraphError> {
         auth.require(Permission::GraphVerify)?;
-        commit_local_event(
-            self.pool(),
-            self.identity(),
+        self.commit_event(
             EventPayload::VerifyAssertion(VerifyAssertionPayload {
                 assertion_id: assertion_id.to_hex(),
                 observer_actor_id: auth.actor_id.to_hex(),
@@ -254,9 +247,7 @@ impl GraphService {
     ) -> Result<(), GraphError> {
         auth.require(Permission::GraphAssert)?;
         check_opt_len("reason", &reason, MAX_REASON_LEN)?;
-        commit_local_event(
-            self.pool(),
-            self.identity(),
+        self.commit_event(
             EventPayload::DisputeAssertion(DisputeAssertionPayload {
                 disputed_assertion_id: disputed_assertion_id.to_hex(),
                 disputing_actor_id: auth.actor_id.to_hex(),
@@ -290,9 +281,7 @@ impl GraphService {
             ));
         }
 
-        commit_local_event(
-            self.pool(),
-            self.identity(),
+        self.commit_event(
             EventPayload::RetractAssertion(RetractAssertionPayload {
                 retracted_assertion_id: retracted_assertion_id.to_hex(),
                 actor_id: auth.actor_id.to_hex(),
@@ -312,9 +301,7 @@ impl GraphService {
         new_assertion_id: AssertionId,
     ) -> Result<(), GraphError> {
         auth.require(Permission::GraphAssert)?;
-        commit_local_event(
-            self.pool(),
-            self.identity(),
+        self.commit_event(
             EventPayload::SupersedeAssertion(SupersedeAssertionPayload {
                 old_assertion_id: old_assertion_id.to_hex(),
                 new_assertion_id: new_assertion_id.to_hex(),
