@@ -23,7 +23,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | POST | `/assertions` | `graph:assert` | Create an assertion, optionally with evidence attached |
 | POST | `/assertions/{id}/evidence` | `graph:assert` | Attach evidence to an existing assertion |
 | POST | `/assertions/{id}/verify` | `graph:verify` | Record a verification observation |
-| POST | `/assertions/{id}/dispute` | `graph:verify` | Dispute an assertion |
+| POST | `/assertions/{id}/dispute` | `graph:assert` | Dispute an assertion (disputing is itself a claim about a claim, same permission as making one) |
 | POST | `/assertions/{id}/retract` | `graph:retract-own` | Retract your own assertion |
 | POST | `/assertions/{id}/supersede` | `graph:assert` | Flag an assertion as superseded by a newer one (spec section 36) -- both must already exist |
 | GET | `/edges/{id}` | `graph:read` | Get an edge (subject/predicate/object) by id |
