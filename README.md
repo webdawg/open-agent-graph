@@ -13,9 +13,12 @@ document that was never committed to this repository and is no longer retrievabl
 Status: signed event log, REST API, MCP server, and peer-to-peer replication (`oag-sync`, plus an
 optional Reticulum mesh transport) are all implemented and share one service layer. Also built:
 corroboration/ranking signals, semantic search, an LLM-extraction fallback for the crawler,
-Prometheus-style metrics, structured request logging, local evidence redaction, and a minimal
-human-browsable HTML view (`/ui/search`, `/ui/nodes/{id}`, `/ui/assertions/{id}`). See `docs/` for
-the full picture — start with `docs/architecture.md`.
+Prometheus-style metrics, structured request logging, local evidence redaction, a minimal
+human-browsable HTML view (`/ui/search`, `/ui/nodes/{id}`, `/ui/assertions/{id}`), and a small
+per-peer tensor-pad memory (`oag-tensor`) nudged by real sync outcomes. A separate, optional
+evolution layer (`oag-brain/` — outside this workspace; needs `libtensorflow`) programs that pad
+via real scaled dot-product self-attention between two peers. See `docs/` for the full picture —
+start with `docs/architecture.md`.
 
 ## Specification
 

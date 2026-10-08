@@ -66,6 +66,7 @@ instead.
 | [20-configuration.md](20-configuration.md) | `config.toml` |
 | [21-petname.md](21-petname.md) | Deterministic human-readable peer display names |
 | [22-future-work.md](22-future-work.md) | Deliberately not built yet, and why |
+| [23-tensor-pad-and-evolution-layer.md](23-tensor-pad-and-evolution-layer.md) | Per-peer tensor pad memory, and the TensorFlow-backed attention layer that programs it |
 
 ## Founding context
 
