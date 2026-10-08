@@ -1864,6 +1864,7 @@ dependencies = [
  "oag-reticulum",
  "oag-storage",
  "oag-sync",
+ "oag-tensor",
  "reqwest",
  "serde",
  "serde_json",
@@ -2061,6 +2062,7 @@ dependencies = [
  "oag-events",
  "oag-graph",
  "oag-storage",
+ "oag-tensor",
  "rand 0.8.8",
  "reqwest",
  "serde",
@@ -2070,6 +2072,10 @@ dependencies = [
  "tower-http 0.7.1",
  "tracing",
 ]
+
+[[package]]
+name = "oag-tensor"
+version = "0.1.0"
 
 [[package]]
 name = "once_cell"

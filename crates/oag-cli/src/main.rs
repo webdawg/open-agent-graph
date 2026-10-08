@@ -97,6 +97,11 @@ enum Command {
         #[command(subcommand)]
         command: EmbeddingsCommand,
     },
+    /// Ant memory node: this peer's small persistent tensor pad.
+    Tensor {
+        #[command(subcommand)]
+        command: TensorCommand,
+    },
     /// Create a consistent snapshot of the whole local database (spec
     /// section 82) -- safe to run against a live `oag serve` (uses SQLite's
     /// `VACUUM INTO`, not a raw file copy, which could grab an inconsistent
@@ -285,6 +290,15 @@ enum IdentityCommand {
 }
 
 #[derive(Subcommand)]
+enum TensorCommand {
+    /// Print this peer's current tensor pad values as a JSON array.
+    Show {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum KeyCommand {
     Create {
         #[arg(long, default_value = "./data")]
@@ -438,6 +452,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Identity { command: IdentityCommand::Restore { data_dir, backup_path, force } } => {
             commands::identity_restore(&data_dir, &backup_path, force).await
         }
+        Command::Tensor { command: TensorCommand::Show { data_dir } } => commands::tensor_show(&data_dir).await,
         Command::Key {
             command:
                 KeyCommand::Create { data_dir, actor_type, name, permissions, public_key, key_proof, identity_uri },

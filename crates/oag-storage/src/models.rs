@@ -181,6 +181,13 @@ pub struct NodeEmbeddingRow {
 }
 
 #[derive(Debug, FromRow)]
+pub struct TensorPadRow {
+    pub peer_id: Vec<u8>,
+    pub pad_values: Vec<u8>,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, FromRow)]
 pub struct RedactionRow {
     pub event_id: Vec<u8>,
     pub redacted_at: i64,

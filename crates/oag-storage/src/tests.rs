@@ -387,3 +387,36 @@ async fn list_keys_reports_colon_separated_permission_strings() {
         assert!(Permission::parse(p).is_some(), "{p} must round-trip through Permission::parse");
     }
 }
+
+#[tokio::test]
+async fn tensor_pad_get_returns_none_for_unknown_peer() {
+    let path = temp_db_path("tensor-pad-unknown");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let result = repo::tensor_pads::get(&mut conn, &[1u8; 32]).await.unwrap();
+    assert!(result.is_none());
+}
+
+#[tokio::test]
+async fn tensor_pad_upsert_then_get_round_trips_values() {
+    let path = temp_db_path("tensor-pad-round-trip");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let peer_id = [2u8; 32];
+    let values: Vec<f32> = (0..32).map(|i| i as f32 * 0.5).collect();
+    repo::tensor_pads::upsert(&mut conn, &peer_id, &values, 100).await.unwrap();
+    let fetched = repo::tensor_pads::get(&mut conn, &peer_id).await.unwrap().unwrap();
+    assert_eq!(fetched, values);
+}
+
+#[tokio::test]
+async fn tensor_pad_upsert_overwrites_existing_row_for_same_peer() {
+    let path = temp_db_path("tensor-pad-overwrite");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+    let peer_id = [3u8; 32];
+    repo::tensor_pads::upsert(&mut conn, &peer_id, &[1.0; 32], 100).await.unwrap();
+    repo::tensor_pads::upsert(&mut conn, &peer_id, &[2.0; 32], 200).await.unwrap();
+    let fetched = repo::tensor_pads::get(&mut conn, &peer_id).await.unwrap().unwrap();
+    assert_eq!(fetched, vec![2.0; 32]);
+}

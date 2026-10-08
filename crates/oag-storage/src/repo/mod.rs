@@ -11,3 +11,4 @@ pub mod redactions;
 pub mod replication;
 pub mod search_suppressions;
 pub mod stats;
+pub mod tensor_pads;

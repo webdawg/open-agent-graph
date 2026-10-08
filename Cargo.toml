@@ -13,6 +13,7 @@ members = [
     "crates/oag-petname",
     "crates/oag-reticulum",
     "crates/oag-embeddings",
+    "crates/oag-tensor",
     "crates/oag-cli",
 ]
 
@@ -34,6 +35,7 @@ oag-crawler = { path = "crates/oag-crawler" }
 oag-petname = { path = "crates/oag-petname" }
 oag-reticulum = { path = "crates/oag-reticulum" }
 oag-embeddings = { path = "crates/oag-embeddings" }
+oag-tensor = { path = "crates/oag-tensor" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

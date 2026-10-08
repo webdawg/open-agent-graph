@@ -282,6 +282,17 @@ pub async fn identity_show(data_dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn tensor_show(data_dir: &Path) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let peer_id = graph.identity().peer_id();
+    let mut conn = graph.pool().acquire().await?;
+    let values = oag_storage::repo::tensor_pads::get(&mut conn, peer_id.as_bytes())
+        .await?
+        .unwrap_or_else(|| oag_tensor::TensorPad::default().values);
+    println!("{}", serde_json::to_string_pretty(&values)?);
+    Ok(())
+}
+
 pub async fn identity_backup(data_dir: &Path, out: &Path) -> anyhow::Result<()> {
     let source = data_dir.join("identity.key");
     if !source.exists() {

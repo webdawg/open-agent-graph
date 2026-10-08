@@ -21,6 +21,7 @@ oag-crawler.workspace = true
 oag-petname.workspace = true
 oag-reticulum.workspace = true
 oag-embeddings.workspace = true
+oag-tensor.workspace = true
 url.workspace = true
 hex.workspace = true
 serde.workspace = true

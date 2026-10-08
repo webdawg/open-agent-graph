@@ -3,8 +3,12 @@ use std::sync::Arc;
 
 use oag_crypto::{PeerId, VerifyingKey};
 use oag_events::{ingest_remote_event, IngestOutcome};
-use oag_storage::repo::{events as events_repo, peers as peers_repo, replication as replication_repo};
+use oag_storage::repo::{
+    events as events_repo, peers as peers_repo, replication as replication_repo,
+    tensor_pads as tensor_pads_repo,
+};
 use oag_storage::SqlitePool;
+use oag_tensor::TensorPad;
 
 use crate::client::{SyncClient, SyncClientError};
 use crate::federation::FederationPolicy;
@@ -211,7 +215,34 @@ impl SyncService {
             }
         }
 
+        self.observe_sync_outcome(&summary).await;
+
         Ok(summary)
+    }
+
+    /// Nudge this peer's own "ant memory node" tensor pad (spec: see
+    /// `crates/oag-tensor`) toward a small feature vector derived from this
+    /// sync round's real outcome — the only thing that currently feeds this
+    /// memory. Best-effort: a tensor-pad persistence failure must never
+    /// fail (or even be visible as an error from) the sync it's observing,
+    /// same reasoning as `discover_peers`' own silent-failure style above.
+    async fn observe_sync_outcome(&self, summary: &SyncSummary) {
+        const LEARNING_RATE: f32 = 0.1;
+
+        let Ok(mut conn) = self.pool.acquire().await else { return };
+        let peer_id_bytes = *self.self_peer_id.as_bytes();
+        let existing = tensor_pads_repo::get(&mut conn, &peer_id_bytes).await.ok().flatten();
+        let mut pad = TensorPad::from_values(existing.unwrap_or_default());
+
+        let signal = [
+            (summary.applied as f32 + 1.0).ln(),
+            (summary.already_known as f32 + 1.0).ln(),
+            (summary.forks as f32 + 1.0).ln(),
+            (summary.errors.len() as f32 + 1.0).ln(),
+        ];
+        pad.update(&signal, LEARNING_RATE);
+
+        let _ = tensor_pads_repo::upsert(&mut conn, &peer_id_bytes, &pad.values, now_ts()).await;
     }
 
     async fn discover_peers(&self, addr: &str) {
