@@ -1,0 +1,29 @@
+[package]
+name = "oag-brain"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+
+# Deliberately its own workspace root (empty [workspace] table), not a
+# member of the main repo's workspace at ../Cargo.toml. tensorflow-sys
+# needs a C library (libtensorflow) at compile time; keeping this crate
+# out of the main workspace graph means `cargo build --workspace` from
+# the repo root never depends on that being present. See
+# `/home/webdawg/.claude/plans/cozy-prancing-parasol.md` (preserved in
+# this repo's history) for the full reasoning.
+[workspace]
+
+[dependencies]
+oag-tensor = { path = "../crates/oag-tensor" }
+oag-storage = { path = "../crates/oag-storage" }
+oag-crypto = { path = "../crates/oag-crypto" }
+tensorflow = "0.21"
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+anyhow = "1"
+rand = "0.8"
+rand_chacha = "0.3"
