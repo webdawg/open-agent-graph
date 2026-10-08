@@ -32,6 +32,39 @@ struct ChaosPeer {
     addr: String,
 }
 
+/// Snapshots every given peer's metrics + tensor pad and writes it to
+/// `traces/<test_name>-<unix_ts>.json` at the repo root (gitignored) --
+/// evolutionary-analysis data for later, nothing reads this yet. Best
+/// effort: a trace-writing failure must never fail the test it's observing.
+/// Duplicated (not shared) with `oag-sync/src/tests.rs`'s identical helper
+/// -- this file is a separate compilation unit (an integration test), and
+/// two small call sites don't justify new shared test infrastructure.
+async fn write_network_trace(test_name: &str, peers: &[(&str, &GraphService)]) {
+    let mut network = serde_json::Map::new();
+    for (label, graph) in peers {
+        let Ok(metrics) = graph.metrics_snapshot().await else { continue };
+        let Ok(mut conn) = graph.pool().acquire().await else { continue };
+        let peer_id = graph.identity().peer_id();
+        let tensor_pad =
+            oag_storage::repo::tensor_pads::get(&mut conn, peer_id.as_bytes()).await.ok().flatten().unwrap_or_default();
+        network.insert(
+            label.to_string(),
+            serde_json::json!({ "peer_id": peer_id.to_string(), "metrics": metrics, "tensor_pad": tensor_pad }),
+        );
+    }
+
+    let now =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let traces_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../traces");
+    if std::fs::create_dir_all(&traces_dir).is_err() {
+        return;
+    }
+    let _ = std::fs::write(
+        traces_dir.join(format!("{test_name}-{now}.json")),
+        serde_json::to_string_pretty(&network).unwrap_or_default(),
+    );
+}
+
 async fn spawn_peer(name: &str) -> ChaosPeer {
     let dir = std::env::temp_dir().join(format!(
         "oag-chaos-{name}-{}",
@@ -347,6 +380,12 @@ async fn fifty_peers_converge_after_chaos() {
         }
     }
     assert_eq!(total_forks, 0, "chaos harness never constructs real forks; found {total_forks}");
+
+    let labeled_peers: Vec<(String, &GraphService)> =
+        peers.iter().enumerate().map(|(i, p)| (format!("peer-{i}"), p.graph.as_ref())).collect();
+    let labeled_peers: Vec<(&str, &GraphService)> =
+        labeled_peers.iter().map(|(label, graph)| (label.as_str(), *graph)).collect();
+    write_network_trace("fifty_peers_converge_after_chaos", &labeled_peers).await;
 
     let total_events: u64 = reference_heads.values().sum();
     println!(

@@ -17,6 +17,36 @@ struct TestPeer {
     addr: String,
 }
 
+/// Snapshots every given peer's metrics + tensor pad and writes it to
+/// `traces/<test_name>-<unix_ts>.json` at the repo root (gitignored) --
+/// evolutionary-analysis data for later, nothing reads this yet. Best
+/// effort: a trace-writing failure must never fail the test it's observing.
+async fn write_network_trace(test_name: &str, peers: &[(&str, &GraphService)]) {
+    let mut network = serde_json::Map::new();
+    for (label, graph) in peers {
+        let Ok(metrics) = graph.metrics_snapshot().await else { continue };
+        let Ok(mut conn) = graph.pool().acquire().await else { continue };
+        let peer_id = graph.identity().peer_id();
+        let tensor_pad =
+            oag_storage::repo::tensor_pads::get(&mut conn, peer_id.as_bytes()).await.ok().flatten().unwrap_or_default();
+        network.insert(
+            label.to_string(),
+            serde_json::json!({ "peer_id": peer_id.to_string(), "metrics": metrics, "tensor_pad": tensor_pad }),
+        );
+    }
+
+    let now =
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+    let traces_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../traces");
+    if std::fs::create_dir_all(&traces_dir).is_err() {
+        return;
+    }
+    let _ = std::fs::write(
+        traces_dir.join(format!("{test_name}-{now}.json")),
+        serde_json::to_string_pretty(&network).unwrap_or_default(),
+    );
+}
+
 fn fresh_temp_dir(name: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "oag-sync-test-{name}-{}",
@@ -129,6 +159,8 @@ async fn two_peer_replication() {
     let second = b.sync.sync_with_peer(&a.addr).await.unwrap();
     assert_eq!(second.applied, 0);
     assert!(second.errors.is_empty());
+
+    write_network_trace("two_peer_replication", &[("a", a.graph.as_ref()), ("b", b.graph.as_ref())]).await;
 }
 
 /// Spec section 12/40's whole identity model rests on `PeerId` being

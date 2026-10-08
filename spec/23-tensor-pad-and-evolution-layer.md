@@ -61,6 +61,17 @@ dependency-light binary. The evolution layer needed a large, pre-1.0-feeling nat
 — rather than let that risk leak into the one thing every other feature in this project depends on
 building cleanly, it was kept structurally separate from day one.
 
+## Test trace collection
+
+`crates/oag-sync`'s two heaviest integration tests (`two_peer_replication` in `src/tests.rs`,
+`fifty_peers_converge_after_chaos` in `tests/distributed_convergence.rs`) each end by snapshotting
+every test peer's `MetricsSnapshot` plus tensor pad into `traces/<test_name>-<unix_ts>.json` at the
+repo root (gitignored). Best-effort and silent on failure, like `observe_sync_outcome` above — a
+trace write must never fail the test it's observing. This is purely data collection for later
+evolutionary analysis across runs; no analysis tooling reads these yet, and the helper is
+deliberately duplicated across the two call sites rather than factored into shared test
+infrastructure for just two uses.
+
 ## Tests
 
 `crates/oag-tensor/src/lib.rs` (EMA math, padding/truncation). `crates/oag-storage/src/tests.rs`

@@ -1,5 +1,6 @@
 /target/
 **/target/
+/traces/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
