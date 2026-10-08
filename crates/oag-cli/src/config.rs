@@ -14,7 +14,7 @@ fn default_true() -> bool {
 }
 
 /// `config.toml` per spec section 94.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct FileConfig {
     #[serde(default)]
     pub data: DataSection,
@@ -318,20 +318,6 @@ impl ReticulumSection {
     }
 }
 
-impl Default for FileConfig {
-    fn default() -> Self {
-        Self {
-            data: DataSection::default(),
-            server: ServerSection::default(),
-            search: SearchSection::default(),
-            mcp: McpSection::default(),
-            network: NetworkSection::default(),
-            federation: FederationSection::default(),
-            crawler: CrawlerSection::default(),
-            reticulum: ReticulumSection::default(),
-        }
-    }
-}
 
 /// The fully resolved settings a `serve` invocation runs with: CLI flags
 /// take priority, falling back to `--config <file>` (file + `OAG_*` env
