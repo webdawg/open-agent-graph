@@ -171,3 +171,49 @@ both are about minting/governing address space without a single permanent gateke
 two new future-work threads, recorded separately: self-hosted roadmap governance via the existing
 assertion/corroboration machinery instead of a second blockchain, and peer clustering/grouping as a
 concept distinct from flat peer identity.
+
+---
+
+## Entry 3 — 2026-10-09
+
+> the next layer is a blackhole, a force pulling down everywhere slowing each node down - one at a
+> time
+
+### Response
+
+Read against [23-tensor-pad-and-evolution-layer.md](spec/23-tensor-pad-and-evolution-layer.md),
+which already describes two forces acting on the same per-peer tensor pad: `oag-tensor` (a peer
+nudging its own pad toward a signal derived from its own sync experience) and `oag-brain` (one
+peer's pad reprogramming another's via pairwise self-attention, two pads at a time). This entry
+describes a third, structurally different force on the same pad — call it the **gravity layer**
+(the "blackhole" is the colloquial name, matching this project's running physics-metaphor naming:
+ant memory, evolution layer, now gravity):
+
+- **"a force pulling down everywhere"**: unlike both existing forces, this one is not driven by any
+  particular sync event or any particular peer's attention — it's ambient and universal, acting on
+  every pad regardless of whether that peer has synced recently. The natural reading of "pulling
+  down" is decay toward zero/collapse, not growth: `TensorPad::update` already does an EMA step
+  toward a *signal* (`v = (1-lr)*v + lr*s`); a gravity pull is the same mechanism with the signal
+  fixed at zero (or some small constant below the pad's current magnitude) rather than
+  sync-derived — so a pad that nothing nudges for a while loses magnitude instead of holding state
+  forever. This needs no new dependency; it's a second entry point into `oag-tensor`'s existing EMA
+  math (e.g. `TensorPad::pull(strength)` beside `update`), not new machinery.
+- **"slowing each node down"** has a second, not-mutually-exclusive reading worth flagging rather
+  than collapsing: either the pad's own magnitude is what shrinks (decay, as above), or the
+  *rate* at which a node's own sync/processing loop ticks is what gravity throttles directly
+  (gravitational time dilation — more accumulated "mass" slows a node's own clock). The first is
+  buildable today with zero new state; the second would need a new per-peer rate signal and is a
+  real, separate design question. Recording both readings here rather than picking one
+  unilaterally — status: open.
+- **"one at a time"** already has a concrete precedent in this codebase, not just a metaphor:
+  `spawn_gossip_loop` (`crates/oag-sync/src/gossip.rs`) already iterates every known address
+  sequentially inside one loop (`for addr in &addrs { service.sync_with_peer(addr).await }`), never
+  concurrently. Gravity should piggyback on that exact shape rather than introduce a new scheduler:
+  once per gossip tick, pull exactly one peer's pad (round-robin through `list_peers`, independent
+  of whether that peer was actually reached this round) instead of decaying every row in the table
+  in one pass. This keeps gravity's own write pattern consistent with this project's existing
+  "no unbounded/bursty global operation" precedent (the rate limiter's threshold-triggered sweep,
+  `MAX_TOTAL_KNOWN_PEERS`) — one small write per tick, not a full-table pass.
+
+Not implemented yet — this entry and the corresponding future-work note are the capture, not the
+build. See [22-future-work.md](spec/22-future-work.md) for the tracked item.
