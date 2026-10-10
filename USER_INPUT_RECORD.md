@@ -217,3 +217,74 @@ ant memory, evolution layer, now gravity):
 
 Not implemented yet — this entry and the corresponding future-work note are the capture, not the
 build. See [22-future-work.md](spec/22-future-work.md) for the tracked item.
+
+---
+
+## Entry 4 — 2026-10-09
+
+Elicited through four direct clarifying questions while planning ephemeral peer identity/trust
+(`future_ephemeral_peer_trust.md`), each question included verbatim below its answer so the context
+is legible later.
+
+> [Should ephemeral identity be the new default behavior of `oag serve`, or an opt-in config flag?]
+>
+> Once a network is established they should have a voting right to keep the network alive if a new
+> peer upgrades and comes in - we build trust by monitoring peers and seeing if they are doing
+> trustful things, we should adjust the time limit on trust checks live. Different things would
+> change the trust level, and trust is not about paranoia, trust is about reliance. A node can
+> become untrusted because it is operating on bad hardware or buggy, just the same as a malicous
+> actor. If we are creating something where something needs to be restarted, upgraded, etc - they
+> we have to inform the network first, do the work, and when we come back online we would have a
+> low trust level, and then the trust level gets rebuild as time goes on. We want a network where
+> almost everything can be leaked, and even a malicous actor could come in, or memory could become
+> corrupt, but nothing bad can happen.
+
+> [When identity rotates, how should the old peer_id's event history be treated?]
+>
+> see what i wrote before and build architecutre around that - use common software sense though -
+> get this all into a creator log - we have something somewhere
+
+> [What should the v1 uptime/trust signal actually be, mechanically?]
+>
+> Signed presence heartbeat
+
+> [Should this milestone wire the new trust signal into FederationPolicy's enforcement, or just
+> compute and expose it?]
+>
+> Wire it into enforcement now
+
+### Response
+
+Four load-bearing design decisions, folded into the Phase 1 ephemeral-peer-trust plan
+(`spec/24-ephemeral-peer-trust.md` once built):
+
+**Trust is reliance, not paranoia** — a peer made unreliable by bad/buggy hardware is scored
+identically to a malicious one. One continuous trust signal, computed from observed behavior only,
+with no attempt to infer intent. This directly shapes `trust_score`: it never branches on *why* a
+peer looks bad, only on what was actually observed (heartbeat continuity, the existing `forked`
+flag).
+
+**Announced vs. unannounced absence** — a peer that broadcasts a `GoingOffline` presence heartbeat
+before restarting/upgrading gets treated more gently on return than one that simply vanished. Since
+ephemeral identity means the returning peer's `peer_id` is new and cryptographically unlinkable to
+the one that left (no succession proof was wanted — "use common software sense" is read as: don't
+build new crypto machinery for a feature whose point is needing *less* identity machinery), the
+leniency can't attach to the key. It attaches to the network *address* instead: every peer that
+directly witnessed the announcement independently remembers, for a configurable grace window, that
+*that address* said it was coming back — and extends a gentler trust-rebuild curve to whatever new
+`peer_id` next greets it from there. This is this plan's reading of "voting right": many independent
+observers, each extending the same leniency on their own judgment with no coordination between them,
+rather than a literal ballot or quorum. Flagged clearly in the plan as the single biggest
+interpretive call, open to correction.
+
+**Live-adjustable trust-check windows** — landing in v1 as ordinary `config.toml` values (consistent
+with every other tunable in this project), not true hot-reload-without-restart; the latter is
+real, separate future work, not bundled into this milestone.
+
+**"Nothing bad can happen" even under full compromise** — safety has to come from the protocol's
+own structure, not secrecy or assumed good faith. Read together with the existing PKT-inspired
+"degrade, don't drop" framing already in `future_ephemeral_peer_trust.md`: federation enforcement
+gets a hard-reject floor only at zero trust (forked, or never-seen); everything above that is
+accepted but visibly tiered, never silently dropped outright.
+
+See `future_ephemeral_peer_trust.md` memory for the full Phase 1 scope this entry fed into.
