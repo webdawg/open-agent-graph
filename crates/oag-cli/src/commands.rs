@@ -300,6 +300,15 @@ pub async fn tensor_show(data_dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn gravity_show(data_dir: &Path) -> anyhow::Result<()> {
+    let graph = open_graph(data_dir).await?;
+    let peer_id = graph.identity().peer_id();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+    let gravity_level = oag_sync::gravity::get_or_generate(graph.pool(), &peer_id, now).await?;
+    println!("gravity_level: {gravity_level}");
+    Ok(())
+}
+
 pub async fn identity_backup(data_dir: &Path, out: &Path) -> anyhow::Result<()> {
     let source = data_dir.join("identity.key");
     if !source.exists() {

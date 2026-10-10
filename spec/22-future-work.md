@@ -93,25 +93,9 @@ as a spec, only kept as durable, hash-verified, provenance-tracked evidence that
 happened. See `USER_INPUT_RECORD.md`, Entry 2, for the full reasoning and what was and wasn't
 adopted from it.
 
-## Gravity layer — a universal, sequential slowing force (the "blackhole")
+## Gravity layer
 
-A third force on the tensor pad described in
-[23-tensor-pad-and-evolution-layer.md](23-tensor-pad-and-evolution-layer.md), alongside
-`oag-tensor` (a peer nudging its own pad from its own sync experience) and `oag-brain` (pairwise
-attention between two peers' pads). Unlike either, gravity is ambient and universal — it acts on
-every pad regardless of recent activity, pulling magnitude down toward zero rather than toward a
-sync-derived or attention-derived signal, the same EMA step `oag-tensor` already does, just with a
-fixed zero signal instead of one built from a real event.
-
-The "one at a time" part is not just a metaphor: `spawn_gossip_loop`
-(`crates/oag-sync/src/gossip.rs`) already visits every known peer address sequentially within a
-single loop, never concurrently. Gravity is scoped to piggyback on that same shape — one pad
-pulled per gossip tick, round-robin through known peers — rather than a full-table decay pass,
-consistent with this project's existing aversion to unbounded/bursty global operations (the rate
-limiter's sweep, `MAX_TOTAL_KNOWN_PEERS`).
-
-Open question carried over from the capture, not yet resolved: whether "slowing each node down"
-means the pad's own magnitude decays (buildable today, no new state) or the node's own
-sync-loop tick rate is throttled by accumulated mass (a real, separate mechanism, not yet
-designed). See `USER_INPUT_RECORD.md`, Entry 3, for the full reasoning. Status: open, not yet
-built.
+Implemented — see [25-gravity.md](25-gravity.md). (`USER_INPUT_RECORD.md` Entry 3 first captured
+this as an open question between two readings; Entry 5 resolved it and this section's earlier
+"not yet built" draft of the pad-decay reading was superseded, not built — gravity throttles a
+node's own processing speed, and never touches the tensor pad.)

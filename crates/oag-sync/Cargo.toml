@@ -20,7 +20,7 @@ tower-http = { workspace = true, features = ["limit"] }
 reqwest = { workspace = true, features = ["stream"] }
 futures-util = "0.3"
 hex.workspace = true
+rand.workspace = true
 
 [dev-dependencies]
 oag-graph.workspace = true
-rand.workspace = true

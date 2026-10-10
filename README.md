@@ -17,8 +17,11 @@ Prometheus-style metrics, structured request logging, local evidence redaction, 
 human-browsable HTML view (`/ui/search`, `/ui/nodes/{id}`, `/ui/assertions/{id}`), and a small
 per-peer tensor-pad memory (`oag-tensor`) nudged by real sync outcomes. A separate, optional
 evolution layer (`oag-brain/` — outside this workspace; needs `libtensorflow`) programs that pad
-via real scaled dot-product self-attention between two peers. See `docs/` for the full picture —
-start with `docs/architecture.md`.
+via real scaled dot-product self-attention between two peers. Also built: opt-in ephemeral peer
+identity with signed presence heartbeats and trust-weighted federation (`[identity].ephemeral` in
+`config.toml`), and a small, truly-random per-node "gravity level" that very slightly throttles
+that node's own processing speed. See `docs/` for the full picture — start with
+`docs/architecture.md`.
 
 ## Specification
 

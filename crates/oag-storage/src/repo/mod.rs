@@ -4,6 +4,7 @@ pub mod edges;
 pub mod events;
 pub mod node_authority;
 pub mod node_embeddings;
+pub mod node_gravity;
 pub mod nodes;
 pub mod peer_presence;
 pub mod peers;

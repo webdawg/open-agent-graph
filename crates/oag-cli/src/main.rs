@@ -102,6 +102,12 @@ enum Command {
         #[command(subcommand)]
         command: TensorCommand,
     },
+    /// The gravity layer: this peer's small, truly-random "how much
+    /// gravity is here" value (spec/25).
+    Gravity {
+        #[command(subcommand)]
+        command: GravityCommand,
+    },
     /// Create a consistent snapshot of the whole local database (spec
     /// section 82) -- safe to run against a live `oag serve` (uses SQLite's
     /// `VACUUM INTO`, not a raw file copy, which could grab an inconsistent
@@ -299,6 +305,16 @@ enum TensorCommand {
 }
 
 #[derive(Subcommand)]
+enum GravityCommand {
+    /// Print this peer's gravity level, rolling and persisting one with a
+    /// strong RNG on first use if it doesn't have one yet.
+    Show {
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
 enum KeyCommand {
     Create {
         #[arg(long, default_value = "./data")]
@@ -453,6 +469,7 @@ async fn main() -> anyhow::Result<()> {
             commands::identity_restore(&data_dir, &backup_path, force).await
         }
         Command::Tensor { command: TensorCommand::Show { data_dir } } => commands::tensor_show(&data_dir).await,
+        Command::Gravity { command: GravityCommand::Show { data_dir } } => commands::gravity_show(&data_dir).await,
         Command::Key {
             command:
                 KeyCommand::Create { data_dir, actor_type, name, permissions, public_key, key_proof, identity_uri },

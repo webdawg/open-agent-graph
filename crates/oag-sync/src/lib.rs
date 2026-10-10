@@ -1,6 +1,7 @@
 pub mod client;
 pub mod federation;
 pub mod gossip;
+pub mod gravity;
 pub mod presence;
 pub mod rate_limit;
 pub mod replication;

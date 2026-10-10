@@ -288,3 +288,40 @@ gets a hard-reject floor only at zero trust (forked, or never-seen); everything 
 accepted but visibly tiered, never silently dropped outright.
 
 See `future_ephemeral_peer_trust.md` memory for the full Phase 1 scope this entry fed into.
+
+---
+
+## Entry 5 — 2026-10-09
+
+> no you need to build that - gravity is different everywhere by some small random amount (use a
+> really good randomness generator for this for now, but hardware later), the speed at witch a
+> node can process is impacted by its gravity level, but very very slightly
+
+### Response
+
+Resolves the open question `spec/22-future-work.md`/`USER_INPUT_RECORD.md` Entry 3 deliberately
+left unresolved (whether "slowing each node down" meant the tensor pad's own magnitude decaying,
+or the node's own clock being throttled) in favor of the second reading, and adds a detail that
+entry didn't have at all: gravity is a *per-node* quantity, randomly rolled, not a single global
+force.
+
+Implemented as `oag-sync`'s `gravity.rs` plus a new `node_gravity` table
+(`crates/oag-storage/migrations/0010_node_gravity.sql`): each peer rolls its own
+`gravity_level` once, with `rand::rngs::OsRng` — the OS's own CSPRNG, not the deterministic
+seeded-RNG pattern this project otherwise uses for reproducibility (`oag-tensor`/`oag-brain`'s
+fixed-seed weights, `oag-petname`'s deterministic naming) — and persists it, so it survives
+restarts for a permanent identity the same way a real physical trait would, rather than being
+re-rolled every time anyone asks. "Hardware later" is recorded here verbatim as the explicit future
+upgrade path: swap `OsRng` for a real hardware entropy/measurement source without changing anything
+downstream, since every consumer only ever sees a `f32` gravity level, never the source it came
+from.
+
+"The speed at which a node can process is impacted ... very very slightly": applied to the gossip
+loop (`spawn_gossip_loop`), which already processes known peers sequentially, "one at a time" —
+the same anchor Entry 3's capture used. A gravity level of `1.0` (the theoretical maximum) costs at
+most half a millisecond per peer address processed per gossip tick; most nodes, with a
+small-to-middling random level, see a small fraction of that. Full reasoning and the exact mapping:
+`spec/25-gravity.md`.
+
+See also `spec/23-tensor-pad-and-evolution-layer.md` for the two other forces already acting on
+the same tensor pad this entry's gravity reading deliberately does *not* touch.

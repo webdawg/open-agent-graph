@@ -202,6 +202,13 @@ pub struct AddressGoingOfflineRow {
     pub from_peer_id: Vec<u8>,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct NodeGravityRow {
+    pub peer_id: Vec<u8>,
+    pub gravity_level: f64,
+    pub generated_at: i64,
+}
+
 #[derive(Debug, FromRow)]
 pub struct RedactionRow {
     pub event_id: Vec<u8>,
