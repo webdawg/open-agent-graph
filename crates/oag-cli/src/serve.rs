@@ -13,8 +13,15 @@ use crate::config::ResolvedConfig;
 pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     std::fs::create_dir_all(&config.data_dir)?;
 
-    let identity_path = config.data_dir.join("identity.key");
-    let identity = PeerIdentity::load_or_generate(&identity_path)?;
+    // Ephemeral peer trust, Phase 1 (spec/24): a clean fork at startup, not
+    // a new mode bolted onto the persistent path -- `identity.key` is never
+    // read or written at all when ephemeral mode is on.
+    let identity = if config.identity_ephemeral {
+        PeerIdentity::generate()
+    } else {
+        let identity_path = config.data_dir.join("identity.key");
+        PeerIdentity::load_or_generate(&identity_path)?
+    };
     let peer_id = identity.peer_id();
 
     let db_path = config.data_dir.join("oag.sqlite");
@@ -24,6 +31,7 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     let pool_for_sync = pool.clone();
     let pool_for_reticulum = pool.clone();
     let identity_for_reticulum = identity.clone();
+    let identity_for_heartbeats = identity.clone();
 
     let graph = Arc::new(GraphService::new(pool, identity));
 
@@ -31,9 +39,15 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         bootstrap_admin(&graph).await?;
     }
 
-    let sync_service = oag_sync::SyncService::new(pool_for_sync, peer_id, self_public_key, config.federation);
+    let mut sync_service = oag_sync::SyncService::new(pool_for_sync, peer_id, self_public_key, config.federation);
+    if config.identity_ephemeral {
+        sync_service = sync_service
+            .with_minimum_trust(oag_sync::EPHEMERAL_MINIMUM_TRUST, config.trust_config)
+            .with_heartbeat_identity(identity_for_heartbeats);
+        oag_sync::spawn_heartbeat_loop(sync_service.clone(), config.heartbeat_interval);
+    }
     let sync_router = oag_sync::router(sync_service.clone());
-    oag_sync::spawn_gossip_loop(sync_service, config.bootstrap_peers.clone(), config.sync_interval);
+    oag_sync::spawn_gossip_loop(sync_service.clone(), config.bootstrap_peers.clone(), config.sync_interval);
 
     if let Some(reticulum_config) = config.reticulum.clone() {
         let address_hash = oag_reticulum::local_address_hash(&identity_for_reticulum);
@@ -58,6 +72,11 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     let app = build_app(rest_router, mcp_service, rate_limit_state);
 
     println!("oag: peer_id = {peer_id}");
+    if config.identity_ephemeral {
+        println!("oag: identity: ephemeral (regenerates every restart)");
+    } else {
+        println!("oag: identity: permanent");
+    }
     println!("oag: data dir = {}", config.data_dir.display());
     println!("oag: REST listening on http://{}/api/v1", config.listen);
     if config.mcp_enabled {
@@ -75,8 +94,42 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     }
 
     let listener = tokio::net::TcpListener::bind(config.listen).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal(sync_service, config.identity_ephemeral))
+        .await?;
     Ok(())
+}
+
+/// Waits for Ctrl-C or SIGTERM, then — in ephemeral mode only — best-effort
+/// broadcasts a signed `GoingOffline` heartbeat to every known peer before
+/// `axum::serve` actually stops (spec/24: "an announced restart should be
+/// treated more gently than an unannounced disappearance,"
+/// `USER_INPUT_RECORD.md` Entry 4). Never blocks shutdown waiting on a dead
+/// peer -- `broadcast_presence` already treats each address independently.
+async fn shutdown_signal(sync_service: oag_sync::SyncService, ephemeral: bool) {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        let Ok(mut signal) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) else {
+            return;
+        };
+        signal.recv().await;
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    if ephemeral {
+        println!("oag: shutting down -- announcing planned downtime to known peers");
+        let sent = sync_service.broadcast_presence(oag_sync::PresenceStatus::GoingOffline).await;
+        println!("oag: announced to {sent} known peer address(es)");
+    }
 }
 
 /// Mounts `/mcp` (if `mcp_service` is `Some`) onto `rest_router`, with its

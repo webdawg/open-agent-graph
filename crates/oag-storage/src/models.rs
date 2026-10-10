@@ -187,6 +187,21 @@ pub struct TensorPadRow {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct PeerPresenceRow {
+    pub peer_id: Vec<u8>,
+    pub session_started_at: i64,
+    pub last_heartbeat_at: i64,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, FromRow)]
+pub struct AddressGoingOfflineRow {
+    pub address: String,
+    pub announced_at: i64,
+    pub from_peer_id: Vec<u8>,
+}
+
 #[derive(Debug, FromRow)]
 pub struct RedactionRow {
     pub event_id: Vec<u8>,

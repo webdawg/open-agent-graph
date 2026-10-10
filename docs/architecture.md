@@ -161,11 +161,16 @@ and evidence model used for everything else, applied reflexively to the project'
 
 ## What's deliberately not built yet
 
-Six larger directions are tracked as future work, not yet implemented. None changes anything
-described in this document today:
+Several larger directions are tracked as future work. Phase 1 of the first one below has since
+landed (`spec/24-ephemeral-peer-trust.md`); the rest remain not yet implemented and change nothing
+described elsewhere in this document:
 
 - Ephemeral, session-scoped peer identity with data/uptime-driven trust (inspired by the PKT
-  Network paper — see `ENVIRONMENT.md`).
+  Network paper — see `ENVIRONMENT.md`). **Phase 1 implemented** (opt-in `[identity] ephemeral =
+  true`, signed presence heartbeats, per-observer trust scoring, trust-weighted federation — see
+  `spec/24-ephemeral-peer-trust.md`). Still future work: a real multi-peer voting/consensus
+  mechanism (Phase 1 uses a soft, local, address-correlation heuristic instead), live config
+  reload for the trust-check windows, and PacketCrypt-style proof-of-data-volume.
 - Native IPFS integration for large evidence blobs and static exports (spec section 84's
   `blobs/<hash>` concept).
 - Granular, per-artifact data versioning: an explicit version number on every projected artifact

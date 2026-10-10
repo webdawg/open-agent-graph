@@ -5,6 +5,7 @@ pub mod events;
 pub mod node_authority;
 pub mod node_embeddings;
 pub mod nodes;
+pub mod peer_presence;
 pub mod peers;
 pub mod rebuild;
 pub mod redactions;

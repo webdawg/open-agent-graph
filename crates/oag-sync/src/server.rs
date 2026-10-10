@@ -5,9 +5,10 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use oag_crypto::{PeerId, VerifyingKey};
 use oag_events::{ingest_remote_event, IngestOutcome};
-use oag_storage::repo::{events as events_repo, peers as peers_repo};
+use oag_storage::repo::{events as events_repo, peer_presence as peer_presence_repo, peers as peers_repo};
 use serde::Deserialize;
 
+use crate::presence::{self, PresenceHeartbeat, PresenceStatus};
 use crate::rate_limit;
 use crate::service::SyncService;
 use crate::wire::{EventsResponse, HeadsResponse, HelloResponse, PeerRecord, PeersResponse, SYNC_PROTOCOL, SYNC_VERSION};
@@ -32,6 +33,7 @@ pub fn router(service: SyncService) -> Router {
         .route("/oag/sync/v1/events/{origin}", get(get_events))
         .route("/oag/sync/v1/events", post(post_events))
         .route("/oag/sync/v1/peers", get(peers))
+        .route("/oag/sync/v1/presence", post(post_presence))
         .route("/oag/sync/v1/replication-status", get(replication_status))
         .layer(middleware::from_fn_with_state(
             service.clone(),
@@ -126,7 +128,7 @@ async fn post_events(
             skipped += 1;
             continue;
         };
-        if !service.federation_allows(&origin_peer_id) {
+        if !service.federation_allows(&origin_peer_id).await {
             skipped += 1;
             continue;
         }
@@ -159,6 +161,47 @@ async fn post_events(
         }
     }
     Ok(Json(serde_json::json!({ "applied": applied, "skipped": skipped })))
+}
+
+/// Ephemeral peer trust, Phase 1 (spec/24): accepts a signed presence
+/// heartbeat and records it. `GoingOffline` additionally marks every
+/// address this peer currently knows for the sender as recently announced
+/// (`address_going_offline`) -- the address-correlated grace window a
+/// later, differently-identified arrival at that same address may benefit
+/// from (see `trust.rs::compute_trust`). Unauthenticated at the transport
+/// layer like every other `/oag/sync/v1/*` endpoint, for the same reason:
+/// the heartbeat is self-authenticating via its own signature.
+async fn post_presence(
+    State(service): State<SyncService>,
+    Json(heartbeat): Json<PresenceHeartbeat>,
+) -> Result<StatusCode, StatusCode> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let peer_id = presence::verify(&heartbeat, now).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let mut conn = service.pool().acquire().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    peer_presence_repo::record_heartbeat(
+        &mut conn,
+        peer_id.as_bytes(),
+        heartbeat.unsigned.session_started_at,
+        heartbeat.unsigned.timestamp,
+        heartbeat.unsigned.status.as_str(),
+    )
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if heartbeat.unsigned.status == PresenceStatus::GoingOffline {
+        let addresses = peers_repo::list_addresses(&mut conn, peer_id.as_bytes())
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        for address in addresses {
+            let _ = peer_presence_repo::record_going_offline(&mut conn, &address, peer_id.as_bytes(), now).await;
+        }
+    }
+
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn peers(State(service): State<SyncService>) -> Json<PeersResponse> {

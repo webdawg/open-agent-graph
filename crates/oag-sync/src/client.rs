@@ -83,6 +83,20 @@ impl SyncClient {
         let url = format!("{}/peers", Self::base(addr));
         capped_json(self.http.get(url).send().await?.error_for_status()?).await
     }
+
+    /// Ephemeral peer trust, Phase 1: push one signed presence heartbeat.
+    /// Fire-and-forget by design at the call site (`presence.rs`'s sender
+    /// loop) — one unreachable peer must never block heartbeats to the
+    /// others, same reasoning as the gossip loop's own per-address handling.
+    pub async fn send_presence(
+        &self,
+        addr: &str,
+        heartbeat: &crate::presence::PresenceHeartbeat,
+    ) -> Result<(), SyncClientError> {
+        let url = format!("{}/presence", Self::base(addr));
+        self.http.post(url).json(heartbeat).send().await?.error_for_status()?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

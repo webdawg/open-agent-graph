@@ -32,6 +32,8 @@ pub struct FileConfig {
     pub crawler: CrawlerSection,
     #[serde(default)]
     pub reticulum: ReticulumSection,
+    #[serde(default)]
+    pub identity: IdentitySection,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -319,6 +321,57 @@ impl ReticulumSection {
 }
 
 
+/// `[identity]` — ephemeral peer trust, Phase 1 (spec/24). `ephemeral =
+/// false` by default: permanent, `identity.key`-backed identity stays the
+/// default behavior for every existing deployment, same opt-in shape as
+/// `[reticulum]`. When `ephemeral = true`, `oag serve` generates a fresh
+/// identity every start and never reads or writes `identity.key` at all —
+/// a clean fork at startup, not a new mode bolted onto the persistent path.
+#[derive(Debug, Deserialize)]
+pub struct IdentitySection {
+    #[serde(default)]
+    pub ephemeral: bool,
+    #[serde(default = "default_heartbeat_interval_seconds")]
+    pub heartbeat_interval_seconds: u64,
+    #[serde(default = "default_trust_rebuild_seconds")]
+    pub trust_rebuild_seconds: i64,
+    #[serde(default = "default_announced_restart_grace_seconds")]
+    pub announced_restart_grace_seconds: i64,
+}
+
+fn default_heartbeat_interval_seconds() -> u64 {
+    30
+}
+
+fn default_trust_rebuild_seconds() -> i64 {
+    3600
+}
+
+fn default_announced_restart_grace_seconds() -> i64 {
+    300
+}
+
+impl Default for IdentitySection {
+    fn default() -> Self {
+        Self {
+            ephemeral: false,
+            heartbeat_interval_seconds: default_heartbeat_interval_seconds(),
+            trust_rebuild_seconds: default_trust_rebuild_seconds(),
+            announced_restart_grace_seconds: default_announced_restart_grace_seconds(),
+        }
+    }
+}
+
+impl IdentitySection {
+    pub fn to_trust_config(&self) -> oag_sync::TrustConfig {
+        oag_sync::TrustConfig {
+            heartbeat_interval_seconds: self.heartbeat_interval_seconds as i64,
+            trust_rebuild_seconds: self.trust_rebuild_seconds,
+            announced_restart_grace_seconds: self.announced_restart_grace_seconds,
+        }
+    }
+}
+
 /// The fully resolved settings a `serve` invocation runs with: CLI flags
 /// take priority, falling back to `--config <file>` (file + `OAG_*` env
 /// overrides via figment), falling back to hardcoded defaults.
@@ -330,6 +383,9 @@ pub struct ResolvedConfig {
     pub sync_interval: std::time::Duration,
     pub federation: oag_sync::FederationPolicy,
     pub reticulum: Option<oag_reticulum::ReticulumConfig>,
+    pub identity_ephemeral: bool,
+    pub heartbeat_interval: std::time::Duration,
+    pub trust_config: oag_sync::TrustConfig,
     pub embedding_provider: Box<dyn oag_embeddings::EmbeddingProvider>,
     pub crawler_config: oag_crawler::CrawlerConfig,
     pub llm_extractor: std::sync::Arc<dyn oag_crawler::LlmExtractor>,
@@ -368,6 +424,9 @@ pub fn resolve(
         sync_interval: std::time::Duration::from_secs(file.network.sync_interval_seconds),
         federation,
         reticulum: file.reticulum.to_reticulum_config(),
+        identity_ephemeral: file.identity.ephemeral,
+        heartbeat_interval: std::time::Duration::from_secs(file.identity.heartbeat_interval_seconds),
+        trust_config: file.identity.to_trust_config(),
         embedding_provider: file.search.to_embedding_provider(),
         // `false` here, always -- unlike `oag crawl`'s one-shot
         // `--allow-private-networks` flag (an operator's own explicit,

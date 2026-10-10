@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use oag_crypto::{PeerId, VerifyingKey};
+use oag_crypto::{PeerId, PeerIdentity, VerifyingKey};
 use oag_events::{ingest_remote_event, IngestOutcome};
 use oag_storage::repo::{
     events as events_repo, peers as peers_repo, replication as replication_repo,
@@ -13,6 +13,7 @@ use oag_tensor::TensorPad;
 use crate::client::{SyncClient, SyncClientError};
 use crate::federation::FederationPolicy;
 use crate::rate_limit::SyncRateLimiter;
+use crate::trust::TrustConfig;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
@@ -58,6 +59,17 @@ pub struct SyncService {
     federation: FederationPolicy,
     client: SyncClient,
     rate_limiter: Arc<SyncRateLimiter>,
+    /// Ephemeral peer trust, Phase 1: `0.0` (the default) is a no-op --
+    /// `federation_allows` skips the trust lookup entirely, so every
+    /// deployment not running ephemeral identity sees zero behavior change.
+    /// Only `oag serve`'s ephemeral-mode startup path sets this nonzero.
+    minimum_trust: f32,
+    trust_config: TrustConfig,
+    /// `Some` only when this peer broadcasts its own signed presence
+    /// heartbeats (ephemeral mode) -- `None` everywhere else, including
+    /// every pre-existing construction site, so nothing about them changes.
+    heartbeat_identity: Option<PeerIdentity>,
+    session_started_at: i64,
 }
 
 impl SyncService {
@@ -74,7 +86,36 @@ impl SyncService {
             federation,
             client: SyncClient::new(),
             rate_limiter: Arc::new(SyncRateLimiter::default()),
+            minimum_trust: 0.0,
+            trust_config: TrustConfig::default(),
+            heartbeat_identity: None,
+            session_started_at: now_ts(),
         }
+    }
+
+    /// Opts this service into ephemeral-peer-trust enforcement: below
+    /// `minimum_trust`, an origin's events are refused (see
+    /// `federation_allows`'s "degrade, don't drop" two-tier check).
+    pub fn with_minimum_trust(mut self, minimum_trust: f32, trust_config: TrustConfig) -> Self {
+        self.minimum_trust = minimum_trust;
+        self.trust_config = trust_config;
+        self
+    }
+
+    /// Opts this service into broadcasting its own signed presence
+    /// heartbeats (`presence::spawn_heartbeat_loop`) using `identity` to
+    /// sign them.
+    pub fn with_heartbeat_identity(mut self, identity: PeerIdentity) -> Self {
+        self.heartbeat_identity = Some(identity);
+        self
+    }
+
+    pub fn heartbeat_identity(&self) -> Option<&PeerIdentity> {
+        self.heartbeat_identity.as_ref()
+    }
+
+    pub fn session_started_at(&self) -> i64 {
+        self.session_started_at
     }
 
     pub fn pool(&self) -> &SqlitePool {
@@ -93,8 +134,26 @@ impl SyncService {
         &self.rate_limiter
     }
 
-    pub fn federation_allows(&self, peer_id: &PeerId) -> bool {
-        self.federation.allows(peer_id)
+    /// "Degrade, don't drop" (spec/24, `USER_INPUT_RECORD.md` Entry 4): the
+    /// existing binary `FederationPolicy` check is untouched and short-
+    /// circuits first. Only when `minimum_trust > 0.0` (ephemeral mode) does
+    /// a second, narrower check run at all -- a cheap no-op for everyone
+    /// else, not a new enforcement architecture layered over the old one.
+    pub async fn federation_allows(&self, peer_id: &PeerId) -> bool {
+        if !self.federation.allows(peer_id) {
+            return false;
+        }
+        if self.minimum_trust <= 0.0 {
+            return true;
+        }
+        match crate::trust::compute_trust(&self.pool, peer_id, now_ts(), &self.trust_config).await {
+            Ok(score) => score >= self.minimum_trust,
+            // A trust-lookup failure degrades to "not yet trusted" rather
+            // than either silently passing or hard-erroring the caller --
+            // consistent with "nothing bad can happen" even when something
+            // this new signal depends on is itself misbehaving.
+            Err(_) => false,
+        }
     }
 
     /// This peer's current head sequence for every origin it has any events
@@ -165,7 +224,7 @@ impl SyncService {
         for (origin_hex, remote_seq) in &hello.heads {
             let Some(origin_peer_id_bytes) = decode_hex32(origin_hex) else { continue };
             let origin_peer_id = PeerId::from_bytes(origin_peer_id_bytes);
-            if !self.federation.allows(&origin_peer_id) {
+            if !self.federation_allows(&origin_peer_id).await {
                 continue;
             }
 
@@ -243,6 +302,39 @@ impl SyncService {
         pad.update(&signal, LEARNING_RATE);
 
         let _ = tensor_pads_repo::upsert(&mut conn, &peer_id_bytes, &pad.values, now_ts()).await;
+    }
+
+    /// Builds and pushes one signed presence heartbeat to every known peer
+    /// address, best-effort (one unreachable peer never blocks the others
+    /// or the caller) -- only meaningful when
+    /// [`with_heartbeat_identity`](Self::with_heartbeat_identity) was
+    /// called; a no-op otherwise. Returns how many sends were attempted.
+    pub async fn broadcast_presence(&self, status: crate::presence::PresenceStatus) -> usize {
+        let Some(identity) = &self.heartbeat_identity else { return 0 };
+        let heartbeat = match crate::presence::build_and_sign(identity, status, self.session_started_at, now_ts()) {
+            Ok(hb) => hb,
+            Err(_) => return 0,
+        };
+
+        let mut addrs = Vec::new();
+        if let Ok(mut conn) = self.pool.acquire().await {
+            if let Ok(peers) = peers_repo::list_peers(&mut conn).await {
+                for peer in peers {
+                    if let Ok(known) = peers_repo::list_addresses(&mut conn, &peer.peer_id).await {
+                        addrs.extend(known);
+                    }
+                }
+            }
+        }
+        addrs.sort();
+        addrs.dedup();
+
+        for addr in &addrs {
+            if let Err(error) = self.client.send_presence(addr, &heartbeat).await {
+                tracing::debug!(peer = %addr, %error, "presence heartbeat delivery failed");
+            }
+        }
+        addrs.len()
     }
 
     async fn discover_peers(&self, addr: &str) {

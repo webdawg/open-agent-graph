@@ -559,3 +559,106 @@ async fn a_wrong_key_on_file_for_a_peer_blocks_their_real_events_rather_than_acc
     let applied = oag_events::ingest_remote_event(&pool, victim_identity.verifying_key(), signed, 1_700_000_002).await;
     assert!(matches!(applied, Ok(oag_events::IngestOutcome::Applied(_, _))), "got {applied:?}");
 }
+
+/// Ephemeral peer trust, Phase 1 (spec/24): same `TestPeer` shape as
+/// `spawn_peer_at`, but with a freshly generated (never persisted) identity
+/// and opted into heartbeat broadcasting/trust enforcement -- the two
+/// things `spawn_peer_at`'s permanent-identity peers never need.
+async fn spawn_ephemeral_peer(
+    name: &str,
+    trust_config: crate::trust::TrustConfig,
+    heartbeat_interval: std::time::Duration,
+) -> TestPeer {
+    let dir = fresh_temp_dir(name);
+    let pool = open_pool(&dir.join("oag.sqlite")).await.unwrap();
+
+    let identity = PeerIdentity::generate();
+    let peer_id = identity.peer_id();
+    let public_key = identity.verifying_key().to_bytes();
+    let heartbeat_identity = identity.clone();
+
+    let graph = Arc::new(GraphService::new(pool.clone(), identity));
+    let actor_id =
+        graph.declare_actor(ActorType::Service, Some(format!("{name}-actor")), None, None).await.unwrap();
+    let auth = AuthContext {
+        actor_id,
+        permissions: vec![Permission::GraphAssert],
+    };
+
+    let sync = SyncService::new(pool, peer_id, public_key, FederationPolicy::Open)
+        .with_minimum_trust(crate::trust::EPHEMERAL_MINIMUM_TRUST, trust_config)
+        .with_heartbeat_identity(heartbeat_identity);
+    crate::presence::spawn_heartbeat_loop(sync.clone(), heartbeat_interval);
+
+    let app = router(sync.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    TestPeer {
+        dir,
+        graph,
+        sync,
+        auth,
+        addr: format!("http://{addr}"),
+    }
+}
+
+/// End-to-end over real HTTP: two ephemeral peers discover each other via
+/// an ordinary sync round, exchange real signed presence heartbeats on a
+/// fast loop, and each independently builds a nonzero trust score for the
+/// other purely from what it personally observed -- then confirms the
+/// "degrade, don't drop" floor: a merely-low-trust peer's events are still
+/// accepted, but the instant the existing `peers.forked` signal is set,
+/// `federation_allows` hard-rejects regardless of heartbeat history.
+#[tokio::test]
+async fn ephemeral_peers_build_real_trust_from_signed_heartbeats() {
+    let trust_config = crate::trust::TrustConfig {
+        heartbeat_interval_seconds: 1,
+        trust_rebuild_seconds: 5,
+        announced_restart_grace_seconds: 10,
+    };
+    let fast = std::time::Duration::from_millis(100);
+    let a = spawn_ephemeral_peer("ephemeral-a", trust_config, fast).await;
+    let b = spawn_ephemeral_peer("ephemeral-b", trust_config, fast).await;
+
+    // Each peer must know the other's address before heartbeats have
+    // anywhere to go -- piggyback on a real sync round, same as production
+    // (`discover_peers` is what actually learns the address).
+    a.sync.sync_with_peer(&b.addr).await.unwrap();
+    b.sync.sync_with_peer(&a.addr).await.unwrap();
+
+    // Heartbeat/session timestamps are whole-second unix timestamps, not
+    // sub-second -- sleeping comfortably past 1 full second (not just
+    // "a few heartbeat ticks") guarantees `now - session_started_at >= 1`
+    // regardless of where in a given second the session happened to start,
+    // so the rebuild fraction below can't round down to exactly zero.
+    tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+
+    let b_peer_id = b.graph.identity().peer_id();
+    let b_public_key = b.graph.identity().verifying_key().to_bytes();
+
+    let mut a_conn = a.sync.pool().acquire().await.unwrap();
+    let presence_of_b_at_a =
+        oag_storage::repo::peer_presence::get(&mut a_conn, b_peer_id.as_bytes()).await.unwrap();
+    assert!(presence_of_b_at_a.is_some(), "A should have recorded at least one real heartbeat from B");
+
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+    let trust_of_b = crate::trust::compute_trust(a.sync.pool(), &b_peer_id, now, &trust_config).await.unwrap();
+    assert!(trust_of_b > 0.0, "expected nonzero trust once real heartbeats have been received, got {trust_of_b}");
+
+    // "Degrade, don't drop": a merely-low-trust peer still passes.
+    assert!(a.sync.federation_allows(&b_peer_id).await, "a low-but-nonzero-trust peer must not be hard-rejected");
+
+    // Ensure A has a `peers` row for B to mark, independent of whatever the
+    // sync round above happened to upsert, then confirm the existing
+    // `forked` signal is still the one real hard floor.
+    oag_storage::repo::peers::upsert_peer(&mut a_conn, b_peer_id.as_bytes(), &b_public_key, None, now).await.unwrap();
+    oag_storage::repo::peers::mark_forked(&mut a_conn, b_peer_id.as_bytes()).await.unwrap();
+    assert!(
+        !a.sync.federation_allows(&b_peer_id).await,
+        "a forked peer must be hard-rejected regardless of heartbeat history"
+    );
+}

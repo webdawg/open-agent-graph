@@ -83,11 +83,18 @@ pub async fn peer_list(data_dir: &Path) -> anyhow::Result<()> {
         println!("no known peers");
         return Ok(());
     }
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+    // Ephemeral peer trust, Phase 1 (spec/24): this observer's own view of
+    // each peer's trust, using the default trust-check windows rather than
+    // whatever a running `oag serve` was configured with -- this is a
+    // read-only snapshot for a human to inspect, not enforcement.
+    let trust_config = oag_sync::TrustConfig::default();
     for info in peers {
         let peer_id = oag_crypto::PeerId::from_bytes(info.peer_id);
         let addrs = oag_storage::repo::peers::list_addresses(&mut conn, peer_id.as_bytes()).await?;
+        let trust = oag_sync::trust::compute_trust(sync.pool(), &peer_id, now, &trust_config).await?;
         println!(
-            "{peer_id}  forked={}  last_seen={:?}  addresses={:?}",
+            "{peer_id}  forked={}  trust={trust:.2}  last_seen={:?}  addresses={:?}",
             info.forked, info.last_seen, addrs
         );
     }
