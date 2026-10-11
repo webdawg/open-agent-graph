@@ -70,6 +70,12 @@ pub struct SyncService {
     /// every pre-existing construction site, so nothing about them changes.
     heartbeat_identity: Option<PeerIdentity>,
     session_started_at: i64,
+    /// Peer clustering, Phase 1 (spec/26): `Some` only when `[cluster].name`
+    /// is configured -- independent of `heartbeat_identity`/`minimum_trust`
+    /// above, since clustering must work for a permanent identity too, not
+    /// just ephemeral peers that opted into Phase 1's heartbeats.
+    cluster_identity: Option<PeerIdentity>,
+    own_cluster: Option<String>,
 }
 
 impl SyncService {
@@ -90,6 +96,8 @@ impl SyncService {
             trust_config: TrustConfig::default(),
             heartbeat_identity: None,
             session_started_at: now_ts(),
+            cluster_identity: None,
+            own_cluster: None,
         }
     }
 
@@ -114,6 +122,17 @@ impl SyncService {
         self.heartbeat_identity.as_ref()
     }
 
+    /// Opts this service into broadcasting its own signed cluster
+    /// declarations (`cluster::spawn_cluster_announce_loop`) and into the
+    /// `federation_allows` cluster override below -- independent of
+    /// `with_minimum_trust`/`with_heartbeat_identity`, so it works for a
+    /// permanent identity exactly the same as an ephemeral one.
+    pub fn with_cluster(mut self, identity: PeerIdentity, cluster: String) -> Self {
+        self.cluster_identity = Some(identity);
+        self.own_cluster = Some(cluster);
+        self
+    }
+
     pub fn session_started_at(&self) -> i64 {
         self.session_started_at
     }
@@ -134,12 +153,34 @@ impl SyncService {
         &self.rate_limiter
     }
 
+    /// Peer clustering, Phase 1 (spec/26): `true` only when this service has
+    /// its own configured cluster *and* `peer_id`'s latest signed
+    /// declaration claims the same one. A bare string comparison against a
+    /// self-asserted claim -- see spec/26's security caveat for exactly
+    /// what guarantee this is (and isn't).
+    async fn same_cluster(&self, peer_id: &PeerId) -> bool {
+        let Some(mine) = &self.own_cluster else { return false };
+        let Ok(mut conn) = self.pool.acquire().await else { return false };
+        match oag_storage::repo::peer_cluster::get(&mut conn, peer_id.as_bytes()).await {
+            Ok(Some(claim)) => &claim.cluster == mine,
+            _ => false,
+        }
+    }
+
     /// "Degrade, don't drop" (spec/24, `USER_INPUT_RECORD.md` Entry 4): the
     /// existing binary `FederationPolicy` check is untouched and short-
     /// circuits first. Only when `minimum_trust > 0.0` (ephemeral mode) does
     /// a second, narrower check run at all -- a cheap no-op for everyone
     /// else, not a new enforcement architecture layered over the old one.
+    ///
+    /// Checked *before* either of those: the peer-clustering override
+    /// (spec/26) -- a same-cluster peer is always allowed, full stop. This
+    /// is a real, explicit security trade-off (see spec/26's caveat), not
+    /// an oversight.
     pub async fn federation_allows(&self, peer_id: &PeerId) -> bool {
+        if self.same_cluster(peer_id).await {
+            return true;
+        }
         if !self.federation.allows(peer_id) {
             return false;
         }
@@ -332,6 +373,40 @@ impl SyncService {
         for addr in &addrs {
             if let Err(error) = self.client.send_presence(addr, &heartbeat).await {
                 tracing::debug!(peer = %addr, %error, "presence heartbeat delivery failed");
+            }
+        }
+        addrs.len()
+    }
+
+    /// Builds and pushes one signed cluster declaration to every known
+    /// peer address, best-effort -- only meaningful when
+    /// [`with_cluster`](Self::with_cluster) was called; a no-op otherwise.
+    /// Returns how many sends were attempted.
+    pub async fn broadcast_cluster_declaration(&self) -> usize {
+        let (Some(identity), Some(cluster)) = (&self.cluster_identity, &self.own_cluster) else {
+            return 0;
+        };
+        let declaration = match crate::cluster::build_and_sign(identity, cluster, now_ts()) {
+            Ok(decl) => decl,
+            Err(_) => return 0,
+        };
+
+        let mut addrs = Vec::new();
+        if let Ok(mut conn) = self.pool.acquire().await {
+            if let Ok(peers) = peers_repo::list_peers(&mut conn).await {
+                for peer in peers {
+                    if let Ok(known) = peers_repo::list_addresses(&mut conn, &peer.peer_id).await {
+                        addrs.extend(known);
+                    }
+                }
+            }
+        }
+        addrs.sort();
+        addrs.dedup();
+
+        for addr in &addrs {
+            if let Err(error) = self.client.send_cluster_declaration(addr, &declaration).await {
+                tracing::debug!(peer = %addr, %error, "cluster declaration delivery failed");
             }
         }
         addrs.len()

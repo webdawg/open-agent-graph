@@ -209,6 +209,13 @@ pub struct NodeGravityRow {
     pub generated_at: i64,
 }
 
+#[derive(Debug, Clone, FromRow)]
+pub struct PeerClusterClaimRow {
+    pub peer_id: Vec<u8>,
+    pub cluster: String,
+    pub declared_at: i64,
+}
+
 #[derive(Debug, FromRow)]
 pub struct RedactionRow {
     pub event_id: Vec<u8>,

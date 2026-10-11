@@ -189,7 +189,12 @@ described elsewhere in this document:
   pointed at itself — a roadmap proposal is just an assertion backed by evidence, ranked by the same
   `source_independence`/`identity_assurance`/`evidence_strength` signals every other claim already
   gets, with no new consensus mechanism to build.
-- First-class peer clustering: groups of mutually cooperating peers (an "ant colony" of small,
-  cooperating units doing real-world physical work — sensors, traffic lights, smart objects) as a
-  concept distinct from today's flat peer set, separate from the ephemeral-identity direction above
-  since it's a topology/trust-radius question, not an identity-lifetime one.
+- Peer clustering: groups of mutually cooperating peers (an "ant colony" of small, cooperating
+  units doing real-world physical work — sensors, traffic lights, smart objects), a concept
+  distinct from the ephemeral-identity direction above since it's a topology/trust-radius question,
+  not an identity-lifetime one. **Phase 1 implemented** (self-declared, signed cluster membership
+  as a full federation override — `[cluster].name` in `config.toml` — see
+  `spec/26-peer-clustering.md`, including its explicit security caveat: an unauthenticated cluster
+  name is a weak shared secret, not a verified fact). Still future work: any corroboration
+  mechanism for a claimed cluster, and the graph-level representation considered and declined for
+  this phase.

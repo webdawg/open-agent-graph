@@ -34,6 +34,8 @@ pub struct FileConfig {
     pub reticulum: ReticulumSection,
     #[serde(default)]
     pub identity: IdentitySection,
+    #[serde(default)]
+    pub cluster: ClusterSection,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -372,6 +374,32 @@ impl IdentitySection {
     }
 }
 
+/// `[cluster]` — peer clustering, Phase 1 (spec/26). `name` unset (the
+/// default): this peer isn't in any cluster, zero behavior change, same
+/// opt-in-by-absence shape as `[identity]`/`[reticulum]`. When set, this
+/// peer broadcasts a signed claim of membership and grants any other peer
+/// claiming the *same* name a full federation override (see
+/// `SyncService::federation_allows`'s security caveat).
+#[derive(Debug, Deserialize)]
+pub struct ClusterSection {
+    pub name: Option<String>,
+    #[serde(default = "default_cluster_announce_interval_seconds")]
+    pub announce_interval_seconds: u64,
+}
+
+fn default_cluster_announce_interval_seconds() -> u64 {
+    60
+}
+
+impl Default for ClusterSection {
+    fn default() -> Self {
+        Self {
+            name: None,
+            announce_interval_seconds: default_cluster_announce_interval_seconds(),
+        }
+    }
+}
+
 /// The fully resolved settings a `serve` invocation runs with: CLI flags
 /// take priority, falling back to `--config <file>` (file + `OAG_*` env
 /// overrides via figment), falling back to hardcoded defaults.
@@ -386,6 +414,8 @@ pub struct ResolvedConfig {
     pub identity_ephemeral: bool,
     pub heartbeat_interval: std::time::Duration,
     pub trust_config: oag_sync::TrustConfig,
+    pub cluster_name: Option<String>,
+    pub cluster_announce_interval: std::time::Duration,
     pub embedding_provider: Box<dyn oag_embeddings::EmbeddingProvider>,
     pub crawler_config: oag_crawler::CrawlerConfig,
     pub llm_extractor: std::sync::Arc<dyn oag_crawler::LlmExtractor>,
@@ -427,6 +457,8 @@ pub fn resolve(
         identity_ephemeral: file.identity.ephemeral,
         heartbeat_interval: std::time::Duration::from_secs(file.identity.heartbeat_interval_seconds),
         trust_config: file.identity.to_trust_config(),
+        cluster_name: file.cluster.name,
+        cluster_announce_interval: std::time::Duration::from_secs(file.cluster.announce_interval_seconds),
         embedding_provider: file.search.to_embedding_provider(),
         // `false` here, always -- unlike `oag crawl`'s one-shot
         // `--allow-private-networks` flag (an operator's own explicit,

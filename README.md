@@ -19,9 +19,11 @@ per-peer tensor-pad memory (`oag-tensor`) nudged by real sync outcomes. A separa
 evolution layer (`oag-brain/` — outside this workspace; needs `libtensorflow`) programs that pad
 via real scaled dot-product self-attention between two peers. Also built: opt-in ephemeral peer
 identity with signed presence heartbeats and trust-weighted federation (`[identity].ephemeral` in
-`config.toml`), and a small, truly-random per-node "gravity level" that very slightly throttles
-that node's own processing speed. See `docs/` for the full picture — start with
-`docs/architecture.md`.
+`config.toml`), a small, truly-random per-node "gravity level" that very slightly throttles that
+node's own processing speed, and opt-in peer clustering (`[cluster].name`) where a self-declared,
+signed cluster membership grants a full federation override — a deliberate, documented security
+trade-off, not a verified fact (see `spec/26-peer-clustering.md`). See `docs/` for the full
+picture — start with `docs/architecture.md`.
 
 ## Specification
 

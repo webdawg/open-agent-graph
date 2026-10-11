@@ -97,6 +97,19 @@ impl SyncClient {
         self.http.post(url).json(heartbeat).send().await?.error_for_status()?;
         Ok(())
     }
+
+    /// Peer clustering, Phase 1: push one signed cluster declaration.
+    /// Fire-and-forget by design at the call site (`cluster.rs`'s
+    /// announce loop), same reasoning as `send_presence`.
+    pub async fn send_cluster_declaration(
+        &self,
+        addr: &str,
+        declaration: &crate::cluster::ClusterDeclaration,
+    ) -> Result<(), SyncClientError> {
+        let url = format!("{}/cluster", Self::base(addr));
+        self.http.post(url).json(declaration).send().await?.error_for_status()?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

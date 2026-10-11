@@ -5,9 +5,13 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use oag_crypto::{PeerId, VerifyingKey};
 use oag_events::{ingest_remote_event, IngestOutcome};
-use oag_storage::repo::{events as events_repo, peer_presence as peer_presence_repo, peers as peers_repo};
+use oag_storage::repo::{
+    events as events_repo, peer_cluster as peer_cluster_repo, peer_presence as peer_presence_repo,
+    peers as peers_repo,
+};
 use serde::Deserialize;
 
+use crate::cluster::{self, ClusterDeclaration};
 use crate::presence::{self, PresenceHeartbeat, PresenceStatus};
 use crate::rate_limit;
 use crate::service::SyncService;
@@ -34,6 +38,7 @@ pub fn router(service: SyncService) -> Router {
         .route("/oag/sync/v1/events", post(post_events))
         .route("/oag/sync/v1/peers", get(peers))
         .route("/oag/sync/v1/presence", post(post_presence))
+        .route("/oag/sync/v1/cluster", post(post_cluster))
         .route("/oag/sync/v1/replication-status", get(replication_status))
         .layer(middleware::from_fn_with_state(
             service.clone(),
@@ -200,6 +205,31 @@ async fn post_presence(
             let _ = peer_presence_repo::record_going_offline(&mut conn, &address, peer_id.as_bytes(), now).await;
         }
     }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Peer clustering, Phase 1 (spec/26): accepts a signed cluster
+/// declaration and records it as the sender's latest claim. A bare
+/// self-assertion -- no corroboration, no authorization check, by
+/// explicit design decision (see spec/26's security caveat). Same
+/// unauthenticated-at-the-transport-layer reasoning as every other
+/// `/oag/sync/v1/*` endpoint: the declaration is self-authenticating via
+/// its own signature.
+async fn post_cluster(
+    State(service): State<SyncService>,
+    Json(declaration): Json<ClusterDeclaration>,
+) -> Result<StatusCode, StatusCode> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let peer_id = cluster::verify(&declaration, now).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let mut conn = service.pool().acquire().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    peer_cluster_repo::upsert(&mut conn, peer_id.as_bytes(), &declaration.unsigned.cluster, now)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(StatusCode::NO_CONTENT)
 }

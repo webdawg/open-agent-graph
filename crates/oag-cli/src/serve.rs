@@ -32,6 +32,7 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     let pool_for_reticulum = pool.clone();
     let identity_for_reticulum = identity.clone();
     let identity_for_heartbeats = identity.clone();
+    let identity_for_cluster = identity.clone();
 
     let graph = Arc::new(GraphService::new(pool, identity));
 
@@ -45,6 +46,12 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
             .with_minimum_trust(oag_sync::EPHEMERAL_MINIMUM_TRUST, config.trust_config)
             .with_heartbeat_identity(identity_for_heartbeats);
         oag_sync::spawn_heartbeat_loop(sync_service.clone(), config.heartbeat_interval);
+    }
+    // Peer clustering, Phase 1 (spec/26): independent of ephemeral mode --
+    // works the same for a permanent identity.
+    if let Some(cluster_name) = config.cluster_name.clone() {
+        sync_service = sync_service.with_cluster(identity_for_cluster, cluster_name);
+        oag_sync::spawn_cluster_announce_loop(sync_service.clone(), config.cluster_announce_interval);
     }
     let sync_router = oag_sync::router(sync_service.clone());
     oag_sync::spawn_gossip_loop(sync_service.clone(), config.bootstrap_peers.clone(), config.sync_interval);
@@ -76,6 +83,9 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         println!("oag: identity: ephemeral (regenerates every restart)");
     } else {
         println!("oag: identity: permanent");
+    }
+    if let Some(cluster_name) = &config.cluster_name {
+        println!("oag: cluster: {cluster_name}");
     }
     println!("oag: data dir = {}", config.data_dir.display());
     println!("oag: REST listening on http://{}/api/v1", config.listen);

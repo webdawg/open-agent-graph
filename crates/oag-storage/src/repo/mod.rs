@@ -6,6 +6,7 @@ pub mod node_authority;
 pub mod node_embeddings;
 pub mod node_gravity;
 pub mod nodes;
+pub mod peer_cluster;
 pub mod peer_presence;
 pub mod peers;
 pub mod rebuild;

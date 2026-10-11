@@ -325,3 +325,47 @@ small-to-middling random level, see a small fraction of that. Full reasoning and
 
 See also `spec/23-tensor-pad-and-evolution-layer.md` for the two other forces already acting on
 the same tensor pad this entry's gravity reading deliberately does *not* touch.
+
+---
+
+## Entry 6 — 2026-10-11
+
+Elicited through three direct clarifying questions while planning peer clustering
+(`future_peer_clustering.md`), each question included verbatim below its answer so the context is
+legible later.
+
+> [Should a 'cluster' be a first-class graph concept (a Node with member_of edges from
+> peer-nodes, reusing the existing assertion/evidence/corroboration pipeline for free) or a purely
+> networking-layer construct (a new FederationPolicy-style concept with no graph representation)?]
+>
+> Pure networking-layer construct
+
+> [For this first phase, what's the one concrete behavioral effect of two peers sharing a
+> cluster?]
+>
+> Trust/federation effect now
+
+> [Who can assert that a peer belongs to a cluster?]
+>
+> Any peer can self-assert
+
+### Response
+
+Overrides this session's own recommendation on the first question (graph-level representation,
+since it was free given the existing assertion pipeline) in favor of keeping clustering entirely
+inside `oag-sync`/`oag-storage` — no `oag-core`/`oag-graph` change at all, see
+`spec/26-peer-clustering.md`.
+
+**The three answers compose into a real, explicit security trade-off, stated plainly rather than
+assumed safe**: self-assertion with no gatekeeping, combined with a pure-networking construct
+with no corroboration mechanism (that's what declining the graph-level option costs — the graph's
+`source_independence`/`identity_assurance` signals were the thing not adopted), combined with a
+*full* trust/federation override (not just a cadence change) means a cluster name functions as a
+shared, unauthenticated label: any peer that learns or guesses it can claim the same cluster and
+receive the same full-trust override from anyone configured with that name. This was flagged
+explicitly before the decision was made (`future_peer_clustering.md`'s own open question: "does
+intra-cluster replication need the same rigor as `FederationPolicy::Open`/`Allowlist`") and chosen
+anyway, deliberately — not an oversight, and documented prominently in the implementation rather
+than quietly assumed safe.
+
+See `future_peer_clustering.md` memory for the full Phase 1 scope this entry fed into.

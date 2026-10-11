@@ -662,3 +662,87 @@ async fn ephemeral_peers_build_real_trust_from_signed_heartbeats() {
         "a forked peer must be hard-rejected regardless of heartbeat history"
     );
 }
+
+/// Peer clustering, Phase 1 (spec/26): same `TestPeer` shape as
+/// `spawn_peer_at` (a real, permanent identity -- clustering must work for
+/// that case exactly as well as an ephemeral one), additionally opted into
+/// broadcasting a signed cluster declaration via `with_cluster`.
+async fn spawn_clustered_peer(name: &str, federation: FederationPolicy, cluster: &str) -> TestPeer {
+    let dir = fresh_temp_dir(name);
+    let pool = open_pool(&dir.join("oag.sqlite")).await.unwrap();
+
+    let identity = PeerIdentity::load_or_generate(&dir.join("identity.key")).unwrap();
+    let peer_id = identity.peer_id();
+    let public_key = identity.verifying_key().to_bytes();
+    let cluster_identity = identity.clone();
+
+    let graph = Arc::new(GraphService::new(pool.clone(), identity));
+    let actor_id =
+        graph.declare_actor(ActorType::Service, Some(format!("{name}-actor")), None, None).await.unwrap();
+    let auth = AuthContext {
+        actor_id,
+        permissions: vec![Permission::GraphAssert],
+    };
+
+    let sync = SyncService::new(pool, peer_id, public_key, federation).with_cluster(cluster_identity, cluster.to_string());
+
+    let app = router(sync.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    TestPeer {
+        dir,
+        graph,
+        sync,
+        auth,
+        addr: format!("http://{addr}"),
+    }
+}
+
+/// End-to-end over real HTTP: peer A runs `FederationPolicy::Allowlist`
+/// that does **not** include peer B's `peer_id`. Confirms B is rejected
+/// until a real signed cluster declaration (matching A's own configured
+/// cluster) arrives, at which point `federation_allows` flips to `true`
+/// purely from the cluster override -- then confirms a *different*
+/// cluster name does not trigger it, and that this all works for ordinary
+/// permanent identities, not just ephemeral ones.
+#[tokio::test]
+async fn matching_cluster_declaration_overrides_an_allowlist_rejection() {
+    let allowlist_of_nobody = FederationPolicy::Allowlist(std::collections::HashSet::new());
+    let a = spawn_clustered_peer("cluster-a", allowlist_of_nobody, "home-lab").await;
+    let b = spawn_clustered_peer("cluster-b", FederationPolicy::Open, "home-lab").await;
+    let c = spawn_clustered_peer("cluster-c", FederationPolicy::Open, "other-site").await;
+
+    let b_peer_id = b.graph.identity().peer_id();
+    let c_peer_id = c.graph.identity().peer_id();
+
+    // Before any declaration arrives, A's empty allowlist rejects both.
+    assert!(!a.sync.federation_allows(&b_peer_id).await, "B must be rejected before any cluster declaration arrives");
+    assert!(!a.sync.federation_allows(&c_peer_id).await, "C must be rejected before any cluster declaration arrives");
+
+    // Each side must know the other's address before anything can flow --
+    // A needs B/C's address to receive their declarations' effect, and
+    // B/C each need A's address to have anywhere to broadcast one.
+    a.sync.sync_with_peer(&b.addr).await.unwrap();
+    a.sync.sync_with_peer(&c.addr).await.unwrap();
+    b.sync.sync_with_peer(&a.addr).await.unwrap();
+    c.sync.sync_with_peer(&a.addr).await.unwrap();
+
+    // Real signed declarations, pushed exactly the way the announce loop
+    // would, over real HTTP (at least A's address; `discover_peers`'
+    // transitive relay may have also taught each of them about the other).
+    assert!(b.sync.broadcast_cluster_declaration().await > 0, "B must have at least A's address known");
+    assert!(c.sync.broadcast_cluster_declaration().await > 0, "C must have at least A's address known");
+
+    assert!(
+        a.sync.federation_allows(&b_peer_id).await,
+        "B declared the same cluster as A -- the override must now apply despite the empty allowlist"
+    );
+    assert!(
+        !a.sync.federation_allows(&c_peer_id).await,
+        "C declared a *different* cluster -- must still be rejected by the unchanged allowlist"
+    );
+}

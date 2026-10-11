@@ -1,4 +1,5 @@
 pub mod client;
+pub mod cluster;
 pub mod federation;
 pub mod gossip;
 pub mod gravity;
@@ -13,6 +14,7 @@ pub mod trust;
 pub mod wire;
 
 pub use client::{SyncClient, SyncClientError};
+pub use cluster::{spawn_cluster_announce_loop, ClusterDeclaration, ClusterError};
 pub use federation::FederationPolicy;
 pub use gossip::spawn_gossip_loop;
 pub use presence::{spawn_heartbeat_loop, PresenceError, PresenceHeartbeat, PresenceStatus};

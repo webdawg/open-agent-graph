@@ -93,8 +93,12 @@ pub async fn peer_list(data_dir: &Path) -> anyhow::Result<()> {
         let peer_id = oag_crypto::PeerId::from_bytes(info.peer_id);
         let addrs = oag_storage::repo::peers::list_addresses(&mut conn, peer_id.as_bytes()).await?;
         let trust = oag_sync::trust::compute_trust(sync.pool(), &peer_id, now, &trust_config).await?;
+        let cluster = oag_storage::repo::peer_cluster::get(&mut conn, peer_id.as_bytes())
+            .await?
+            .map(|claim| claim.cluster)
+            .unwrap_or_else(|| "-".to_string());
         println!(
-            "{peer_id}  forked={}  trust={trust:.2}  last_seen={:?}  addresses={:?}",
+            "{peer_id}  forked={}  trust={trust:.2}  cluster={cluster}  last_seen={:?}  addresses={:?}",
             info.forked, info.last_seen, addrs
         );
     }

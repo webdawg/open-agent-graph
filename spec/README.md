@@ -69,6 +69,7 @@ instead.
 | [23-tensor-pad-and-evolution-layer.md](23-tensor-pad-and-evolution-layer.md) | Per-peer tensor pad memory, and the TensorFlow-backed attention layer that programs it |
 | [24-ephemeral-peer-trust.md](24-ephemeral-peer-trust.md) | Opt-in per-restart identity, signed presence heartbeats, trust-weighted federation |
 | [25-gravity.md](25-gravity.md) | Per-node random "gravity level" that very slightly throttles that node's own processing speed |
+| [26-peer-clustering.md](26-peer-clustering.md) | Self-declared, signed cluster membership as a federation override |
 
 ## Founding context
 
