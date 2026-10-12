@@ -32,6 +32,39 @@ impl Versioned for EvidenceRow {
     const MIGRATIONS: &'static [crate::versioning::MigrationStep<EvidenceRow>] = &[];
 }
 
+impl HasSchemaVersion for ObservationRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for ObservationRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<ObservationRow>] = &[];
+}
+
+impl HasSchemaVersion for DisputeRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for DisputeRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<DisputeRow>] = &[];
+}
+
+impl HasSchemaVersion for RetractionRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for RetractionRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<RetractionRow>] = &[];
+}
+
 fn row_to_assertion(row: AssertionRow) -> Result<Assertion, StorageError> {
     let row = row.migrate_to_current();
     let extraction_method = ExtractionMethod::parse(&row.extraction_method).ok_or_else(|| {
@@ -244,6 +277,7 @@ pub struct Dispute {
 }
 
 fn row_to_dispute(row: DisputeRow) -> Result<Dispute, StorageError> {
+    let row = row.migrate_to_current();
     Ok(Dispute {
         id: oag_core::EventId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.id)?)),
         disputed_assertion_id: AssertionId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(
@@ -294,6 +328,7 @@ pub struct Retraction {
 }
 
 fn row_to_retraction(row: RetractionRow) -> Result<Retraction, StorageError> {
+    let row = row.migrate_to_current();
     Ok(Retraction {
         id: oag_core::EventId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.id)?)),
         retracted_assertion_id: AssertionId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(
@@ -372,6 +407,7 @@ pub struct Observation {
 }
 
 fn row_to_observation(row: ObservationRow) -> Result<Observation, StorageError> {
+    let row = row.migrate_to_current();
     Ok(Observation {
         id: oag_core::EventId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.id)?)),
         assertion_id: AssertionId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(

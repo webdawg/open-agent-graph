@@ -476,3 +476,36 @@ metadata → `oag ipfs cat` round-trips the exact original page bytes).
 
 See `future_ipfs_static_data_hosting.md` memory and `spec/29-ipfs-pinning.md` for the full
 mechanism this entry fed into.
+
+---
+
+## Entry 10 — 2026-10-12
+
+Another self-made design judgment, same pattern as Entries 7-9 — `spec/27-artifact-versioning.md`'s
+own "still future work" note already named this Phase 2 precisely ("the same mechanism for
+actors/aliases/disputes/retractions/supersessions/observations"), so building it only required two
+judgment calls, both recorded here.
+
+**First**: `assertion_supersessions` was excluded entirely, not just deferred for a later phase.
+Grepping the whole workspace found `SupersessionRow` (`oag-storage/src/models.rs`) has zero usages
+anywhere outside its own definition — `insert_supersession` writes using a separate plain struct
+built directly, and the only place supersession info is ever displayed (the Human Interface's
+assertion page) reads it from the event log (`get_history`), not this table. There is no
+row-to-domain-type read path for a migration shim to attach to, so a `schema_version` column here
+would have nothing to condition on at read time — building one anyway would be versioning a table
+nothing actually reads, the same kind of speculative construction Phase 1's own "what's
+deliberately not built yet" section already declined for payload-variant versioning.
+
+**Second**: of the remaining five, only `actors` got the explicit "migrate in place" CLI action
+(`oag migrate actor <id> --force`). It's the only one of the five with a pre-existing singular
+get-by-id lookup to extend (`repo::actors::get_by_id`, already backing `oag actor get`) — exactly
+the precedent Phase 1's four commands followed. `node_aliases` has no single id at all (composite
+primary key); `observations`/`assertion_disputes`/`assertion_retractions` each have a real `id`
+column but no existing singular lookup anywhere (only `list_*` keyed by `assertion_id`).
+Inventing one solely to attach a migrate command would have been scope beyond "the same
+mechanism" — the same reasoning Entry 8 used to decline generalizing `list_roadmap_proposals`. All
+five still get the automatic shim (`row_to_*` migrating on every read), which fully satisfies "the
+same mechanism" for the read side regardless; only the explicit write-side convenience is narrower
+for four of them.
+
+See `spec/27-artifact-versioning.md` for the full mechanism this entry fed into.

@@ -307,6 +307,17 @@ enum MigrateCommand {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
+    /// Phase 2 (spec/27-artifact-versioning.md): the only one of actors/
+    /// aliases/disputes/retractions/observations with an explicit
+    /// migrate-in-place action, since it's the only one with a
+    /// pre-existing singular get-by-id lookup (`oag actor get`) to extend.
+    Actor {
+        id: String,
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -537,6 +548,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Migrate { command: MigrateCommand::Evidence { id, force, data_dir } } => {
             commands::migrate_evidence(&data_dir, &id, force).await
+        }
+        Command::Migrate { command: MigrateCommand::Actor { id, force, data_dir } } => {
+            commands::migrate_actor(&data_dir, &id, force).await
         }
         Command::Identity { command: IdentityCommand::Show { data_dir } } => {
             commands::identity_show(&data_dir).await

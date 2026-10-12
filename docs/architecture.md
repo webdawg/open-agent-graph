@@ -186,14 +186,16 @@ remain not yet implemented and change nothing described elsewhere in this docume
   is purely a retrieval pointer. Still future work: pinning the crawler's auxiliary side-fetches,
   any REST/MCP pin/fetch endpoint, and the original `blobs/<hash>` static-export concept beyond
   evidence content.
-- Granular, per-artifact data versioning. **Phase 1 implemented** for nodes/edges/assertions/
-  evidence — an explicit `schema_version` on every row, with both access modes Entry 1 described
-  (`USER_INPUT_RECORD.md`) available at read time: migrate a row to the current version in place
-  (`oag migrate <type> <id> --force`), or keep serving it through an in-memory adapter applied
-  automatically on every read (see `spec/27-artifact-versioning.md`). Still future work: the same
-  mechanism for actors/aliases/disputes/retractions/supersessions/observations, and versioned
-  `EventPayload` variants for a genuinely breaking payload shape change (deferred deliberately,
-  not an oversight — see `spec/27`'s own explanation and `USER_INPUT_RECORD.md` Entry 7).
+- Granular, per-artifact data versioning. **Phase 1 and 2 implemented** for nodes/edges/
+  assertions/evidence (Phase 1) and actors/node-aliases/disputes/retractions/observations
+  (Phase 2) — an explicit `schema_version` on every row, with the in-memory shim Entry 1 described
+  (`USER_INPUT_RECORD.md`) applied automatically on every read for all nine types, plus the
+  explicit migrate-in-place action (`oag migrate <type> <id> --force`) for the five types with a
+  pre-existing singular get-by-id lookup to extend (see `spec/27-artifact-versioning.md`). Still
+  future work: `assertion_supersessions` (deliberately — no typed read path exists to attach a
+  shim to), and versioned `EventPayload` variants for a genuinely breaking payload shape change
+  (deferred deliberately, not an oversight — see `spec/27`'s own explanation and
+  `USER_INPUT_RECORD.md` Entries 7 and 10).
 - Long-word, subdomain-based node addressing: extending `oag-petname`'s existing deterministic
   word-based peer *display* names into actual *addressing* — using one domain's enormous subdomain
   space (tens of millions of subdomains, each mapping to a `NodeId`/`PeerId`) as a way to mint vast

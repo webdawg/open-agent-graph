@@ -1,0 +1,5 @@
+ALTER TABLE actors ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE node_aliases ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE observations ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE assertion_disputes ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE assertion_retractions ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1;

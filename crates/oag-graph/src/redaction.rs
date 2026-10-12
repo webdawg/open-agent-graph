@@ -15,7 +15,7 @@
 //!   node, its edges, and its assertions are completely untouched, and
 //!   `unsuppress_node_from_search` fully reverses it.
 
-use oag_core::{AssertionId, EdgeId, EventId, NodeId, Permission};
+use oag_core::{ActorId, AssertionId, EdgeId, EventId, NodeId, Permission};
 use oag_storage::repo::{redactions as redactions_repo, search_suppressions as search_suppressions_repo};
 
 use crate::assert::check_opt_len;
@@ -145,6 +145,19 @@ impl GraphService {
         auth.require(Permission::Admin)?;
         let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
         Ok(oag_storage::repo::assertions::migrate_evidence_to_current(&mut conn, evidence_id).await?)
+    }
+
+    /// The actor equivalent of `Self::migrate_node` (spec/27-artifact-
+    /// versioning.md Phase 2). Unlike aliases/disputes/retractions/
+    /// observations -- which get the automatic shim but no explicit
+    /// migrate-in-place action, since none of them has a pre-existing
+    /// singular get-by-id lookup to extend -- actors already have one
+    /// (`repo::actors::get_by_id`, backing `oag actor get`), so this
+    /// follows Phase 1's four commands exactly.
+    pub async fn migrate_actor(&self, auth: &AuthContext, actor_id: ActorId) -> Result<MigrationOutcome, GraphError> {
+        auth.require(Permission::Admin)?;
+        let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(oag_storage::repo::actors::migrate_to_current(&mut conn, actor_id).await?)
     }
 }
 
@@ -389,6 +402,37 @@ mod tests {
     async fn migrating_an_unknown_id_is_not_found() {
         let (service, auth) = service_with_admin("migrate-unknown").await;
         let err = service.migrate_node(&auth, NodeId::derive(b"no-such-node")).await.unwrap_err();
+        assert!(matches!(err, GraphError::Storage(oag_storage::StorageError::NotFound)));
+    }
+
+    /// Phase 2's one new `GraphService`-level migrate method -- actors are
+    /// the only one of actors/aliases/disputes/retractions/observations
+    /// that gets an explicit migrate-in-place action, since they're the
+    /// only one with a pre-existing singular get-by-id lookup to extend.
+    #[tokio::test]
+    async fn migrating_a_freshly_declared_actor_reports_already_current() {
+        let (service, auth) = service_with_admin("migrate-actor-already-current").await;
+        assert_eq!(
+            service.migrate_actor(&auth, auth.actor_id).await.unwrap(),
+            MigrationOutcome::AlreadyCurrent { version: 1 }
+        );
+    }
+
+    #[tokio::test]
+    async fn migrating_an_actor_requires_admin_permission() {
+        let (service, _) = service_with_admin("migrate-actor-needs-admin").await;
+        let actor_id =
+            service.declare_actor(ActorType::Agent, Some("no-admin".into()), None, None).await.unwrap();
+        let no_admin = AuthContext { actor_id, permissions: vec![Permission::GraphAssert] };
+
+        let err = service.migrate_actor(&no_admin, actor_id).await.unwrap_err();
+        assert!(matches!(err, GraphError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn migrating_an_unknown_actor_is_not_found() {
+        let (service, auth) = service_with_admin("migrate-actor-unknown").await;
+        let err = service.migrate_actor(&auth, ActorId::derive(b"no-such-actor")).await.unwrap_err();
         assert!(matches!(err, GraphError::Storage(oag_storage::StorageError::NotFound)));
     }
 }

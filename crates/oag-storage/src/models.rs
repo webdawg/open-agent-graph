@@ -44,6 +44,7 @@ pub struct NodeAliasRow {
     pub alias: String,
     pub alias_type: String,
     pub source_assertion: Option<Vec<u8>>,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -65,6 +66,7 @@ pub struct ActorRow {
     pub identity_uri: Option<String>,
     pub metadata: String,
     pub created_at: i64,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -112,6 +114,7 @@ pub struct ObservationRow {
     pub result: String,
     pub observed_at: i64,
     pub created_at: i64,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -121,6 +124,7 @@ pub struct DisputeRow {
     pub disputing_actor_id: Vec<u8>,
     pub reason: Option<String>,
     pub created_at: i64,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -130,6 +134,7 @@ pub struct RetractionRow {
     pub actor_id: Vec<u8>,
     pub reason: Option<String>,
     pub created_at: i64,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]

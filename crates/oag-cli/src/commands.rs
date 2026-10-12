@@ -495,6 +495,15 @@ pub async fn migrate_evidence(data_dir: &Path, id: &str, force: bool) -> anyhow:
     Ok(())
 }
 
+pub async fn migrate_actor(data_dir: &Path, id: &str, force: bool) -> anyhow::Result<()> {
+    require_migrate_force(force)?;
+    let graph = open_graph(data_dir).await?;
+    let actor_id = id.parse().map_err(|_| anyhow::anyhow!("invalid actor id '{id}'"))?;
+    let outcome = graph.migrate_actor(&cli_admin_auth(), actor_id).await?;
+    println!("{}", serde_json::to_string_pretty(&outcome)?);
+    Ok(())
+}
+
 pub async fn key_create(
     data_dir: &Path,
     actor_type: &str,

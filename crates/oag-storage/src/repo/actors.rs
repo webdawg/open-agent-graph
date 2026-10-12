@@ -3,8 +3,21 @@ use sqlx::SqliteConnection;
 
 use crate::error::{bytes_to_array, StorageError};
 use crate::models::{ActorKeyRow, ActorRow};
+use crate::versioning::{HasSchemaVersion, MigrationOutcome, Versioned};
+
+impl HasSchemaVersion for ActorRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for ActorRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<ActorRow>] = &[];
+}
 
 fn row_to_actor(row: ActorRow) -> Result<Actor, StorageError> {
+    let row = row.migrate_to_current();
     let actor_type = ActorType::parse(&row.actor_type)
         .ok_or_else(|| StorageError::UnknownEnumValue("actor_type", row.actor_type.clone()))?;
     let public_key = row
@@ -50,6 +63,31 @@ pub async fn get_by_id(
         .fetch_optional(&mut *conn)
         .await?;
     row.map(row_to_actor).transpose()
+}
+
+/// spec/27-artifact-versioning.md's "convert perm" access mode for an
+/// actor, mirroring `repo::nodes::migrate_to_current` exactly.
+pub async fn migrate_to_current(
+    conn: &mut SqliteConnection,
+    id: ActorId,
+) -> Result<MigrationOutcome, StorageError> {
+    let row: Option<ActorRow> = sqlx::query_as("SELECT * FROM actors WHERE actor_id = ?")
+        .bind(id.as_hash().as_bytes().to_vec())
+        .fetch_optional(&mut *conn)
+        .await?;
+    let row = row.ok_or(StorageError::NotFound)?;
+    let from = row.schema_version();
+    if from >= ActorRow::CURRENT_VERSION {
+        return Ok(MigrationOutcome::AlreadyCurrent { version: from });
+    }
+    let migrated = row.migrate_to_current();
+    let to = migrated.schema_version();
+    sqlx::query("UPDATE actors SET schema_version = ? WHERE actor_id = ?")
+        .bind(to)
+        .bind(id.as_hash().as_bytes().to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(MigrationOutcome::Migrated { from, to })
 }
 
 /// Find an actor by its exact `name` and `actor_type`. Used to reuse a

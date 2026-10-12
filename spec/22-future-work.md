@@ -13,14 +13,17 @@ enum; `canonicalize_value` passes an already-scheme-prefixed identifier through 
 than forcing a house format; the event log never deletes or rewrites anything. See
 `USER_INPUT_RECORD.md`, Entry 1.
 
-**Phase 1 implemented** — granular, per-artifact data versioning for nodes/edges/assertions/
-evidence: an explicit `schema_version` on every row, with two access modes at read time — migrate
-a row to the current version in place (`oag migrate <type> <id> --force`), or keep serving it
-through an in-memory adapter applied automatically on every read. See
-`spec/27-artifact-versioning.md`. Still not built: the same mechanism for actors/aliases/disputes/
-retractions/supersessions/observations, and versioned `EventPayload` variants for a genuinely
-breaking (non-additive) payload shape change — `spec/27`'s own "what's deliberately not built yet"
-section explains why the latter was deferred rather than built speculatively.
+**Phase 1 and 2 implemented** — granular, per-artifact data versioning for nodes/edges/assertions/
+evidence (Phase 1) and actors/node-aliases/disputes/retractions/observations (Phase 2): an
+explicit `schema_version` on every row, with the in-memory shim applied automatically on every
+read for all nine types, plus an explicit migrate-in-place action
+(`oag migrate <type> <id> --force`) for the five types that have a pre-existing singular
+get-by-id lookup to extend (node/edge/assertion/evidence/actor). See
+`spec/27-artifact-versioning.md`. Still not built: `assertion_supersessions` (deliberately —
+its row type has no typed read path to attach a shim to, see `spec/27`'s "Scope" section), and
+versioned `EventPayload` variants for a genuinely breaking (non-additive) payload shape change —
+`spec/27`'s own "what's deliberately not built yet" section explains why the latter was deferred
+rather than built speculatively.
 
 ## Ephemeral, session-scoped peer identity
 

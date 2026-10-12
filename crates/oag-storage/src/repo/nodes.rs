@@ -17,6 +17,17 @@ impl Versioned for NodeRow {
     const MIGRATIONS: &'static [crate::versioning::MigrationStep<NodeRow>] = &[];
 }
 
+impl HasSchemaVersion for NodeAliasRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for NodeAliasRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<NodeAliasRow>] = &[];
+}
+
 fn parse_alias_type(s: &str) -> Result<oag_core::AliasType, StorageError> {
     Ok(match s {
         "name" => oag_core::AliasType::Name,
@@ -30,6 +41,7 @@ fn parse_alias_type(s: &str) -> Result<oag_core::AliasType, StorageError> {
 }
 
 fn row_to_alias(row: NodeAliasRow) -> Result<NodeAlias, StorageError> {
+    let row = row.migrate_to_current();
     Ok(NodeAlias {
         node_id: NodeId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.node_id)?)),
         alias: row.alias,
