@@ -509,3 +509,30 @@ same mechanism" for the read side regardless; only the explicit write-side conve
 for four of them.
 
 See `spec/27-artifact-versioning.md` for the full mechanism this entry fed into.
+
+---
+
+## Entry 11 — 2026-10-12
+
+A self-made correction, not quite the same shape as Entries 7-10's judgment calls — those each
+picked between two reasonable designs; this one reverses a reasoning step from the immediately
+preceding phase once a new fact made it wrong.
+
+`spec/29-ipfs-pinning.md`'s Phase 1 (this session, same day) put IPFS pinning config under
+`[crawler]` (`ipfs_pinning_provider`/`ipfs_api_base_url`/`ipfs_api_key`), reasoned at the time as
+"IPFS pinning is crawler-specific... belongs in the section that already owns crawl-time
+behavior." Phase 2 — `oag backup --pin`, picking up the original memory's shape #2 ("publish
+read-only snapshots... to IPFS") — needed the exact same `PinningProvider`, and backup has nothing
+to do with crawling. Rather than have `oag backup --pin` read a `[crawler]`-scoped setting, or
+duplicate the provider-resolution logic under a second name, moved it to its own top-level
+`[ipfs]` section (`crates/oag-cli/src/config.rs`'s new `IpfsSection`), with `CrawlerSection` and
+`ResolvedConfig`/`resolve_crawler_config` updated to read from it unchanged otherwise.
+
+**Why this isn't a legacy break**: the `[crawler].ipfs_*` keys existed for exactly one commit,
+earlier the same session, with no real `config.toml` anywhere ever having depended on that path —
+"legacy must flow" (Entry 1) is about data/clients/protocols actually in use, not about a config
+key nobody has had the chance to write yet. Fixing a wrong assumption before anyone depends on it
+is the cheap moment to fix it; leaving a known-wrong section name in place "for compatibility" with
+zero real users would have been cargo-culting the principle rather than applying it.
+
+See `spec/29-ipfs-pinning.md` for the full mechanism this entry fed into.

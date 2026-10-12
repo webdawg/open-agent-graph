@@ -116,6 +116,14 @@ enum Command {
         out: PathBuf,
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
+        /// Also pin the resulting snapshot to IPFS (spec/29-ipfs-pinning.md
+        /// Phase 2), via `[ipfs]` in config.toml. Fails loudly, unlike the
+        /// crawler's best-effort pinning -- this flag's entire point is to
+        /// pin, so a failure here must be surfaced, not silently skipped.
+        #[arg(long)]
+        pin: bool,
+        #[arg(long)]
+        config: Option<PathBuf>,
     },
     /// Wipe every derived graph table and replay the full signed event log
     /// to regenerate them from scratch (spec section 83). The event log
@@ -525,7 +533,7 @@ async fn main() -> anyhow::Result<()> {
         Command::Embeddings { command: EmbeddingsCommand::Recompute { data_dir, config } } => {
             commands::embeddings_recompute(&data_dir, config).await
         }
-        Command::Backup { out, data_dir } => commands::backup(&data_dir, &out).await,
+        Command::Backup { out, data_dir, pin, config } => commands::backup(&data_dir, &out, pin, config).await,
         Command::Rebuild { data_dir } => commands::rebuild(&data_dir).await,
         Command::Redact { command: RedactCommand::Evidence { evidence_id, reason, force, data_dir } } => {
             commands::redact_evidence(&data_dir, &evidence_id, reason, force).await

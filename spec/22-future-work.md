@@ -54,14 +54,16 @@ directory peer) for discovery.
 
 ## Native IPFS integration
 
-**Phase 1 implemented** — see [29-ipfs-pinning.md](29-ipfs-pinning.md). Evidence content can
-optionally be pinned to IPFS (opt-in, `[crawler].ipfs_pinning_provider`, default disabled); the
-resulting CID lands in the existing `Evidence.metadata` JSON column as `{"ipfs_cid": "..."}` — no
-schema change, since that column already existed. `oag-crawler` auto-pins the main page's body at
-crawl time; `oag ipfs cat <cid>` retrieves pinned content directly. OAG's own `content_hash` stays
-authoritative; the CID is purely an additional retrieval pointer, never a trust signal. Still not
-built: pinning the crawler's `llms.txt`/ARD/agent-card side-fetches, any REST/MCP pin/fetch
-endpoint, and the original `blobs/<hash>` static-export concept beyond evidence content.
+**Phase 1 and 2 implemented** — see [29-ipfs-pinning.md](29-ipfs-pinning.md). Evidence content
+(Phase 1) and `oag backup` snapshots (Phase 2) can optionally be pinned to IPFS (opt-in,
+`[ipfs].pinning_provider`, default disabled). Evidence's CID lands in the existing
+`Evidence.metadata` JSON column as `{"ipfs_cid": "..."}` — no schema change, since that column
+already existed. `oag-crawler` auto-pins the main page's body at crawl time; `oag backup --pin`
+pins the resulting snapshot; `oag ipfs cat <cid>` retrieves pinned content from either. OAG's own
+`content_hash` stays authoritative; a CID is purely an additional retrieval pointer, never a trust
+signal. Still not built: pinning the crawler's `llms.txt`/ARD/agent-card side-fetches, any REST/MCP
+pin/fetch endpoint, automatic/scheduled backup pinning, and inlining large evidence bodies into
+IPFS in place of local storage (no local full-body evidence storage exists to replace).
 
 ## Self-hosted roadmap governance
 

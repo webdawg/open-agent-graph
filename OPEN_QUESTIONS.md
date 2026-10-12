@@ -35,6 +35,15 @@ Format: question, assumption I'm running with, status.
 - **No REST/MCP endpoint for pin/fetch.** The write side needs none (it's the existing evidence-add
   path, one new optional field); `oag ipfs cat` is CLI-only, matching `oag redact`/`oag peer forks`
   precedent for operator-triggered read tooling. Status: resolved.
+- **Phase 2 config moved from `[crawler].ipfs_*` to its own `[ipfs]` section.** `oag backup --pin`
+  needed the same `PinningProvider` as the crawler, immediately falsifying Phase 1's own
+  "crawler-specific" reasoning for where the config lived. Moved before any real deployment
+  depended on the old key path -- a timely correction, not a legacy break (`USER_INPUT_RECORD.md`
+  Entry 11). Status: resolved.
+- **`oag backup --pin` fails loudly on a pin error**, unlike the crawler's best-effort-and-continue
+  posture. Assumption: `--pin`'s entire point is to pin, so there's no sensible "continue without
+  it" fallback the way a crawl (which has plenty of other useful work to do regardless) has.
+  Status: resolved.
 
 ## Semantic search (spec section 64)
 

@@ -179,13 +179,14 @@ remain not yet implemented and change nothing described elsewhere in this docume
   mechanism (Phase 1 uses a soft, local, address-correlation heuristic instead), live config
   reload for the trust-check windows, and PacketCrypt-style proof-of-data-volume.
 - Native IPFS integration for large evidence blobs and static exports (spec section 84's
-  `blobs/<hash>` concept). **Phase 1 implemented** — opt-in pinning of crawled evidence content
-  (`[crawler].ipfs_pinning_provider`, default disabled), the resulting CID stored in the existing
-  `Evidence.metadata` column (`{"ipfs_cid": "..."}`, no schema change), and `oag ipfs cat <cid>` for
-  retrieval — see `spec/29-ipfs-pinning.md`. OAG's own `content_hash` stays authoritative; the CID
-  is purely a retrieval pointer. Still future work: pinning the crawler's auxiliary side-fetches,
-  any REST/MCP pin/fetch endpoint, and the original `blobs/<hash>` static-export concept beyond
-  evidence content.
+  `blobs/<hash>` concept). **Phase 1 and 2 implemented** — opt-in pinning of crawled evidence
+  content (Phase 1) and `oag backup` snapshots (Phase 2), both via `[ipfs].pinning_provider`
+  (default disabled). Evidence's CID lands in the existing `Evidence.metadata` column
+  (`{"ipfs_cid": "..."}`, no schema change); `oag ipfs cat <cid>` retrieves pinned content from
+  either source — see `spec/29-ipfs-pinning.md`. OAG's own `content_hash` stays authoritative; a
+  CID is purely a retrieval pointer. Still future work: pinning the crawler's auxiliary
+  side-fetches, any REST/MCP pin/fetch endpoint, automatic/scheduled backup pinning, and inlining
+  large evidence bodies into IPFS in place of local storage.
 - Granular, per-artifact data versioning. **Phase 1 and 2 implemented** for nodes/edges/
   assertions/evidence (Phase 1) and actors/node-aliases/disputes/retractions/observations
   (Phase 2) — an explicit `schema_version` on every row, with the in-memory shim Entry 1 described

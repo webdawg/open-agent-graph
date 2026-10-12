@@ -356,7 +356,12 @@ pub async fn identity_restore(data_dir: &Path, backup_path: &Path, force: bool) 
     Ok(())
 }
 
-pub async fn backup(data_dir: &Path, out: &Path) -> anyhow::Result<()> {
+pub async fn backup(
+    data_dir: &Path,
+    out: &Path,
+    pin: bool,
+    config_path: Option<std::path::PathBuf>,
+) -> anyhow::Result<()> {
     let pool = oag_storage::open_pool(&data_dir.join("oag.sqlite")).await?;
     oag_storage::backup_to(&pool, out).await?;
     println!("backed up database -> {}", out.display());
@@ -365,6 +370,20 @@ pub async fn backup(data_dir: &Path, out: &Path) -> anyhow::Result<()> {
          catastrophic on its own -- but this snapshot is much faster to restore from than a \
          full re-sync, and is your only copy if this is a lone/first peer."
     );
+    if pin {
+        let pinning_provider = crate::config::resolve_pinning_provider(config_path)?;
+        let bytes = tokio::fs::read(out).await?;
+        let cid = pinning_provider
+            .pin(&bytes)
+            .await
+            .map_err(|e| anyhow::anyhow!("{e} (is [ipfs].pinning_provider set in config.toml?)"))?;
+        println!("pinned to IPFS: {cid}");
+        println!(
+            "note: this CID is an unverified retrieval pointer only, same as every other \
+             pinned_cid in this project (spec/29-ipfs-pinning.md) -- not independently confirmed, \
+             never a trust signal."
+        );
+    }
     Ok(())
 }
 
@@ -739,10 +758,23 @@ mod tests {
         open_graph(&data_dir).await.unwrap();
 
         let out_path = temp_dir("backup-rebuild-out").join("snapshot.sqlite");
-        backup(&data_dir, &out_path).await.unwrap();
+        backup(&data_dir, &out_path, false, None).await.unwrap();
         assert!(out_path.exists());
 
         rebuild(&data_dir).await.unwrap();
+    }
+
+    /// `--pin` with no `[ipfs]` configured (the default) must surface a
+    /// clear disabled-provider error, not panic -- same posture as `oag
+    /// ipfs cat` with pinning disabled.
+    #[tokio::test]
+    async fn backup_with_pin_but_no_ipfs_configured_is_a_clear_error() {
+        let data_dir = temp_dir("backup-pin-disabled");
+        open_graph(&data_dir).await.unwrap();
+        let out_path = temp_dir("backup-pin-disabled-out").join("snapshot.sqlite");
+
+        let err = backup(&data_dir, &out_path, true, None).await.unwrap_err();
+        assert!(err.to_string().contains("disabled"), "got {err}");
     }
 
     async fn seed_evidence(data_dir: &Path) -> String {
