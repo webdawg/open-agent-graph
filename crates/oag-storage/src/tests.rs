@@ -235,6 +235,40 @@ async fn assert_evidence_dispute_retract_round_trip() {
 }
 
 #[tokio::test]
+async fn list_by_predicate_and_object_filters_both_fields() {
+    let path = temp_db_path("predicate-object-filter");
+    let pool = open_pool(&path).await.unwrap();
+    let mut conn = pool.acquire().await.unwrap();
+
+    let now = 1_700_000_000_i64;
+    let hub = Node::new(NodeType::concept(), "concept:oag-roadmap-proposal", now);
+    let proposal_a = Node::new(NodeType::concept(), "concept:proposal-a", now);
+    let proposal_b = Node::new(NodeType::concept(), "concept:proposal-b", now);
+    let decoy = Node::new(NodeType::concept(), "concept:decoy", now);
+    for n in [&hub, &proposal_a, &proposal_b, &decoy] {
+        repo::nodes::insert_if_missing(&mut conn, n).await.unwrap();
+    }
+
+    let edge_a = Edge::new(proposal_a.id, Predicate::new("instance_of"), hub.id, now);
+    let edge_b = Edge::new(proposal_b.id, Predicate::new("instance_of"), hub.id, now);
+    // Decoy: same object, different predicate -- must not match.
+    let edge_wrong_predicate = Edge::new(decoy.id, Predicate::new("example_of"), hub.id, now);
+    // Decoy: same predicate, different object -- must not match either.
+    let edge_wrong_object = Edge::new(decoy.id, Predicate::new("instance_of"), proposal_a.id, now);
+    for e in [&edge_a, &edge_b, &edge_wrong_predicate, &edge_wrong_object] {
+        repo::edges::insert_if_missing(&mut conn, e).await.unwrap();
+    }
+
+    let mut matched = repo::edges::list_by_predicate_and_object(&mut conn, "instance_of", hub.id)
+        .await
+        .unwrap();
+    matched.sort_by_key(|e| e.id);
+    let mut expected = vec![edge_a.id, edge_b.id];
+    expected.sort();
+    assert_eq!(matched.iter().map(|e| e.id).collect::<Vec<_>>(), expected);
+}
+
+#[tokio::test]
 async fn fts_search_finds_node_after_update() {
     let path = temp_db_path("fts");
     let pool = open_pool(&path).await.unwrap();

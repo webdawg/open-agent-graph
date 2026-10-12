@@ -205,6 +205,59 @@ pub async fn search_page(State(state): State<AppState>, Query(q): Query<SearchQu
     Ok(Html(template.render().map_err(|e| HumanError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?).into_response())
 }
 
+struct RoadmapProposalView {
+    link: String,
+    canonical_identifier: String,
+    name: Option<String>,
+    description: Option<String>,
+    active_assertions: usize,
+    distinct_actors: usize,
+    source_independence: String,
+    evidence_strength: String,
+    agreement: String,
+    freshness: String,
+    identity_assurance: String,
+}
+
+#[derive(Template)]
+#[template(path = "roadmap.html")]
+struct RoadmapTemplate {
+    key: String,
+    proposals: Vec<RoadmapProposalView>,
+}
+
+/// spec/28-roadmap-governance.md: browse every roadmap proposal, ranked by
+/// the same corroboration signals every other claim already gets, shown
+/// separately rather than collapsed into one score -- same convention
+/// `oag-cli`'s `EdgeCommand::Corroboration` already follows.
+pub async fn roadmap_page(State(state): State<AppState>, Query(q): Query<KeyQuery>) -> Result<Response, HumanError> {
+    authenticate_query(&q.key, &state.graph).await?;
+    let key = q.key.unwrap_or_default();
+
+    let proposals = state
+        .graph
+        .list_roadmap_proposals()
+        .await?
+        .into_iter()
+        .map(|p| RoadmapProposalView {
+            link: node_link(p.node.id, &key),
+            canonical_identifier: p.node.canonical_identifier,
+            name: p.node.name,
+            description: p.node.description,
+            active_assertions: p.corroboration.active_assertions,
+            distinct_actors: p.corroboration.distinct_actors,
+            source_independence: format!("{:.2}", p.corroboration.source_independence),
+            evidence_strength: format!("{:.2}", p.corroboration.evidence_strength),
+            agreement: format!("{:.2}", p.corroboration.agreement),
+            freshness: format!("{:.2}", p.corroboration.freshness),
+            identity_assurance: format!("{:.2}", p.corroboration.identity_assurance),
+        })
+        .collect();
+
+    let template = RoadmapTemplate { key, proposals };
+    Ok(Html(template.render().map_err(|e| HumanError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?).into_response())
+}
+
 #[derive(Template)]
 #[template(path = "node.html")]
 struct NodeTemplate {

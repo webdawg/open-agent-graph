@@ -82,6 +82,25 @@ pub async fn list_by_object(
     rows.into_iter().map(row_to_edge).collect()
 }
 
+/// Every edge with a given predicate pointing at `object` -- e.g. every
+/// `(x, instance_of, concept:oag-roadmap-proposal)` edge (spec/28-roadmap-
+/// governance.md). Unlike `list_by_object`, also filters by predicate, since
+/// a hub node like a roadmap-proposal concept is meaningless to browse
+/// without restricting to the one relationship that marks membership in it.
+pub async fn list_by_predicate_and_object(
+    conn: &mut SqliteConnection,
+    predicate: &str,
+    object: NodeId,
+) -> Result<Vec<oag_core::Edge>, StorageError> {
+    let rows: Vec<EdgeRow> =
+        sqlx::query_as("SELECT * FROM edges WHERE predicate = ? AND object_node_id = ?")
+            .bind(predicate)
+            .bind(object.as_hash().as_bytes().to_vec())
+            .fetch_all(&mut *conn)
+            .await?;
+    rows.into_iter().map(row_to_edge).collect()
+}
+
 /// Every edge in the local graph — used by authority (PageRank) recomputation,
 /// which genuinely needs the whole graph rather than a node-scoped slice of it.
 pub async fn list_all(conn: &mut SqliteConnection) -> Result<Vec<oag_core::Edge>, StorageError> {

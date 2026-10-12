@@ -25,8 +25,11 @@ signed cluster membership grants a full federation override — a deliberate, do
 trade-off, not a verified fact (see `spec/26-peer-clustering.md`) — and per-artifact data
 versioning for nodes/edges/assertions/evidence (`oag migrate <type> <id>`), so legacy rows can
 always either be converted in place or served forever through an in-memory adapter applied
-automatically on every read (see `spec/27-artifact-versioning.md`). See `docs/` for the full
-picture — start with `docs/architecture.md`.
+automatically on every read (see `spec/27-artifact-versioning.md`), and self-hosted roadmap
+governance, where a roadmap proposal is just an ordinary assertion backed by evidence, ranked by
+the graph's own corroboration signals with no new consensus mechanism (`GET /api/v1/roadmap`,
+`GET /ui/roadmap` — see `spec/28-roadmap-governance.md`). See `docs/` for the full picture — start
+with `docs/architecture.md`.
 
 ## Specification
 

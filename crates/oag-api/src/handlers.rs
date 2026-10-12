@@ -140,6 +140,19 @@ pub async fn get_edge(
     Ok(Json(json!({ "edge": edge })))
 }
 
+/// spec/28-roadmap-governance.md: every roadmap proposal currently asserted
+/// against `oag_graph::ROADMAP_PROPOSAL_HUB`, each with its corroboration
+/// signals, ranked (not collapsed into one score). Submitting a proposal is
+/// the ordinary `POST /api/v1/assertions` -- this is read-only.
+pub async fn list_roadmap_proposals(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    authenticate_read(&headers, &state.graph).await?;
+    let proposals = state.graph.list_roadmap_proposals().await?;
+    Ok(Json(json!({ "proposals": proposals })))
+}
+
 pub async fn get_edge_corroboration(
     State(state): State<AppState>,
     headers: HeaderMap,

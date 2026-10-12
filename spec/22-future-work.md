@@ -55,14 +55,16 @@ For large evidence blobs and static exports — a `blobs/<hash>` concept, not ye
 
 ## Self-hosted roadmap governance
 
-Rather than a second, separate blockchain for "what should be built next," reuse OAG's own
-assertion/evidence/corroboration machinery pointed at itself — a roadmap proposal is just an
-assertion backed by evidence, ranked by the same `source_independence`/`identity_assurance`/
-`evidence_strength` signals every other claim already gets (see
-[06-corroboration-and-authority.md](06-corroboration-and-authority.md)), with no new consensus
-mechanism to build. This is a recommendation against building something, not a construction plan —
-the genuinely new part, if pursued, is a convention for which predicate/concept namespace roadmap
-proposals live under, and possibly a dedicated Human Interface view for browsing/ranking them.
+**Implemented** — see [28-roadmap-governance.md](28-roadmap-governance.md). Rather than a second,
+separate blockchain for "what should be built next," reuses OAG's own assertion/evidence/
+corroboration machinery pointed at itself: a roadmap proposal is `(proposal, instance_of,
+concept:oag-roadmap-proposal)`, an ordinary assertion backed by ordinary evidence, ranked by the
+same signals every other claim already gets (see
+[06-corroboration-and-authority.md](06-corroboration-and-authority.md)) — no new consensus
+mechanism, no new predicate, no new write path. The two genuinely new things the original
+recommendation named — a predicate/concept-namespace convention and a Human Interface view for
+browsing/ranking — are both built; a generic "list instances of any hub node" capability was
+considered and deliberately not built (see `USER_INPUT_RECORD.md` Entry 8).
 
 ## First-class peer clustering
 

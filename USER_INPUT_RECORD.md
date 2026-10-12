@@ -408,3 +408,33 @@ operator a flag in a case that is, today, universal.
 
 See `future_legacy_compatibility_and_versioning.md` memory and `spec/27-artifact-versioning.md` for
 the full mechanism this entry fed into.
+
+---
+
+## Entry 8 — 2026-10-12
+
+Like Entry 7, a self-made design judgment rather than an elicited answer — `spec/22-future-work.md`'s
+"Self-hosted roadmap governance" section (itself derived from Entry 2's "we build things... and we
+decide what to do with it") already specified the shape precisely enough ("the genuinely new part,
+if pursued, is a convention for which predicate/concept namespace roadmap proposals live under,
+and possibly a dedicated Human Interface view for browsing/ranking them") that building
+`spec/28-roadmap-governance.md` only required two judgment calls, both recorded here rather than
+silently assumed.
+
+**First**: which predicate to use for the convention. Rather than inventing a new one (e.g.
+`roadmap_candidate`), reused the already-documented `instance_of` — `(proposal, instance_of,
+concept:oag-roadmap-proposal)`. This keeps the feature at genuinely zero new vocabulary, which is
+as literal a reading of "no new consensus mechanism to build" as the words allow, and mirrors
+`concept:software-architecture-reference`'s existing hub-node precedent exactly (an external page,
+`example_of`, that hub).
+
+**Second**: whether `GraphService::list_roadmap_proposals` should be a generic "list every
+instance of any hub node" capability, or scoped narrowly to roadmap proposals specifically. Built
+narrowly scoped — the future-work text asked for a roadmap-proposal view, not a general
+hub-browsing primitive, and nothing else in this codebase currently needs the generic version. The
+underlying code is nearly identical either way, so generalizing later, if a second real use ever
+appears, costs almost nothing; building it speculatively now would have been exactly the kind of
+unrequested abstraction this project's own conventions warn against.
+
+See `future_self_hosted_roadmap_governance.md` memory and `spec/28-roadmap-governance.md` for the
+full mechanism this entry fed into.

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Roadmap — OAG</title>
+</head>
+<body>
+<p><a href="/ui/search?key={{ key }}">&#8592; search</a></p>
+<p><a href="/api/v1/roadmap?key={{ key }}">view as JSON</a></p>
+<h1>Roadmap proposals</h1>
+<p>Every proposal is an ordinary assertion backed by ordinary evidence, ranked by the same
+corroboration signals every other claim gets — never collapsed into one score. To propose
+something, assert <code>(your proposal, instance_of, concept:oag-roadmap-proposal)</code> via
+<code>POST /api/v1/assertions</code>, with evidence backing it.</p>
+
+{% if proposals.is_empty() %}
+<p>No proposals yet.</p>
+{% else %}
+<ol>
+{% for p in proposals %}
+  <li>
+    <a href="{{ p.link }}">{{ p.canonical_identifier }}</a>{% if let Some(name) = p.name %} — {{ name }}{% endif %}
+    {% if let Some(description) = p.description %}<p>{{ description }}</p>{% endif %}
+    <ul>
+      <li>active assertions: {{ p.active_assertions }}</li>
+      <li>distinct actors: {{ p.distinct_actors }}</li>
+      <li>source independence: {{ p.source_independence }}</li>
+      <li>evidence strength: {{ p.evidence_strength }}</li>
+      <li>agreement: {{ p.agreement }}</li>
+      <li>freshness: {{ p.freshness }}</li>
+      <li>identity assurance: {{ p.identity_assurance }}</li>
+    </ul>
+  </li>
+{% endfor %}
+</ol>
+{% endif %}
+</body>
+</html>

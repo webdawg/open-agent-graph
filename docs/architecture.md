@@ -163,10 +163,10 @@ and evidence model used for everything else, applied reflexively to the project'
 
 ## What's deliberately not built yet
 
-Several larger directions are tracked as future work. Phase 1 of three of them has since landed
-(`spec/24-ephemeral-peer-trust.md`, `spec/26-peer-clustering.md`, `spec/27-artifact-versioning.md`
-— each marked below); the rest remain not yet implemented and change nothing described elsewhere
-in this document:
+Several larger directions are tracked as future work. Phase 1 of three of them, plus one other,
+has since landed (`spec/24-ephemeral-peer-trust.md`, `spec/26-peer-clustering.md`,
+`spec/27-artifact-versioning.md`, `spec/28-roadmap-governance.md` — each marked below); the rest
+remain not yet implemented and change nothing described elsewhere in this document:
 
 - Ephemeral, session-scoped peer identity with data/uptime-driven trust (inspired by the PKT
   Network paper — see `ENVIRONMENT.md`). **Phase 1 implemented** (opt-in `[identity] ephemeral =
@@ -191,9 +191,13 @@ in this document:
   "use an existing substrate in a way its designers didn't require" spirit as `oag-reticulum`.
 - Self-hosted roadmap governance: rather than a second, separate blockchain for "what should be built
   next" (`USER_INPUT_RECORD.md`, Entry 2), reuse OAG's own assertion/evidence/corroboration machinery
-  pointed at itself — a roadmap proposal is just an assertion backed by evidence, ranked by the same
-  `source_independence`/`identity_assurance`/`evidence_strength` signals every other claim already
-  gets, with no new consensus mechanism to build.
+  pointed at itself. **Implemented** — `(proposal, instance_of, concept:oag-roadmap-proposal)` is
+  an ordinary assertion, ranked by the same `source_independence`/`identity_assurance`/
+  `evidence_strength` signals every other claim already gets, with no new consensus mechanism, no
+  new predicate, and no new write path (`GET /api/v1/roadmap`, `GET /ui/roadmap`, the MCP tool
+  `graph_list_roadmap_proposals` — see `spec/28-roadmap-governance.md`). Deliberately not built: a
+  generic "list instances of any hub node" capability beyond this one use (`USER_INPUT_RECORD.md`
+  Entry 8).
 - Peer clustering: groups of mutually cooperating peers (an "ant colony" of small, cooperating
   units doing real-world physical work — sensors, traffic lights, smart objects), a concept
   distinct from the ephemeral-identity direction above since it's a topology/trust-radius question,

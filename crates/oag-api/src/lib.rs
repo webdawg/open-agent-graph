@@ -71,12 +71,14 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/edges/{id}/corroboration",
             get(handlers::get_edge_corroboration),
         )
+        .route("/api/v1/roadmap", get(handlers::list_roadmap_proposals))
         .route("/api/v1/resolve", post(handlers::resolve))
         .route("/api/v1/subgraph", get(handlers::subgraph))
         .route("/api/v1/history/{object_type}/{id}", get(handlers::history))
         .route("/api/v1/status", get(handlers::status))
         .route("/api/v1/crawl", post(crawl::crawl))
         .route("/ui/search", get(human::search_page))
+        .route("/ui/roadmap", get(human::roadmap_page))
         .route("/ui/nodes/{id}", get(human::node_page))
         .route("/ui/assertions/{id}", get(human::assertion_page))
         .layer(middleware::from_fn_with_state(

@@ -255,6 +255,19 @@ impl OagMcpServer {
         .await
     }
 
+    #[tool(description = "List every roadmap proposal currently asserted against the self-hosted roadmap-governance hub (concept:oag-roadmap-proposal), each with its corroboration signals, ranked but never collapsed into one score. To propose something, assert it yourself via graph_assert: (your proposal, instance_of, concept:oag-roadmap-proposal), with evidence backing it.")]
+    async fn graph_list_roadmap_proposals(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_list_roadmap_proposals", async {
+            self.authenticate_read(&parts).await?;
+            let proposals = self.graph.list_roadmap_proposals().await.map_err(map_err)?;
+            Ok(Json(json!({ "proposals": proposals })))
+        })
+        .await
+    }
+
     #[tool(description = "Get a compact semantic neighborhood (nodes, edges, assertions) around a node, out to a given depth.")]
     async fn graph_get_subgraph(
         &self,
