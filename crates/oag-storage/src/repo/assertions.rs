@@ -8,8 +8,32 @@ use crate::error::{bytes_to_array, StorageError};
 use crate::models::{
     AssertionRow, DisputeRow, EvidenceRow, ObservationRow, RetractionRow,
 };
+use crate::versioning::{HasSchemaVersion, MigrationOutcome, Versioned};
+
+impl HasSchemaVersion for AssertionRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for AssertionRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<AssertionRow>] = &[];
+}
+
+impl HasSchemaVersion for EvidenceRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for EvidenceRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<EvidenceRow>] = &[];
+}
 
 fn row_to_assertion(row: AssertionRow) -> Result<Assertion, StorageError> {
+    let row = row.migrate_to_current();
     let extraction_method = ExtractionMethod::parse(&row.extraction_method).ok_or_else(|| {
         StorageError::UnknownEnumValue("extraction_method", row.extraction_method.clone())
     })?;
@@ -82,6 +106,7 @@ pub async fn set_status(
 }
 
 fn row_to_evidence(row: EvidenceRow) -> Result<Evidence, StorageError> {
+    let row = row.migrate_to_current();
     let evidence_type = EvidenceType::parse(&row.evidence_type)
         .ok_or_else(|| StorageError::UnknownEnumValue("evidence_type", row.evidence_type.clone()))?;
     Ok(Evidence {
@@ -152,6 +177,61 @@ pub async fn list_evidence(
         .fetch_all(&mut *conn)
         .await?;
     rows.into_iter().map(row_to_evidence).collect()
+}
+
+/// The "convert perm" access mode (spec/27-artifact-versioning.md) for an
+/// assertion row -- see `nodes::migrate_to_current`'s doc comment for the
+/// general shape. `AssertionRow::MIGRATIONS` is empty today, so this always
+/// reports `AlreadyCurrent` for any row that exists.
+pub async fn migrate_to_current(
+    conn: &mut SqliteConnection,
+    id: AssertionId,
+) -> Result<MigrationOutcome, StorageError> {
+    let row: Option<AssertionRow> = sqlx::query_as("SELECT * FROM assertions WHERE id = ?")
+        .bind(id.as_hash().as_bytes().to_vec())
+        .fetch_optional(&mut *conn)
+        .await?;
+    let row = row.ok_or(StorageError::NotFound)?;
+    let from = row.schema_version();
+    if from >= AssertionRow::CURRENT_VERSION {
+        return Ok(MigrationOutcome::AlreadyCurrent { version: from });
+    }
+    let migrated = row.migrate_to_current();
+    let to = migrated.schema_version();
+    sqlx::query("UPDATE assertions SET schema_version = ? WHERE id = ?")
+        .bind(to)
+        .bind(id.as_hash().as_bytes().to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(MigrationOutcome::Migrated { from, to })
+}
+
+/// The "convert perm" access mode for an evidence row. `Evidence::id` is the
+/// `ADD_EVIDENCE` event's id, hence `oag_core::EventId` rather than a
+/// dedicated evidence id type -- same convention `redact_evidence` above
+/// already uses. `EvidenceRow::MIGRATIONS` is empty today, so this always
+/// reports `AlreadyCurrent` for any row that exists.
+pub async fn migrate_evidence_to_current(
+    conn: &mut SqliteConnection,
+    id: oag_core::EventId,
+) -> Result<MigrationOutcome, StorageError> {
+    let row: Option<EvidenceRow> = sqlx::query_as("SELECT * FROM evidence WHERE id = ?")
+        .bind(id.as_hash().as_bytes().to_vec())
+        .fetch_optional(&mut *conn)
+        .await?;
+    let row = row.ok_or(StorageError::NotFound)?;
+    let from = row.schema_version();
+    if from >= EvidenceRow::CURRENT_VERSION {
+        return Ok(MigrationOutcome::AlreadyCurrent { version: from });
+    }
+    let migrated = row.migrate_to_current();
+    let to = migrated.schema_version();
+    sqlx::query("UPDATE evidence SET schema_version = ? WHERE id = ?")
+        .bind(to)
+        .bind(id.as_hash().as_bytes().to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(MigrationOutcome::Migrated { from, to })
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

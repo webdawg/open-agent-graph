@@ -15,7 +15,7 @@
 //!   node, its edges, and its assertions are completely untouched, and
 //!   `unsuppress_node_from_search` fully reverses it.
 
-use oag_core::{EventId, NodeId, Permission};
+use oag_core::{AssertionId, EdgeId, EventId, NodeId, Permission};
 use oag_storage::repo::{redactions as redactions_repo, search_suppressions as search_suppressions_repo};
 
 use crate::assert::check_opt_len;
@@ -24,6 +24,7 @@ use crate::service::{AuthContext, GraphService};
 
 pub use oag_storage::repo::redactions::Redaction;
 pub use oag_storage::repo::search_suppressions::SuppressedNode;
+pub use oag_storage::MigrationOutcome;
 
 // Same spec section 61 rationale as assert.rs's MAX_REASON_LEN (which this
 // matches) -- an unbounded `reason` here isn't a signed event, so it can't
@@ -102,6 +103,48 @@ impl GraphService {
         let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
         search_suppressions_repo::unsuppress(&mut conn, node_id).await?;
         Ok(())
+    }
+
+    /// spec/27-artifact-versioning.md's "convert perm" access mode for a
+    /// node: rewrites the row to its current schema shape in place.
+    /// `Permission::Admin`-gated for the same reason as everything else in
+    /// this file -- a direct, irreversible storage mutation outside the
+    /// event log, not something a normal actor calls.
+    pub async fn migrate_node(&self, auth: &AuthContext, node_id: NodeId) -> Result<MigrationOutcome, GraphError> {
+        auth.require(Permission::Admin)?;
+        let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(oag_storage::repo::nodes::migrate_to_current(&mut conn, node_id).await?)
+    }
+
+    /// The edge equivalent of `Self::migrate_node`.
+    pub async fn migrate_edge(&self, auth: &AuthContext, edge_id: EdgeId) -> Result<MigrationOutcome, GraphError> {
+        auth.require(Permission::Admin)?;
+        let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(oag_storage::repo::edges::migrate_to_current(&mut conn, edge_id).await?)
+    }
+
+    /// The assertion equivalent of `Self::migrate_node`.
+    pub async fn migrate_assertion(
+        &self,
+        auth: &AuthContext,
+        assertion_id: AssertionId,
+    ) -> Result<MigrationOutcome, GraphError> {
+        auth.require(Permission::Admin)?;
+        let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(oag_storage::repo::assertions::migrate_to_current(&mut conn, assertion_id).await?)
+    }
+
+    /// The evidence equivalent of `Self::migrate_node`. `evidence_id` is the
+    /// `ADD_EVIDENCE` event's id, same convention `Self::redact_evidence`
+    /// already uses.
+    pub async fn migrate_evidence(
+        &self,
+        auth: &AuthContext,
+        evidence_id: EventId,
+    ) -> Result<MigrationOutcome, GraphError> {
+        auth.require(Permission::Admin)?;
+        let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(oag_storage::repo::assertions::migrate_evidence_to_current(&mut conn, evidence_id).await?)
     }
 }
 
@@ -295,5 +338,57 @@ mod tests {
         service.rebuild_projection().await.unwrap();
 
         assert!(service.search("redaction-test", 10).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn migrating_a_freshly_asserted_artifact_reports_already_current() {
+        let (service, auth) = service_with_admin("migrate-already-current").await;
+        let evidence_id = assert_with_evidence(&service, &auth).await;
+
+        let ResolveOutcome::Found { node, .. } =
+            service.resolve("https://example.com/redaction-target").await.unwrap()
+        else {
+            panic!("expected the asserted subject to resolve");
+        };
+        let edge = service.get_edges(node.id).await.unwrap()[0].clone();
+        let assertion_id = service.list_assertions_for_node(node.id).await.unwrap()[0].id;
+
+        // No second schema shape exists for any artifact type yet, so every
+        // one of these must report AlreadyCurrent -- not a stand-in for a
+        // real migration, the actual honest state of the mechanism today.
+        assert_eq!(
+            service.migrate_node(&auth, node.id).await.unwrap(),
+            MigrationOutcome::AlreadyCurrent { version: 1 }
+        );
+        assert_eq!(
+            service.migrate_edge(&auth, edge.id).await.unwrap(),
+            MigrationOutcome::AlreadyCurrent { version: 1 }
+        );
+        assert_eq!(
+            service.migrate_assertion(&auth, assertion_id).await.unwrap(),
+            MigrationOutcome::AlreadyCurrent { version: 1 }
+        );
+        assert_eq!(
+            service.migrate_evidence(&auth, evidence_id).await.unwrap(),
+            MigrationOutcome::AlreadyCurrent { version: 1 }
+        );
+    }
+
+    #[tokio::test]
+    async fn migrating_requires_admin_permission() {
+        let (service, _) = service_with_admin("migrate-needs-admin").await;
+        let actor_id =
+            service.declare_actor(ActorType::Agent, Some("no-admin".into()), None, None).await.unwrap();
+        let no_admin = AuthContext { actor_id, permissions: vec![Permission::GraphAssert] };
+
+        let err = service.migrate_node(&no_admin, NodeId::derive(b"whatever")).await.unwrap_err();
+        assert!(matches!(err, GraphError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn migrating_an_unknown_id_is_not_found() {
+        let (service, auth) = service_with_admin("migrate-unknown").await;
+        let err = service.migrate_node(&auth, NodeId::derive(b"no-such-node")).await.unwrap_err();
+        assert!(matches!(err, GraphError::Storage(oag_storage::StorageError::NotFound)));
     }
 }

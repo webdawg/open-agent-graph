@@ -131,6 +131,15 @@ enum Command {
         #[command(subcommand)]
         command: RedactCommand,
     },
+    /// spec/27-artifact-versioning.md's "convert perm" access mode:
+    /// permanently rewrite one artifact's row to its current schema shape.
+    /// Every normal read already serves current-shape data regardless (the
+    /// "shim" access mode, applied automatically) -- this command only
+    /// matters for skipping that in-memory conversion on future reads.
+    Migrate {
+        #[command(subcommand)]
+        command: MigrateCommand,
+    },
     /// Crawl one URL: fetch it safely, extract structured facts (JSON-LD,
     /// llms.txt, ARD, A2A), and assert them as evidence-backed claims.
     Crawl {
@@ -237,6 +246,46 @@ enum RedactCommand {
     },
     UnsuppressNode {
         node_id: String,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum MigrateCommand {
+    /// Permanently rewrite one node's row to its current schema shape.
+    /// Refuses without --force: even though no real second shape exists for
+    /// any artifact type yet, a schema_version bump is a real, irreversible
+    /// storage mutation outside the event log the moment one ever does.
+    /// Reports "already current" immediately, regardless of --force, when
+    /// there's genuinely nothing to do.
+    Node {
+        id: String,
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    Edge {
+        id: String,
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    Assertion {
+        id: String,
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
+    /// `id` is the ADD_EVIDENCE event's id, same convention `oag redact
+    /// evidence` already uses.
+    Evidence {
+        id: String,
+        #[arg(long)]
+        force: bool,
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
@@ -458,6 +507,18 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Redact { command: RedactCommand::UnsuppressNode { node_id, data_dir } } => {
             commands::redact_unsuppress_node(&data_dir, &node_id).await
+        }
+        Command::Migrate { command: MigrateCommand::Node { id, force, data_dir } } => {
+            commands::migrate_node(&data_dir, &id, force).await
+        }
+        Command::Migrate { command: MigrateCommand::Edge { id, force, data_dir } } => {
+            commands::migrate_edge(&data_dir, &id, force).await
+        }
+        Command::Migrate { command: MigrateCommand::Assertion { id, force, data_dir } } => {
+            commands::migrate_assertion(&data_dir, &id, force).await
+        }
+        Command::Migrate { command: MigrateCommand::Evidence { id, force, data_dir } } => {
+            commands::migrate_evidence(&data_dir, &id, force).await
         }
         Command::Identity { command: IdentityCommand::Show { data_dir } } => {
             commands::identity_show(&data_dir).await

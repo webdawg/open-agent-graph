@@ -4,20 +4,23 @@ Deliberately not built yet. None of these change anything described elsewhere in
 specification today — each is tracked so a future session picks up the actual reasoning rather
 than re-deriving it, the same motivation behind this whole `spec/` directory existing.
 
-## Legacy compatibility as a binding principle (already true, mechanism not yet built)
+## Legacy compatibility as a binding principle (already true, Phase 1 of the mechanism built)
 
 **Binding now, not deferred**: OAG must never become its own gatekeeper. No future version may
-require old data, old clients, or old protocols to be upgraded or abandoned to keep working. This
+require old data, old clients, or old protocols be upgraded or abandoned to keep working. This
 is already true by construction in several places — `Predicate` is an open string, not a closed
 enum; `canonicalize_value` passes an already-scheme-prefixed identifier through unchanged rather
 than forcing a house format; the event log never deletes or rewrites anything. See
 `USER_INPUT_RECORD.md`, Entry 1.
 
-**Not yet built**: granular, per-artifact data versioning — an explicit version number on every
-projected artifact (and on `EventPayload` variants themselves), with two access modes at read
-time: migrate a row to the current version in place, or keep serving an old version forever
-through an API-layer adapter. Without this mechanism, the principle above eventually collides with
-any real schema evolution.
+**Phase 1 implemented** — granular, per-artifact data versioning for nodes/edges/assertions/
+evidence: an explicit `schema_version` on every row, with two access modes at read time — migrate
+a row to the current version in place (`oag migrate <type> <id> --force`), or keep serving it
+through an in-memory adapter applied automatically on every read. See
+`spec/27-artifact-versioning.md`. Still not built: the same mechanism for actors/aliases/disputes/
+retractions/supersessions/observations, and versioned `EventPayload` variants for a genuinely
+breaking (non-additive) payload shape change — `spec/27`'s own "what's deliberately not built yet"
+section explains why the latter was deferred rather than built speculatively.
 
 ## Ephemeral, session-scoped peer identity
 

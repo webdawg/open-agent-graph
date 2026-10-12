@@ -3,8 +3,21 @@ use sqlx::SqliteConnection;
 
 use crate::error::{bytes_to_array, StorageError};
 use crate::models::EdgeRow;
+use crate::versioning::{HasSchemaVersion, MigrationOutcome, Versioned};
+
+impl HasSchemaVersion for EdgeRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for EdgeRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<EdgeRow>] = &[];
+}
 
 fn row_to_edge(row: EdgeRow) -> Result<oag_core::Edge, StorageError> {
+    let row = row.migrate_to_current();
     Ok(oag_core::Edge {
         id: EdgeId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.edge_id)?)),
         subject: NodeId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(
@@ -89,4 +102,31 @@ pub async fn list_touching(
     .fetch_all(&mut *conn)
     .await?;
     rows.into_iter().map(row_to_edge).collect()
+}
+
+/// The "convert perm" access mode (spec/27-artifact-versioning.md) -- see
+/// `nodes::migrate_to_current`'s doc comment for the general shape.
+/// `EdgeRow::MIGRATIONS` is empty today, so this always reports
+/// `AlreadyCurrent` for any row that exists.
+pub async fn migrate_to_current(
+    conn: &mut SqliteConnection,
+    id: EdgeId,
+) -> Result<MigrationOutcome, StorageError> {
+    let row: Option<EdgeRow> = sqlx::query_as("SELECT * FROM edges WHERE edge_id = ?")
+        .bind(id.as_hash().as_bytes().to_vec())
+        .fetch_optional(&mut *conn)
+        .await?;
+    let row = row.ok_or(StorageError::NotFound)?;
+    let from = row.schema_version();
+    if from >= EdgeRow::CURRENT_VERSION {
+        return Ok(MigrationOutcome::AlreadyCurrent { version: from });
+    }
+    let migrated = row.migrate_to_current();
+    let to = migrated.schema_version();
+    sqlx::query("UPDATE edges SET schema_version = ? WHERE edge_id = ?")
+        .bind(to)
+        .bind(id.as_hash().as_bytes().to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(MigrationOutcome::Migrated { from, to })
 }

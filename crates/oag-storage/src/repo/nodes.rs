@@ -4,6 +4,18 @@ use sqlx::SqliteConnection;
 
 use crate::error::{bytes_to_array, StorageError};
 use crate::models::{NodeAliasRow, NodeRow};
+use crate::versioning::{HasSchemaVersion, MigrationOutcome, Versioned};
+
+impl HasSchemaVersion for NodeRow {
+    fn schema_version(&self) -> i64 {
+        self.schema_version
+    }
+}
+
+impl Versioned for NodeRow {
+    const CURRENT_VERSION: i64 = 1;
+    const MIGRATIONS: &'static [crate::versioning::MigrationStep<NodeRow>] = &[];
+}
 
 fn parse_alias_type(s: &str) -> Result<oag_core::AliasType, StorageError> {
     Ok(match s {
@@ -33,6 +45,7 @@ fn row_to_alias(row: NodeAliasRow) -> Result<NodeAlias, StorageError> {
 }
 
 fn row_to_node(row: NodeRow) -> Result<oag_core::Node, StorageError> {
+    let row = row.migrate_to_current();
     Ok(oag_core::Node {
         id: NodeId::from_hash(oag_core::Hash32::from_bytes(bytes_to_array(&row.node_id)?)),
         node_type: oag_core::NodeType::new(row.node_type),
@@ -163,4 +176,33 @@ pub async fn list_all(conn: &mut SqliteConnection) -> Result<Vec<oag_core::Node>
 
 pub fn metadata_object() -> JsonValue {
     JsonValue::Object(Default::default())
+}
+
+/// The "convert perm" access mode (spec/27-artifact-versioning.md): rewrites
+/// `node_id`'s row to its current shape in place so future reads skip the
+/// migration chain `row_to_node` otherwise applies in memory on every read.
+/// `NodeRow::MIGRATIONS` is empty today, so this always reports
+/// `AlreadyCurrent` for any row that exists -- a true, honest no-op until a
+/// real second node shape is ever introduced.
+pub async fn migrate_to_current(
+    conn: &mut SqliteConnection,
+    id: NodeId,
+) -> Result<MigrationOutcome, StorageError> {
+    let row: Option<NodeRow> = sqlx::query_as("SELECT * FROM nodes WHERE node_id = ?")
+        .bind(id.as_hash().as_bytes().to_vec())
+        .fetch_optional(&mut *conn)
+        .await?;
+    let row = row.ok_or(StorageError::NotFound)?;
+    let from = row.schema_version();
+    if from >= NodeRow::CURRENT_VERSION {
+        return Ok(MigrationOutcome::AlreadyCurrent { version: from });
+    }
+    let migrated = row.migrate_to_current();
+    let to = migrated.schema_version();
+    sqlx::query("UPDATE nodes SET schema_version = ? WHERE node_id = ?")
+        .bind(to)
+        .bind(id.as_hash().as_bytes().to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(MigrationOutcome::Migrated { from, to })
 }

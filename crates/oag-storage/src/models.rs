@@ -35,6 +35,7 @@ pub struct NodeRow {
     pub description: Option<String>,
     pub metadata: String,
     pub created_at: i64,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -52,6 +53,7 @@ pub struct EdgeRow {
     pub predicate: String,
     pub object_node_id: Vec<u8>,
     pub created_at: i64,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -84,6 +86,7 @@ pub struct AssertionRow {
     pub asserted_at: i64,
     pub extraction_method: String,
     pub status: String,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]
@@ -98,6 +101,7 @@ pub struct EvidenceRow {
     pub observed_at: Option<i64>,
     pub retrieved_at: Option<i64>,
     pub metadata: String,
+    pub schema_version: i64,
 }
 
 #[derive(Debug, FromRow)]

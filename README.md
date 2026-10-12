@@ -20,9 +20,12 @@ evolution layer (`oag-brain/` — outside this workspace; needs `libtensorflow`)
 via real scaled dot-product self-attention between two peers. Also built: opt-in ephemeral peer
 identity with signed presence heartbeats and trust-weighted federation (`[identity].ephemeral` in
 `config.toml`), a small, truly-random per-node "gravity level" that very slightly throttles that
-node's own processing speed, and opt-in peer clustering (`[cluster].name`) where a self-declared,
+node's own processing speed, opt-in peer clustering (`[cluster].name`) where a self-declared,
 signed cluster membership grants a full federation override — a deliberate, documented security
-trade-off, not a verified fact (see `spec/26-peer-clustering.md`). See `docs/` for the full
+trade-off, not a verified fact (see `spec/26-peer-clustering.md`) — and per-artifact data
+versioning for nodes/edges/assertions/evidence (`oag migrate <type> <id>`), so legacy rows can
+always either be converted in place or served forever through an in-memory adapter applied
+automatically on every read (see `spec/27-artifact-versioning.md`). See `docs/` for the full
 picture — start with `docs/architecture.md`.
 
 ## Specification

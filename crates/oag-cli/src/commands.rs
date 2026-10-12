@@ -440,6 +440,61 @@ pub async fn redact_unsuppress_node(data_dir: &Path, node_id: &str) -> anyhow::R
     Ok(())
 }
 
+/// spec/27-artifact-versioning.md: "convert perm" is a permanent, irreversible
+/// storage mutation outside the event log the moment a real second schema
+/// shape ever exists for any artifact type (none does today, for any of the
+/// four `oag migrate *` commands) -- gated by --force unconditionally, the
+/// same discipline `redact_evidence` above already applies, rather than
+/// special-casing today's always-no-op case.
+fn require_migrate_force(force: bool) -> anyhow::Result<()> {
+    if !force {
+        anyhow::bail!(
+            "converting an artifact to its current schema version is a permanent, irreversible \
+             storage mutation outside the event log. Every normal read already serves \
+             current-shape data regardless, via an in-memory shim applied automatically -- this \
+             command only matters for skipping that conversion on future reads, by rewriting the \
+             stored row now. Pass --force if you're certain."
+        );
+    }
+    Ok(())
+}
+
+pub async fn migrate_node(data_dir: &Path, id: &str, force: bool) -> anyhow::Result<()> {
+    require_migrate_force(force)?;
+    let graph = open_graph(data_dir).await?;
+    let node_id = id.parse().map_err(|_| anyhow::anyhow!("invalid node id '{id}'"))?;
+    let outcome = graph.migrate_node(&cli_admin_auth(), node_id).await?;
+    println!("{}", serde_json::to_string_pretty(&outcome)?);
+    Ok(())
+}
+
+pub async fn migrate_edge(data_dir: &Path, id: &str, force: bool) -> anyhow::Result<()> {
+    require_migrate_force(force)?;
+    let graph = open_graph(data_dir).await?;
+    let edge_id = id.parse().map_err(|_| anyhow::anyhow!("invalid edge id '{id}'"))?;
+    let outcome = graph.migrate_edge(&cli_admin_auth(), edge_id).await?;
+    println!("{}", serde_json::to_string_pretty(&outcome)?);
+    Ok(())
+}
+
+pub async fn migrate_assertion(data_dir: &Path, id: &str, force: bool) -> anyhow::Result<()> {
+    require_migrate_force(force)?;
+    let graph = open_graph(data_dir).await?;
+    let assertion_id = id.parse().map_err(|_| anyhow::anyhow!("invalid assertion id '{id}'"))?;
+    let outcome = graph.migrate_assertion(&cli_admin_auth(), assertion_id).await?;
+    println!("{}", serde_json::to_string_pretty(&outcome)?);
+    Ok(())
+}
+
+pub async fn migrate_evidence(data_dir: &Path, id: &str, force: bool) -> anyhow::Result<()> {
+    require_migrate_force(force)?;
+    let graph = open_graph(data_dir).await?;
+    let evidence_id = id.parse().map_err(|_| anyhow::anyhow!("invalid evidence id '{id}'"))?;
+    let outcome = graph.migrate_evidence(&cli_admin_auth(), evidence_id).await?;
+    println!("{}", serde_json::to_string_pretty(&outcome)?);
+    Ok(())
+}
+
 pub async fn key_create(
     data_dir: &Path,
     actor_type: &str,

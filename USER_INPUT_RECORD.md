@@ -369,3 +369,42 @@ anyway, deliberately — not an oversight, and documented prominently in the imp
 than quietly assumed safe.
 
 See `future_peer_clustering.md` memory for the full Phase 1 scope this entry fed into.
+
+---
+
+## Entry 7 — 2026-10-11
+
+Unlike Entries 4 and 6, this entry records a design judgment made without a new round of direct
+questions — Entry 1 above already specified the mechanism precisely enough ("every single artifact
+of data has a version number, and if we are accessing it we can convert it perm, or we can leave it
+as is and use api interface code to access it") that building spec/27-artifact-versioning.md's
+Phase 1 only required resolving how literally to take `docs/architecture.md`'s own earlier
+speculation that payload variants should *also* eventually carry a version, not just projected
+rows.
+
+**Judgment call, recorded explicitly rather than silently assumed**: Entry 1 describes exactly one
+mechanism — a version number on each *stored artifact* (node/edge/assertion/evidence), with a
+read-time choice between permanently converting it or serving it through an adapter. That's what
+got built. `docs/architecture.md`'s additional speculation that `EventPayload` variants themselves
+should eventually carry a version — so a future *breaking* change to e.g. `AssertRelationPayload`
+doesn't orphan already-signed historical events — was deliberately **not** built this phase: no
+real second payload shape exists anywhere in this codebase today, so a versioned-variant-dispatch
+system would have nothing real to migrate and nothing to prove it correct beyond synthetic test
+fixtures standing in for a shape that doesn't exist. The existing `Option<T>`/`#[serde(default)]`
+convention (already proven, already used throughout `oag-core`) remains the mechanism for additive
+payload evolution; `UnsignedEvent::version: u16` (already part of every signed event's hashed
+bytes, already inert) is documented as the reserved hook for the day a genuinely breaking payload
+change is needed — not wired up until then.
+
+A second, smaller judgment call: the plan for this phase originally called for `oag migrate
+<artifact>`'s "already current" case to report immediately without requiring `--force`, since
+nothing is mutated either way. Implemented instead with `--force` required unconditionally, mirroring
+`redact_evidence`'s existing discipline exactly — because the "no real mutation happens" fact is
+only true *today*, when every row genuinely is already current; a peek-then-gate design that
+skips `--force` for "nothing to do" would, the day a real second schema version exists, let a
+caller who forgot `--force` discover that the tool quietly migrated their row anyway. Consistency
+with the one other irreversible-action command already in this CLI was chosen over saving an
+operator a flag in a case that is, today, universal.
+
+See `future_legacy_compatibility_and_versioning.md` memory and `spec/27-artifact-versioning.md` for
+the full mechanism this entry fed into.

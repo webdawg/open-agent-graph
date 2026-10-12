@@ -202,6 +202,36 @@ async fn assert_evidence_dispute_retract_round_trip() {
     // original assertion is still resolvable — history preserved, not deleted
     let retractions = repo::assertions::list_retractions(&mut conn, assertion.id).await.unwrap();
     assert_eq!(retractions.len(), 1);
+
+    // spec/27-artifact-versioning.md: every row inserted today lands at
+    // CURRENT_VERSION (no second shape exists for any artifact type yet), so
+    // the "convert perm" action correctly reports there's nothing to do.
+    use crate::versioning::MigrationOutcome;
+    assert_eq!(
+        repo::nodes::migrate_to_current(&mut conn, subject.id).await.unwrap(),
+        MigrationOutcome::AlreadyCurrent { version: 1 }
+    );
+    assert_eq!(
+        repo::edges::migrate_to_current(&mut conn, edge.id).await.unwrap(),
+        MigrationOutcome::AlreadyCurrent { version: 1 }
+    );
+    assert_eq!(
+        repo::assertions::migrate_to_current(&mut conn, assertion.id).await.unwrap(),
+        MigrationOutcome::AlreadyCurrent { version: 1 }
+    );
+    assert_eq!(
+        repo::assertions::migrate_evidence_to_current(&mut conn, evidence.id).await.unwrap(),
+        MigrationOutcome::AlreadyCurrent { version: 1 }
+    );
+
+    // migrating an id that doesn't exist is a real "not found" error, not a
+    // silent AlreadyCurrent -- an operator shouldn't be told a typo'd id is
+    // fine.
+    let bogus = oag_core::NodeId::derive(b"no-such-node");
+    assert!(matches!(
+        repo::nodes::migrate_to_current(&mut conn, bogus).await,
+        Err(crate::error::StorageError::NotFound)
+    ));
 }
 
 #[tokio::test]

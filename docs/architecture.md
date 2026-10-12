@@ -20,8 +20,10 @@ version could outgrow (spec section 20); `canonicalize_value` passes an already-
 identifier through unchanged rather than forcing it into a house format; the event log never
 deletes or rewrites anything (spec section 106 invariant 3), so nothing a peer has ever accepted can
 later be invalidated by a protocol change. Any future schema or protocol evolution must add a new
-path alongside the old one, never replace it — see "What's deliberately not built yet" below for
-the granular data-versioning mechanism this implies.
+path alongside the old one, never replace it. The granular data-versioning mechanism this implies
+has its Phase 1 built: every node/edge/assertion/evidence row carries a `schema_version`, with a
+migrate-in-place action and an always-on in-memory adapter both available at read time, neither
+forced on the caller — see `spec/27-artifact-versioning.md`.
 
 ## One program, many peers
 
@@ -161,9 +163,10 @@ and evidence model used for everything else, applied reflexively to the project'
 
 ## What's deliberately not built yet
 
-Several larger directions are tracked as future work. Phase 1 of the first one below has since
-landed (`spec/24-ephemeral-peer-trust.md`); the rest remain not yet implemented and change nothing
-described elsewhere in this document:
+Several larger directions are tracked as future work. Phase 1 of three of them has since landed
+(`spec/24-ephemeral-peer-trust.md`, `spec/26-peer-clustering.md`, `spec/27-artifact-versioning.md`
+— each marked below); the rest remain not yet implemented and change nothing described elsewhere
+in this document:
 
 - Ephemeral, session-scoped peer identity with data/uptime-driven trust (inspired by the PKT
   Network paper — see `ENVIRONMENT.md`). **Phase 1 implemented** (opt-in `[identity] ephemeral =
@@ -173,12 +176,14 @@ described elsewhere in this document:
   reload for the trust-check windows, and PacketCrypt-style proof-of-data-volume.
 - Native IPFS integration for large evidence blobs and static exports (spec section 84's
   `blobs/<hash>` concept).
-- Granular, per-artifact data versioning: an explicit version number on every projected artifact
-  (and on `EventPayload` variants themselves), with two access modes at read time — migrate a row
-  to the current version in place, or keep serving an old version forever through an API-layer
-  adapter. Follows directly from the legacy-compatibility principle above (`USER_INPUT_RECORD.md`,
-  Entry 1) — without it, a future schema change would eventually force a choice between breaking
-  old data and never evolving the format at all.
+- Granular, per-artifact data versioning. **Phase 1 implemented** for nodes/edges/assertions/
+  evidence — an explicit `schema_version` on every row, with both access modes Entry 1 described
+  (`USER_INPUT_RECORD.md`) available at read time: migrate a row to the current version in place
+  (`oag migrate <type> <id> --force`), or keep serving it through an in-memory adapter applied
+  automatically on every read (see `spec/27-artifact-versioning.md`). Still future work: the same
+  mechanism for actors/aliases/disputes/retractions/supersessions/observations, and versioned
+  `EventPayload` variants for a genuinely breaking payload shape change (deferred deliberately,
+  not an oversight — see `spec/27`'s own explanation and `USER_INPUT_RECORD.md` Entry 7).
 - Long-word, subdomain-based node addressing: extending `oag-petname`'s existing deterministic
   word-based peer *display* names into actual *addressing* — using one domain's enormous subdomain
   space (tens of millions of subdomains, each mapping to a `NodeId`/`PeerId`) as a way to mint vast
