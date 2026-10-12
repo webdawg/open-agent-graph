@@ -64,7 +64,12 @@ pub struct SyncService {
     /// deployment not running ephemeral identity sees zero behavior change.
     /// Only `oag serve`'s ephemeral-mode startup path sets this nonzero.
     minimum_trust: f32,
-    trust_config: TrustConfig,
+    /// `Arc<RwLock<_>>`, not a plain `Copy` field, so every clone of this
+    /// service (the sync HTTP router, the gossip loop, the heartbeat loop,
+    /// and `oag serve`'s trust-config reload loop -- spec/24 Phase 2) sees
+    /// the same live value: a reload through any one handle is visible to
+    /// all of them, since they all share this `Arc`.
+    trust_config: Arc<std::sync::RwLock<TrustConfig>>,
     /// `Some` only when this peer broadcasts its own signed presence
     /// heartbeats (ephemeral mode) -- `None` everywhere else, including
     /// every pre-existing construction site, so nothing about them changes.
@@ -93,7 +98,7 @@ impl SyncService {
             client: SyncClient::new(),
             rate_limiter: Arc::new(SyncRateLimiter::default()),
             minimum_trust: 0.0,
-            trust_config: TrustConfig::default(),
+            trust_config: Arc::new(std::sync::RwLock::new(TrustConfig::default())),
             heartbeat_identity: None,
             session_started_at: now_ts(),
             cluster_identity: None,
@@ -106,8 +111,17 @@ impl SyncService {
     /// `federation_allows`'s "degrade, don't drop" two-tier check).
     pub fn with_minimum_trust(mut self, minimum_trust: f32, trust_config: TrustConfig) -> Self {
         self.minimum_trust = minimum_trust;
-        self.trust_config = trust_config;
+        self.trust_config = Arc::new(std::sync::RwLock::new(trust_config));
         self
+    }
+
+    /// Ephemeral peer trust, Phase 2 (spec/24): live config reload for the
+    /// trust-check windows. Callable on any clone of this service;
+    /// observed by every other clone sharing the same `Arc`, including
+    /// ones already spawned (the router, the gossip loop) before this is
+    /// ever called.
+    pub fn update_trust_config(&self, new: TrustConfig) {
+        *self.trust_config.write().unwrap() = new;
     }
 
     /// Opts this service into broadcasting its own signed presence
@@ -187,7 +201,12 @@ impl SyncService {
         if self.minimum_trust <= 0.0 {
             return true;
         }
-        match crate::trust::compute_trust(&self.pool, peer_id, now_ts(), &self.trust_config).await {
+        // Copy the small `Copy` config out while the lock is held, then
+        // drop it before the `.await` below -- `RwLockReadGuard` isn't
+        // `Send`, so holding it across an await point wouldn't compile
+        // anyway, but this is also just the right scope for it regardless.
+        let cfg = *self.trust_config.read().unwrap();
+        match crate::trust::compute_trust(&self.pool, peer_id, now_ts(), &cfg).await {
             Ok(score) => score >= self.minimum_trust,
             // A trust-lookup failure degrades to "not yet trusted" rather
             // than either silently passing or hard-erroring the caller --

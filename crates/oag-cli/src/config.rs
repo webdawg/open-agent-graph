@@ -454,6 +454,12 @@ impl Default for ClusterSection {
 /// take priority, falling back to `--config <file>` (file + `OAG_*` env
 /// overrides via figment), falling back to hardcoded defaults.
 pub struct ResolvedConfig {
+    /// The `--config <path>` this was resolved from, if any -- threaded
+    /// through so `oag serve` can periodically re-read the same file for
+    /// the trust-config reload loop (spec/24 Phase 2). `None` means there's
+    /// nothing to reload from, same as every other field here defaulting
+    /// when no config file was given.
+    pub config_path: Option<PathBuf>,
     pub data_dir: PathBuf,
     pub listen: SocketAddr,
     pub mcp_enabled: bool,
@@ -498,6 +504,7 @@ pub fn resolve(
     let federation = file.federation.to_policy()?;
 
     Ok(ResolvedConfig {
+        config_path,
         data_dir,
         listen,
         mcp_enabled: file.mcp.enabled,
@@ -598,4 +605,25 @@ pub fn resolve_pinning_provider(
     };
 
     Ok(file.ipfs.to_pinning_provider())
+}
+
+/// Lightweight resolver for `oag serve`'s trust-config reload loop
+/// (spec/24-ephemeral-peer-trust.md Phase 2) -- periodically re-reads just
+/// `[identity]` from the same config file `oag serve` started from,
+/// identical figment-loading shape to `resolve_search_section`/
+/// `resolve_pinning_provider`.
+pub fn resolve_identity_section(config_path: Option<PathBuf>) -> anyhow::Result<IdentitySection> {
+    let mut figment = Figment::new();
+    if let Some(path) = &config_path {
+        figment = figment.merge(Toml::file(path));
+    }
+    figment = figment.merge(figment::providers::Env::prefixed("OAG_").split("_"));
+
+    let file: FileConfig = if config_path.is_some() {
+        figment.extract()?
+    } else {
+        FileConfig::default()
+    };
+
+    Ok(file.identity)
 }

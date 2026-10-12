@@ -46,6 +46,17 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
             .with_minimum_trust(oag_sync::EPHEMERAL_MINIMUM_TRUST, config.trust_config)
             .with_heartbeat_identity(identity_for_heartbeats);
         oag_sync::spawn_heartbeat_loop(sync_service.clone(), config.heartbeat_interval);
+        // Ephemeral peer trust, Phase 2 (spec/24): live config reload for
+        // the trust-check windows. Only meaningful in ephemeral mode (the
+        // only mode that ever sets a nonzero minimum_trust), and only when
+        // there's an actual file to re-read.
+        if let Some(config_path) = config.config_path.clone() {
+            tokio::spawn(reload_trust_config_periodically(
+                sync_service.clone(),
+                config_path,
+                TRUST_CONFIG_RELOAD_INTERVAL,
+            ));
+        }
     }
     // Peer clustering, Phase 1 (spec/26): independent of ephemeral mode --
     // works the same for a permanent identity.
@@ -109,6 +120,33 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         .with_graceful_shutdown(shutdown_signal(sync_service, config.identity_ephemeral))
         .await?;
     Ok(())
+}
+
+/// Fixed, deliberately *not* itself a config value (spec/24 Phase 2) -- a
+/// hot-reloadable "how often do we check for changes to the check-interval"
+/// would be a pointless regress. 30s matches `default_heartbeat_interval_
+/// seconds`'s own default and is far more responsive than this setting's
+/// own effect (trust decay/rebuild curves, which operate on minutes) needs.
+const TRUST_CONFIG_RELOAD_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Ephemeral peer trust, Phase 2 (spec/24): periodically re-reads
+/// `[identity]` from `config_path` and pushes any change into
+/// `sync_service` via `update_trust_config`. Unconditional overwrite every
+/// tick -- the simplest correct behavior, since re-applying an unchanged
+/// value is a no-op; a parse failure is swallowed (the config file being
+/// transiently invalid mid-edit shouldn't crash a running peer) and simply
+/// retried next tick.
+async fn reload_trust_config_periodically(
+    sync_service: oag_sync::SyncService,
+    config_path: std::path::PathBuf,
+    interval: std::time::Duration,
+) {
+    loop {
+        tokio::time::sleep(interval).await;
+        if let Ok(section) = crate::config::resolve_identity_section(Some(config_path.clone())) {
+            sync_service.update_trust_config(section.to_trust_config());
+        }
+    }
 }
 
 /// Waits for Ctrl-C or SIGTERM, then — in ephemeral mode only — best-effort

@@ -27,17 +27,21 @@ rather than built speculatively.
 
 ## Ephemeral, session-scoped peer identity
 
+**Phase 1 and 2 implemented** — see [24-ephemeral-peer-trust.md](24-ephemeral-peer-trust.md).
 Inspired by the PKT Network whitepaper (concepts only, not its blockchain/token machinery) — a
-peer's identity would reset every process restart, with trust attached to the *behavior of the
-data a peer presents right now* rather than a persisted key (Sybil-resistant: a misbehaving peer
-can't launder reputation by rotating keys, since a fresh identity also means zero accumulated
-standing). Uptime/connectivity itself would be a trust signal. See `USER_INPUT_RECORD.md`'s
-"networks of temporary work with unguessable encryption," and the "ant colony" metaphor below,
-which independently reinforces the same disposable-identity/persistent-collective-behavior shape.
+peer's identity resets every process restart (opt-in, `[identity] ephemeral = true`), with trust
+attached to the *behavior of the data a peer presents right now* (signed presence heartbeats,
+per-observer trust scoring, trust-weighted federation, and — Phase 2 — live config reload for the
+trust-check windows) rather than a persisted key (Sybil-resistant: a misbehaving peer can't
+launder reputation by rotating keys, since a fresh identity also means zero accumulated standing).
+See `USER_INPUT_RECORD.md`'s "networks of temporary work with unguessable encryption," and the
+"ant colony" metaphor below, which independently reinforces the same disposable-identity/
+persistent-collective-behavior shape.
 
-This would be a significant change to [01-identity.md](01-identity.md)'s current permanent-key
-model and is not scoped further than this description — explicitly flagged by the project's own
-originator as a concept to capture, not yet to plan in detail.
+Still not built: a real multi-peer voting/consensus mechanism (Phase 1 uses a soft, local,
+address-correlation heuristic instead) and PacketCrypt-style merkle-commit-and-random-challenge
+proof of data volume — both genuinely open design questions, not scoped further than this
+description.
 
 ## Long-word, subdomain-based node addressing
 

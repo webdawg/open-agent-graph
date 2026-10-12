@@ -663,6 +663,63 @@ async fn ephemeral_peers_build_real_trust_from_signed_heartbeats() {
     );
 }
 
+/// Ephemeral peer trust, Phase 2 (spec/24): `update_trust_config` on one
+/// handle must be observed by a *clone* taken before the update -- proving
+/// the `Arc<RwLock<_>>` sharing actually works across clones (the shape
+/// `oag serve` relies on: the router/gossip/heartbeat loops are all clones
+/// taken once at startup, long before any reload could happen), not just
+/// within a single handle.
+#[tokio::test]
+async fn update_trust_config_is_observed_by_a_clone_taken_before_the_update() {
+    let pool = open_pool(&fresh_temp_dir("trust-config-reload").join("oag.sqlite")).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let peer_id = identity.peer_id();
+    let public_key = identity.verifying_key().to_bytes();
+
+    let narrow_rebuild = crate::trust::TrustConfig {
+        heartbeat_interval_seconds: 1,
+        trust_rebuild_seconds: 1_000_000, // effectively never finishes rebuilding
+        announced_restart_grace_seconds: 10,
+    };
+    let original =
+        SyncService::new(pool.clone(), peer_id, public_key, FederationPolicy::Open)
+            .with_minimum_trust(crate::trust::EPHEMERAL_MINIMUM_TRUST, narrow_rebuild);
+    // Taken *before* the reload below -- mimics the router/gossip-loop
+    // clones `oag serve` takes once at startup.
+    let the_clone = original.clone();
+
+    let peer_id_b = PeerIdentity::generate().peer_id();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+    let mut conn = pool.acquire().await.unwrap();
+    oag_storage::repo::peer_presence::record_heartbeat(&mut conn, peer_id_b.as_bytes(), now, now, "online")
+        .await
+        .unwrap();
+    drop(conn);
+
+    // With a trust_rebuild_seconds this large, a session that just started
+    // has rebuilt essentially none of its trust yet.
+    let before = crate::trust::compute_trust(&pool, &peer_id_b, now, &narrow_rebuild).await.unwrap();
+    assert!(before < 0.01, "expected near-zero trust before any rebuild time has passed, got {before}");
+
+    // Reload through the *original* handle...
+    let generous_rebuild = crate::trust::TrustConfig {
+        heartbeat_interval_seconds: 1,
+        trust_rebuild_seconds: 1, // fully rebuilt almost immediately
+        announced_restart_grace_seconds: 10,
+    };
+    original.update_trust_config(generous_rebuild);
+
+    // ...and confirm the *clone*, not just the original, now computes
+    // trust using the new config -- `federation_allows` is the real
+    // production read site, so exercise it directly rather than poking at
+    // `compute_trust` again with a config pulled from nowhere.
+    tokio::time::sleep(std::time::Duration::from_millis(1_100)).await;
+    assert!(
+        the_clone.federation_allows(&peer_id_b).await,
+        "the clone should observe the reloaded (generous) trust config, not the one it was constructed with"
+    );
+}
+
 /// Peer clustering, Phase 1 (spec/26): same `TestPeer` shape as
 /// `spawn_peer_at` (a real, permanent identity -- clustering must work for
 /// that case exactly as well as an ephemeral one), additionally opted into

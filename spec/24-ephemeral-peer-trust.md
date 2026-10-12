@@ -1,9 +1,9 @@
-# Ephemeral Peer Trust, Phase 1
+# Ephemeral Peer Trust
 
 **Source**: `crates/oag-sync/src/presence.rs`, `crates/oag-sync/src/trust.rs`,
 `crates/oag-storage/migrations/0009_peer_presence.sql`,
 `crates/oag-storage/src/repo/peer_presence.rs`, `crates/oag-cli/src/config.rs`'s
-`IdentitySection`, `crates/oag-cli/src/serve.rs`.
+`IdentitySection`/`resolve_identity_section`, `crates/oag-cli/src/serve.rs`.
 
 Opt-in (`[identity] ephemeral = true` in `config.toml`, default `false` — permanent,
 `identity.key`-backed identity, same as before this milestone, stays the default for every
@@ -98,12 +98,32 @@ deliberately leaves).
 (`trust::compute_trust`), using default trust-check windows rather than whatever a running `oag
 serve` was configured with — a read-only snapshot for a human to inspect, not itself enforcement.
 
+## Phase 2: live config reload for the trust-check windows
+
+`SyncService::trust_config` (`heartbeat_interval_seconds`/`trust_rebuild_seconds`/
+`announced_restart_grace_seconds`) is `Arc<std::sync::RwLock<TrustConfig>>`, not a plain field —
+every clone of a `SyncService` (the sync HTTP router, the gossip loop, the heartbeat loop, all
+taken once at `oag serve` startup) shares the same underlying value, so a reload through any one
+handle is visible to all of them. `SyncService::update_trust_config` replaces it; `federation_allows`
+copies the small `Copy` value out under a read lock immediately before its one `.await` (a
+`RwLockReadGuard` isn't `Send`, so it couldn't be held across the await regardless).
+
+`oag serve` spawns `reload_trust_config_periodically` (`serve.rs`) only when `[identity].ephemeral
+= true` *and* a `--config <path>` was actually given (nothing to reload from otherwise) — it wakes
+every `TRUST_CONFIG_RELOAD_INTERVAL` (a fixed 30s, deliberately *not* itself hot-reloadable, to
+avoid a "how often do we check for changes to the check-interval" regress), re-reads just
+`[identity]` via the new `resolve_identity_section`, and unconditionally calls
+`update_trust_config` — re-applying an unchanged value is a harmless no-op, so there's no diffing
+logic to get wrong. A config file that's transiently invalid (e.g. mid-edit) is tolerated: the
+parse error is swallowed for that tick and simply retried at the next one, never crashing the
+running peer.
+
 ## Explicitly deferred
 
 A literal multi-peer ballot/quorum/consensus protocol (the address-correlation heuristic above is
-this milestone's full scope for "voting right"); true live/hot config reload without a restart;
-PacketCrypt-style merkle-commit-and-random-challenge proof of data volume; any token/blockchain
-machinery. See `future_ephemeral_peer_trust.md` for what's tracked and why.
+this milestone's full scope for "voting right"); PacketCrypt-style merkle-commit-and-random-
+challenge proof of data volume; any token/blockchain machinery. See `future_ephemeral_peer_trust.md`
+for what's tracked and why. (Live config reload, formerly listed here, is Phase 2 above.)
 
 ## Tests
 
@@ -122,3 +142,14 @@ instant `peers.forked` is set, it's hard-rejected regardless of heartbeat histor
 watched `oag peer list`'s trust column rise from real heartbeat exchange, and confirmed `kill
 -TERM` triggers the going-offline broadcast and the receiving side records it in
 `address_going_offline`.
+
+**Phase 2**: `oag-sync`'s `update_trust_config_is_observed_by_a_clone_taken_before_the_update` —
+constructs a `SyncService`, clones it (mimicking the router/gossip/heartbeat-loop clones `oag
+serve` takes at startup), calls `update_trust_config` with a different `TrustConfig` on the
+*original* handle, and confirms the *clone* (not just the original) observes the change through
+`federation_allows` — proving the `Arc<RwLock<_>>` sharing works across clones, which is the one
+thing that actually matters for this to work in the real `oag serve` process. Live: a real `oag
+serve --config <path>` with `identity.ephemeral = true` ran correctly with the reload loop active,
+survived a real edit to `trust_rebuild_seconds` across a reload tick, and survived a config file
+left transiently invalid (mid-edit) across a tick without crashing, recovering cleanly once valid
+TOML was restored.

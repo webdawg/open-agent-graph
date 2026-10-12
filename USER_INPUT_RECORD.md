@@ -536,3 +536,36 @@ is the cheap moment to fix it; leaving a known-wrong section name in place "for 
 zero real users would have been cargo-culting the principle rather than applying it.
 
 See `spec/29-ipfs-pinning.md` for the full mechanism this entry fed into.
+
+---
+
+## Entry 12 — 2026-10-12
+
+Self-made judgment calls, same pattern as Entries 7-11 — `spec/24-ephemeral-peer-trust.md`'s own
+"Explicitly deferred" list (and `docs/architecture.md`/`spec/22-future-work.md`'s matching
+bullets) named "live config reload for the trust-check windows" precisely enough to build directly,
+unlike its two siblings on the same list (a real voting/consensus protocol, PacketCrypt-style
+proof-of-data-volume) — both of which have no concrete shape named anywhere in this project's own
+docs or memory, and would mean inventing a consensus/proof-of-work scheme from scratch. Those two
+were deliberately left alone this session as exactly the kind of open-ended design decision better
+surfaced to the user than decided unilaterally; only the third, mechanical item was picked up.
+
+Three smaller calls within that scoped item, all reversible/low-stakes:
+
+1. **Polling, not a file-watcher (inotify/similar).** A fixed 30s poll needs no new dependency and
+   is far more responsive than this setting's own effect (trust decay/rebuild curves, which operate
+   on minutes) requires.
+2. **The poll interval itself is a hardcoded constant, not a config value.** Making it configurable
+   would raise "how often do we check for changes to the check-interval" — hot-reloading a
+   hot-reload setting has no natural base case.
+3. **Unconditional overwrite every tick, no diffing.** Re-applying an unchanged `TrustConfig` is a
+   harmless no-op, so there's no diff-then-apply logic to write or get wrong — the simplest correct
+   behavior, consistent with this project's general preference for the smallest implementation that
+   is actually correct.
+
+Also scoped deliberately narrow: only `[identity]`'s three trust-window fields get this treatment.
+`[cluster]`, `[federation]`, `[network]`, etc. all stay startup-only, exactly matching today's
+behavior — the backlog item named the trust-check windows specifically, not config hot-reload as a
+general capability, and generalizing further wasn't asked for.
+
+See `spec/24-ephemeral-peer-trust.md` for the full mechanism this entry fed into.

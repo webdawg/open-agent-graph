@@ -173,11 +173,12 @@ has since landed (`spec/24-ephemeral-peer-trust.md`, `spec/26-peer-clustering.md
 remain not yet implemented and change nothing described elsewhere in this document:
 
 - Ephemeral, session-scoped peer identity with data/uptime-driven trust (inspired by the PKT
-  Network paper — see `ENVIRONMENT.md`). **Phase 1 implemented** (opt-in `[identity] ephemeral =
-  true`, signed presence heartbeats, per-observer trust scoring, trust-weighted federation — see
-  `spec/24-ephemeral-peer-trust.md`). Still future work: a real multi-peer voting/consensus
-  mechanism (Phase 1 uses a soft, local, address-correlation heuristic instead), live config
-  reload for the trust-check windows, and PacketCrypt-style proof-of-data-volume.
+  Network paper — see `ENVIRONMENT.md`). **Phase 1 and 2 implemented** (opt-in `[identity]
+  ephemeral = true`, signed presence heartbeats, per-observer trust scoring, trust-weighted
+  federation, and live config reload for the trust-check windows via a shared `Arc<RwLock<_>>` and
+  a periodic re-read of `[identity]` — see `spec/24-ephemeral-peer-trust.md`). Still future work: a
+  real multi-peer voting/consensus mechanism (Phase 1 uses a soft, local, address-correlation
+  heuristic instead), and PacketCrypt-style proof-of-data-volume.
 - Native IPFS integration for large evidence blobs and static exports (spec section 84's
   `blobs/<hash>` concept). **Phase 1 and 2 implemented** — opt-in pinning of crawled evidence
   content (Phase 1) and `oag backup` snapshots (Phase 2), both via `[ipfs].pinning_provider`
