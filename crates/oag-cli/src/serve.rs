@@ -67,6 +67,7 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         graph.clone(),
         config.crawler_config,
         config.llm_extractor,
+        config.pinning_provider,
     ));
 
     let state = oag_api::AppState::new(graph.clone())
@@ -217,6 +218,7 @@ mod tests {
             graph.clone(),
             oag_crawler::CrawlerConfig::default(),
             Arc::new(oag_crawler::DisabledExtractor),
+            Arc::new(oag_ipfs::DisabledProvider),
         ));
         let state = oag_api::AppState::new(graph.clone());
         let rate_limit_state = state.clone();

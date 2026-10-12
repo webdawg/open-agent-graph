@@ -70,6 +70,7 @@ async fn spawn_mcp_server_with_crawler_config(
         graph.clone(),
         crawler_config,
         Arc::new(oag_crawler::DisabledExtractor),
+        Arc::new(oag_ipfs::DisabledProvider),
     ));
     let app = axum::Router::new()
         .route_service("/mcp", crate::streamable_http_service(graph, embedding_provider, crawler));
@@ -486,6 +487,7 @@ async fn graph_crawl_without_permission_is_rejected() {
         graph.clone(),
         oag_crawler::CrawlerConfig::default(),
         Arc::new(oag_crawler::DisabledExtractor),
+        Arc::new(oag_ipfs::DisabledProvider),
     ));
     let app = axum::Router::new().route_service("/mcp", crate::streamable_http_service(graph, embedding_provider, crawler));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

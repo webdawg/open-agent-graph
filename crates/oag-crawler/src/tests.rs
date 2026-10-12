@@ -12,6 +12,7 @@ use std::sync::Arc;
 use oag_core::AssertionStatus;
 use oag_crypto::PeerIdentity;
 use oag_graph::{GraphService, ResolveOutcome};
+use oag_ipfs::PinningProvider;
 use oag_storage::pool::open_pool;
 
 use crate::crawler::CrawlerService;
@@ -217,7 +218,7 @@ async fn full_crawl_populates_graph_via_all_extractors() {
     let url = Url::parse(&base).unwrap();
 
     let graph = fresh_graph("full-crawl").await;
-    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor));
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor), Arc::new(oag_ipfs::DisabledProvider));
 
     let summary = crawler.crawl(&url).await.unwrap();
     assert!(summary.facts_asserted > 0);
@@ -274,7 +275,7 @@ async fn crawling_markdown_declares_h1_as_name_alias() {
     let url = Url::parse(&base).unwrap();
 
     let graph = fresh_graph("markdown-crawl").await;
-    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor));
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor), Arc::new(oag_ipfs::DisabledProvider));
 
     let summary = crawler.crawl(&url).await.unwrap();
     assert!(summary.facts_asserted > 0);
@@ -296,7 +297,7 @@ async fn crawl_with_default_config_is_blocked_by_ssrf_policy() {
     let url = Url::parse(&base).unwrap();
 
     let graph = fresh_graph("blocked-crawl").await;
-    let crawler = CrawlerService::new(graph, CrawlerConfig::default(), Arc::new(DisabledExtractor));
+    let crawler = CrawlerService::new(graph, CrawlerConfig::default(), Arc::new(DisabledExtractor), Arc::new(oag_ipfs::DisabledProvider));
 
     let result = crawler.crawl(&url).await;
     assert!(matches!(result, Err(CrawlError::BlockedAddress(_))), "got {result:?}");
@@ -328,6 +329,123 @@ impl crate::llm_extract::LlmExtractor for FakeLlmExtractor {
     }
 }
 
+/// Records how many times `pin` was called and always returns a fixed CID
+/// -- standing in for a real kubo daemon (`oag-ipfs`'s own tests already
+/// cover the HTTP-parsing side; this is about the crawler's own wiring:
+/// which fetch gets pinned, and whether the resulting CID actually reaches
+/// evidence metadata).
+#[derive(Default)]
+struct FakePinningProvider {
+    pin_calls: std::sync::atomic::AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl PinningProvider for FakePinningProvider {
+    async fn pin(&self, _content: &[u8]) -> Result<String, oag_ipfs::IpfsError> {
+        self.pin_calls.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Ok("QmFakeCid".to_string())
+    }
+
+    async fn fetch(&self, _cid: &str) -> Result<Vec<u8>, oag_ipfs::IpfsError> {
+        unimplemented!("not exercised by these tests")
+    }
+
+    fn provider_name(&self) -> &'static str {
+        "fake"
+    }
+}
+
+/// Always fails -- proves a pin failure is best-effort enrichment, never a
+/// crawl-failing error.
+struct FailingPinningProvider;
+
+#[async_trait::async_trait]
+impl PinningProvider for FailingPinningProvider {
+    async fn pin(&self, _content: &[u8]) -> Result<String, oag_ipfs::IpfsError> {
+        Err(oag_ipfs::IpfsError::EmptyResponse)
+    }
+
+    async fn fetch(&self, _cid: &str) -> Result<Vec<u8>, oag_ipfs::IpfsError> {
+        unimplemented!("not exercised by these tests")
+    }
+
+    fn provider_name(&self) -> &'static str {
+        "failing"
+    }
+}
+
+/// spec/29-ipfs-pinning.md's scoping decision: only the main page's content
+/// gets pinned, not the llms.txt/ARD/agent-card side-fetches -- and every
+/// evidence item built for that page (via `page_evidence.clone()`) inherits
+/// the same CID for free.
+#[tokio::test]
+async fn pinning_provider_cid_lands_only_on_the_main_page_evidence() {
+    let base = spawn_fixture(fixture_router()).await;
+    let url = Url::parse(&base).unwrap();
+
+    let graph = fresh_graph("ipfs-pin-scope").await;
+    let pinner = Arc::new(FakePinningProvider::default());
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor), pinner.clone());
+
+    crawler.crawl(&url).await.unwrap();
+
+    let ResolveOutcome::Found { node: page_node, .. } = graph.resolve(&base).await.unwrap() else {
+        panic!("expected the crawled page's own node to resolve");
+    };
+    let assertions = graph.list_assertions_for_node(page_node.id).await.unwrap();
+
+    let mut saw_pinned_web_page = false;
+    let mut saw_unpinned_documentation = false;
+    for assertion in &assertions {
+        for evidence in graph.list_evidence(assertion.id).await.unwrap() {
+            match evidence.evidence_type {
+                oag_core::EvidenceType::WebPage => {
+                    assert_eq!(evidence.metadata, serde_json::json!({ "ipfs_cid": "QmFakeCid" }));
+                    saw_pinned_web_page = true;
+                }
+                oag_core::EvidenceType::Documentation => {
+                    assert_eq!(evidence.metadata, serde_json::json!({}));
+                    saw_unpinned_documentation = true;
+                }
+                _ => {}
+            }
+        }
+    }
+    assert!(saw_pinned_web_page, "expected the main page's web_page evidence to carry a CID");
+    assert!(saw_unpinned_documentation, "expected llms.txt's documentation evidence to stay unpinned");
+    assert_eq!(
+        pinner.pin_calls.load(std::sync::atomic::Ordering::Relaxed),
+        1,
+        "only the main page body should be pinned, not the auxiliary llms.txt/ARD/agent-card fetches"
+    );
+}
+
+/// A pin failure (or a provider error of any kind) must never fail the
+/// whole crawl -- same "best-effort enrichment" posture already
+/// established for malformed LLM-extraction responses.
+#[tokio::test]
+async fn pinning_provider_failure_does_not_fail_the_crawl() {
+    let base = spawn_fixture(fixture_router()).await;
+    let url = Url::parse(&base).unwrap();
+
+    let graph = fresh_graph("ipfs-pin-failure").await;
+    let crawler =
+        CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor), Arc::new(FailingPinningProvider));
+
+    let summary = crawler.crawl(&url).await.unwrap();
+    assert!(summary.facts_asserted > 0);
+
+    let ResolveOutcome::Found { node: page_node, .. } = graph.resolve(&base).await.unwrap() else {
+        panic!("expected the crawled page's own node to resolve");
+    };
+    let assertions = graph.list_assertions_for_node(page_node.id).await.unwrap();
+    for assertion in &assertions {
+        for evidence in graph.list_evidence(assertion.id).await.unwrap() {
+            assert_eq!(evidence.metadata, serde_json::json!({}), "a failed pin must leave metadata empty, not error");
+        }
+    }
+}
+
 /// Spec section 74: an enabled LLM extractor's candidates land as real
 /// assertions, tagged `ExtractionMethod::LlmExtraction`, carrying the
 /// extractor's own confidence (not the fixed confidence deterministic
@@ -339,7 +457,7 @@ async fn llm_extraction_candidates_are_asserted_with_correct_provenance() {
     let url = Url::parse(&base).unwrap();
 
     let graph = fresh_graph("llm-extraction").await;
-    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(FakeLlmExtractor));
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(FakeLlmExtractor), Arc::new(oag_ipfs::DisabledProvider));
 
     let summary = crawler.crawl(&url).await.unwrap();
     assert_eq!(summary.llm_candidates_asserted, 1);
@@ -373,7 +491,7 @@ async fn crawl_counters_track_attempts_and_failures() {
     let url = Url::parse(&base).unwrap();
 
     let graph = fresh_graph("crawl-counters").await;
-    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor));
+    let crawler = CrawlerService::new(graph.clone(), allowing_config(), Arc::new(DisabledExtractor), Arc::new(oag_ipfs::DisabledProvider));
     assert_eq!(crawler.crawls_total(), 0);
     assert_eq!(crawler.crawls_failed(), 0);
 
@@ -381,7 +499,7 @@ async fn crawl_counters_track_attempts_and_failures() {
     assert_eq!(crawler.crawls_total(), 1);
     assert_eq!(crawler.crawls_failed(), 0);
 
-    let blocked_crawler = CrawlerService::new(graph, CrawlerConfig::default(), Arc::new(DisabledExtractor));
+    let blocked_crawler = CrawlerService::new(graph, CrawlerConfig::default(), Arc::new(DisabledExtractor), Arc::new(oag_ipfs::DisabledProvider));
     let result = blocked_crawler.crawl(&url).await;
     assert!(result.is_err(), "default config should block this loopback fixture");
     assert_eq!(blocked_crawler.crawls_total(), 1);

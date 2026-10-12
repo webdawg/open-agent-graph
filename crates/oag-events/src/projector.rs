@@ -148,7 +148,10 @@ async fn project_add_evidence(
         content_hash: p.content_hash.clone(),
         observed_at: p.observed_at,
         retrieved_at: p.retrieved_at,
-        metadata: serde_json::json!({}),
+        metadata: match &p.pinned_cid {
+            Some(cid) => serde_json::json!({ "ipfs_cid": cid }),
+            None => serde_json::json!({}),
+        },
     };
     assertions::insert_evidence(conn, &evidence).await?;
     events::add_ref(conn, event_id, "assertion", assertion_id.as_hash().as_bytes()).await?;

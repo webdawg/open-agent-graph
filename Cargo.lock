@@ -1776,6 +1776,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
+name = "mime_guess"
+version = "2.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
+dependencies = [
+ "mime",
+ "unicase",
+]
+
+[[package]]
 name = "mio"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1830,6 +1840,7 @@ dependencies = [
  "oag-embeddings",
  "oag-events",
  "oag-graph",
+ "oag-ipfs",
  "oag-storage",
  "oag-sync",
  "serde",
@@ -1859,6 +1870,7 @@ dependencies = [
  "oag-embeddings",
  "oag-events",
  "oag-graph",
+ "oag-ipfs",
  "oag-mcp",
  "oag-petname",
  "oag-reticulum",
@@ -1902,6 +1914,7 @@ dependencies = [
  "oag-crypto",
  "oag-events",
  "oag-graph",
+ "oag-ipfs",
  "oag-storage",
  "reqwest",
  "scraper",
@@ -1983,6 +1996,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "oag-ipfs"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "oag-mcp"
 version = "0.1.0"
 dependencies = [
@@ -1993,6 +2019,7 @@ dependencies = [
  "oag-crypto",
  "oag-embeddings",
  "oag-graph",
+ "oag-ipfs",
  "oag-storage",
  "reqwest",
  "rmcp",
@@ -2596,6 +2623,7 @@ dependencies = [
  "hyper-util",
  "js-sys",
  "log",
+ "mime_guess",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -2604,6 +2632,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -3865,6 +3894,12 @@ checksum = "e1b88fcfe09e89d3866a5c11019378088af2d24c3fbd4f0543f96b479ec90697"
 dependencies = [
  "version_check",
 ]
+
+[[package]]
+name = "unicase"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "357cc3acc6a036009fd6c973ed009037c732d60d0b4f6c673e9041497482a28f"
 
 [[package]]
 name = "unicode-bidi"

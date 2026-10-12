@@ -52,6 +52,9 @@ pub struct EvidenceParam {
     pub title: Option<String>,
     pub excerpt: Option<String>,
     pub content_hash: Option<String>,
+    /// An IPFS CID this evidence's content has already been pinned under
+    /// (caller-asserted, unverified — see `spec/29-ipfs-pinning.md`).
+    pub pinned_cid: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]

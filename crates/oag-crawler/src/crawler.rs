@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use oag_core::{ActorType, ExtractionMethod, NodeId, Permission};
 use oag_graph::{AssertInput, AuthContext, EvidenceInput, GraphService, ResolveOutcome};
+use oag_ipfs::PinningProvider;
 use url::Url;
 
 use crate::error::CrawlError;
@@ -45,6 +46,7 @@ pub struct CrawlerService {
     graph: Arc<GraphService>,
     config: CrawlerConfig,
     llm_extractor: Arc<dyn LlmExtractor>,
+    pinning_provider: Arc<dyn PinningProvider>,
     /// Spec section 86's `crawl_jobs`/`crawl_failures` metrics. Process-
     /// lifetime counters (reset on restart), same as every other Prometheus
     /// counter -- there's no durable job queue (spec section 70) behind
@@ -56,11 +58,17 @@ pub struct CrawlerService {
 }
 
 impl CrawlerService {
-    pub fn new(graph: Arc<GraphService>, config: CrawlerConfig, llm_extractor: Arc<dyn LlmExtractor>) -> Self {
+    pub fn new(
+        graph: Arc<GraphService>,
+        config: CrawlerConfig,
+        llm_extractor: Arc<dyn LlmExtractor>,
+        pinning_provider: Arc<dyn PinningProvider>,
+    ) -> Self {
         Self {
             graph,
             config,
             llm_extractor,
+            pinning_provider,
             crawls_total: AtomicU64::new(0),
             crawls_failed: AtomicU64::new(0),
         }
@@ -155,11 +163,26 @@ impl CrawlerService {
         let final_url = page.final_url.to_string();
         let is_html = page.content_type == "text/html" || page.content_type == "application/xhtml+xml";
 
+        // Best-effort enrichment: a pin failure (or a disabled provider,
+        // the default) must never fail the crawl, same posture already
+        // established for malformed LLM-extraction responses. Only the
+        // primary page is pinned in Phase 1 (spec/29-ipfs-pinning.md) —
+        // the llms.txt/ARD/agent-card side-fetches below are metadata-
+        // discovery mechanisms, not primary content, and are left unpinned.
+        let pinned_cid = match self.pinning_provider.pin(&page.body).await {
+            Ok(cid) => Some(cid),
+            Err(err) => {
+                tracing::warn!(error = %err, "IPFS pin failed for crawled page, continuing without a CID");
+                None
+            }
+        };
+
         let page_evidence = EvidenceInput {
             evidence_type: Some("web_page".to_string()),
             uri: Some(final_url.clone()),
             content_hash: Some(page.content_hash.clone()),
             retrieved_at: Some(now_ts()),
+            pinned_cid,
             ..Default::default()
         };
 

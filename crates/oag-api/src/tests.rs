@@ -81,6 +81,7 @@ async fn test_app_with_crawler(name: &str) -> (axum::Router, String) {
         graph.clone(),
         crawler_config,
         Arc::new(oag_crawler::DisabledExtractor),
+        Arc::new(oag_ipfs::DisabledProvider),
     ));
     let state = AppState::new(graph).with_crawler(crawler);
     (build_router(state), raw_key)

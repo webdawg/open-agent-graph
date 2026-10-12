@@ -438,3 +438,41 @@ unrequested abstraction this project's own conventions warn against.
 
 See `future_self_hosted_roadmap_governance.md` memory and `spec/28-roadmap-governance.md` for the
 full mechanism this entry fed into.
+
+---
+
+## Entry 9 — 2026-10-12
+
+Another self-made design judgment, same pattern as Entries 7 and 8 — `future_ipfs_static_data_hosting.md`
+(2026-09-27) had already resolved the hardest two questions ("OAG's own hash stays authoritative,
+the CID is just a retrieval pointer"; "opt-in, works fully disabled") well enough that building
+Phase 1 (`spec/29-ipfs-pinning.md`) required three further judgment calls, recorded here.
+
+**First**: `rust-ipfs`/`ipfs-api` (both flagged in the memory as worth evaluating) were declined in
+favor of a hand-rolled `reqwest`-based client (`oag-ipfs::KuboHttpProvider`) — `rust-ipfs` is
+alpha-quality and far heavier than two HTTP calls justify; `ipfs-api` is a thin wrapper over those
+same two calls. Same "small hand-rolled implementation over a heavyweight crate" posture already
+used for the Prometheus metrics endpoint and `oag-embeddings::OpenAiCompatibleProvider`.
+
+**Second**: only the crawler's main page gets auto-pinned, not the `llms.txt`/ARD/agent-card
+side-fetches a crawl also makes. Those are metadata-discovery mechanisms, not primary content a
+human would want independently retrievable, and skipping them kept Phase 1's scope tight —
+trivially extendable later if a real need shows up.
+
+**Third**: the CID threads through as a narrowly-named `pinned_cid: Option<String>` field on
+`EvidenceInput`/`AddEvidencePayload`/the REST and MCP evidence request shapes, landing in the
+*existing* `Evidence.metadata` JSON column as `{"ipfs_cid": "..."}` — not a generic, open-ended
+metadata API exposed to callers. This needed zero schema migration (`metadata` already existed,
+unused) and keeps the new caller-facing surface exactly as validate-able as `content_hash` already
+is, rather than opening arbitrary JSON injection into evidence metadata from any caller.
+
+One real bug, not a judgment call, found during this feature's own live verification against a
+fixture kubo stand-in (no real kubo daemon available in this environment): `reqwest::multipart::
+Part::bytes` with no `.file_name(...)` produced a part that a stricter multipart parser silently
+treated as empty, pinning the hash of zero bytes instead of the real page content. Fixed by always
+setting a filename on the uploaded part, with a regression-guarding unit test added
+(`oag-ipfs/src/provider.rs`) and reverified live end-to-end (crawl → correct CID in evidence
+metadata → `oag ipfs cat` round-trips the exact original page bytes).
+
+See `future_ipfs_static_data_hosting.md` memory and `spec/29-ipfs-pinning.md` for the full
+mechanism this entry fed into.

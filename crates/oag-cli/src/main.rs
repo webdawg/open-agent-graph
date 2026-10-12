@@ -161,6 +161,24 @@ enum Command {
         #[arg(long)]
         config: Option<PathBuf>,
     },
+    /// Native IPFS pinning commands (spec/29-ipfs-pinning.md).
+    Ipfs {
+        #[command(subcommand)]
+        command: IpfsCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum IpfsCommand {
+    /// Retrieve previously-pinned content by CID from the configured
+    /// provider, writing the raw bytes to stdout. Errors clearly if IPFS
+    /// pinning isn't configured (the default) rather than silently
+    /// producing nothing.
+    Cat {
+        cid: String,
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -564,5 +582,8 @@ async fn main() -> anyhow::Result<()> {
             commands::crawl(&data_dir, &url, config, allow_private_networks).await
         }
         Command::Doctor { data_dir, config } => commands::doctor(&data_dir, config).await,
+        Command::Ipfs { command: IpfsCommand::Cat { cid, config } } => {
+            commands::ipfs_cat(&cid, config).await
+        }
     }
 }

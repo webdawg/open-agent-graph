@@ -20,6 +20,9 @@ pub struct EvidenceRequest {
     pub content_hash: Option<String>,
     pub observed_at: Option<String>,
     pub retrieved_at: Option<String>,
+    /// An IPFS CID this evidence's content has already been pinned under
+    /// (caller-asserted, unverified — see `spec/29-ipfs-pinning.md`).
+    pub pinned_cid: Option<String>,
 }
 
 impl EvidenceRequest {
@@ -32,6 +35,7 @@ impl EvidenceRequest {
             content_hash: self.content_hash,
             observed_at: self.observed_at.as_deref().map(parse_timestamp).transpose()?,
             retrieved_at: self.retrieved_at.as_deref().map(parse_timestamp).transpose()?,
+            pinned_cid: self.pinned_cid,
         })
     }
 }

@@ -218,6 +218,13 @@ pub struct CrawlerSection {
     pub llm_api_key: Option<String>,
     #[serde(default = "default_llm_model")]
     pub llm_model: String,
+    /// spec/29-ipfs-pinning.md: pinning crawled pages to IPFS is opt-in and
+    /// OAG must work with it entirely disabled -- same shape and default as
+    /// `llm_provider` above.
+    #[serde(default = "default_ipfs_pinning_provider")]
+    pub ipfs_pinning_provider: String,
+    pub ipfs_api_base_url: Option<String>,
+    pub ipfs_api_key: Option<String>,
 }
 
 fn default_llm_provider() -> String {
@@ -226,6 +233,10 @@ fn default_llm_provider() -> String {
 
 fn default_llm_model() -> String {
     "gpt-4o-mini".to_string()
+}
+
+fn default_ipfs_pinning_provider() -> String {
+    "disabled".to_string()
 }
 
 fn default_max_response_bytes() -> usize {
@@ -247,6 +258,9 @@ impl Default for CrawlerSection {
             llm_base_url: None,
             llm_api_key: None,
             llm_model: default_llm_model(),
+            ipfs_pinning_provider: default_ipfs_pinning_provider(),
+            ipfs_api_base_url: None,
+            ipfs_api_key: None,
         }
     }
 }
@@ -276,6 +290,23 @@ impl CrawlerSection {
                 None => std::sync::Arc::new(oag_crawler::DisabledExtractor),
             },
             _ => std::sync::Arc::new(oag_crawler::DisabledExtractor),
+        }
+    }
+
+    /// `"disabled"` (the default) or a missing `ipfs_api_base_url` both
+    /// yield `DisabledProvider` -- same "incomplete config degrades to the
+    /// safe default rather than erroring at startup" posture as
+    /// `to_llm_extractor`/`to_embedding_provider`.
+    pub fn to_pinning_provider(&self) -> std::sync::Arc<dyn oag_ipfs::PinningProvider> {
+        match self.ipfs_pinning_provider.as_str() {
+            "kubo" => match &self.ipfs_api_base_url {
+                Some(base_url) => std::sync::Arc::new(oag_ipfs::KuboHttpProvider::new(
+                    base_url.clone(),
+                    self.ipfs_api_key.clone(),
+                )),
+                None => std::sync::Arc::new(oag_ipfs::DisabledProvider),
+            },
+            _ => std::sync::Arc::new(oag_ipfs::DisabledProvider),
         }
     }
 }
@@ -419,6 +450,7 @@ pub struct ResolvedConfig {
     pub embedding_provider: Box<dyn oag_embeddings::EmbeddingProvider>,
     pub crawler_config: oag_crawler::CrawlerConfig,
     pub llm_extractor: std::sync::Arc<dyn oag_crawler::LlmExtractor>,
+    pub pinning_provider: std::sync::Arc<dyn oag_ipfs::PinningProvider>,
 }
 
 pub fn resolve(
@@ -469,18 +501,27 @@ pub fn resolve(
         // widen this peer's own SSRF policy for their request.
         crawler_config: file.crawler.to_crawler_config(false),
         llm_extractor: file.crawler.to_llm_extractor(),
+        pinning_provider: file.crawler.to_pinning_provider(),
     })
 }
+
+/// `oag crawl`/`oag ipfs cat`'s resolved `[crawler]`-section providers.
+type CrawlerProviders = (
+    oag_crawler::CrawlerConfig,
+    std::sync::Arc<dyn oag_crawler::LlmExtractor>,
+    std::sync::Arc<dyn oag_ipfs::PinningProvider>,
+);
 
 /// Lightweight resolver for `oag crawl`, which — like `oag peer *` — is a
 /// one-shot command that doesn't need `serve`'s full `ResolvedConfig`
 /// (data dir is passed separately, network/federation are irrelevant here).
-/// Returns the LLM extractor (spec section 74) alongside the fetch config
-/// since both come from the same `[crawler]` section.
+/// Returns the LLM extractor (spec section 74) and pinning provider (spec/29)
+/// alongside the fetch config since all three come from the same
+/// `[crawler]` section.
 pub fn resolve_crawler_config(
     config_path: Option<PathBuf>,
     allow_private_networks_flag: bool,
-) -> anyhow::Result<(oag_crawler::CrawlerConfig, std::sync::Arc<dyn oag_crawler::LlmExtractor>)> {
+) -> anyhow::Result<CrawlerProviders> {
     let mut figment = Figment::new();
     if let Some(path) = &config_path {
         figment = figment.merge(Toml::file(path));
@@ -496,6 +537,7 @@ pub fn resolve_crawler_config(
     Ok((
         file.crawler.to_crawler_config(allow_private_networks_flag),
         file.crawler.to_llm_extractor(),
+        file.crawler.to_pinning_provider(),
     ))
 }
 

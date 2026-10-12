@@ -59,6 +59,7 @@ fn evidence_input(p: EvidenceParam) -> EvidenceInput {
         content_hash: p.content_hash,
         observed_at: None,
         retrieved_at: None,
+        pinned_cid: p.pinned_cid,
     }
 }
 

@@ -93,6 +93,7 @@ async fn full_vertical_slice_through_commit_local_event() {
             content_hash: None,
             observed_at: Some(now),
             retrieved_at: Some(now),
+            pinned_cid: None,
         }),
         now,
     )
@@ -434,6 +435,98 @@ async fn verify_and_dispute_assertion_for_a_nonexistent_assertion_are_both_rejec
     assert!(matches!(dispute_result, Err(crate::error::EventsError::NotFound(_))), "got {dispute_result:?}");
 }
 
+/// spec/29-ipfs-pinning.md: a `pinned_cid` on `AddEvidencePayload` lands in
+/// the projected `Evidence.metadata` as `{"ipfs_cid": "..."}` -- the one
+/// place the CID the caller supplied actually reaches storage.
+#[tokio::test]
+async fn pinned_cid_is_projected_into_evidence_metadata() {
+    let pool = open_pool(&temp_db_path("pinned-cid-metadata")).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let now = 1_700_000_000_i64;
+
+    let (_, outcome) = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::ActorDeclare(ActorDeclarePayload {
+            actor_type: "agent".into(),
+            name: Some("pinned-cid-actor".into()),
+            public_key: None,
+            identity_uri: None,
+        }),
+        now,
+    )
+    .await
+    .unwrap();
+    let ProjectionOutcome::ActorDeclared { actor_id } = outcome else {
+        panic!("expected ActorDeclared outcome");
+    };
+
+    let (assertion_id, _) = commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::AssertRelation(AssertRelationPayload {
+            subject_identifier: "url:https://example.com/pinned".into(),
+            subject_type: "document".into(),
+            predicate: "instance_of".into(),
+            object_identifier: "concept:document".into(),
+            object_type: "concept".into(),
+            actor_id: actor_id.to_hex(),
+            actor_confidence: Some(0.9),
+            observed_at: Some(now),
+            extraction_method: "direct".into(),
+        }),
+        now,
+    )
+    .await
+    .unwrap();
+
+    commit_local_event(
+        &pool,
+        &identity,
+        EventPayload::AddEvidence(AddEvidencePayload {
+            assertion_id: assertion_id.to_hex(),
+            evidence_type: "web_page".into(),
+            uri: Some("https://example.com/pinned".into()),
+            title: None,
+            excerpt: None,
+            content_hash: None,
+            observed_at: Some(now),
+            retrieved_at: Some(now),
+            pinned_cid: Some("QmTestCid".into()),
+        }),
+        now,
+    )
+    .await
+    .unwrap();
+
+    let mut conn = pool.acquire().await.unwrap();
+    let evidence = oag_storage::repo::assertions::list_evidence(&mut conn, assertion_id)
+        .await
+        .unwrap();
+    assert_eq!(evidence.len(), 1);
+    assert_eq!(evidence[0].metadata, serde_json::json!({ "ipfs_cid": "QmTestCid" }));
+}
+
+/// An `ADD_EVIDENCE` payload signed before `pinned_cid` existed (no such key
+/// in its JSON at all) must still deserialize -- "legacy must flow"
+/// (`USER_INPUT_RECORD.md` Entry 1). `#[serde(default)]` on the field is
+/// what makes this hold.
+#[test]
+fn old_shape_add_evidence_payload_without_pinned_cid_still_deserializes() {
+    let old_shape_json = serde_json::json!({
+        "assertion_id": "deadbeef",
+        "evidence_type": "documentation",
+        "uri": null,
+        "title": null,
+        "excerpt": null,
+        "content_hash": null,
+        "observed_at": null,
+        "retrieved_at": null,
+    });
+    let payload: AddEvidencePayload = serde_json::from_value(old_shape_json).unwrap();
+    assert_eq!(payload.pinned_cid, None);
+}
+
 /// Same gap as the two tests above, for the fifth and last
 /// `EventsError::NotFound`-returning projector case: `project_add_evidence`.
 #[tokio::test]
@@ -456,6 +549,7 @@ async fn add_evidence_for_a_nonexistent_assertion_is_not_found() {
             content_hash: None,
             observed_at: Some(now),
             retrieved_at: Some(now),
+            pinned_cid: None,
         }),
         now,
     )

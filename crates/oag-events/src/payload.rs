@@ -68,6 +68,13 @@ pub struct AddEvidencePayload {
     pub content_hash: Option<String>,
     pub observed_at: Option<i64>,
     pub retrieved_at: Option<i64>,
+    /// An IPFS CID the caller has already pinned this evidence's content
+    /// under (spec `spec/29-ipfs-pinning.md`) — just a retrieval pointer,
+    /// never independently verified. `#[serde(default)]` so events signed
+    /// before this field existed still deserialize ("legacy must flow",
+    /// `USER_INPUT_RECORD.md` Entry 1).
+    #[serde(default)]
+    pub pinned_cid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -628,11 +628,11 @@ pub async fn crawl(
     allow_private_networks_flag: bool,
 ) -> anyhow::Result<()> {
     let url = url::Url::parse(url).map_err(|e| anyhow::anyhow!("invalid URL '{url}': {e}"))?;
-    let (crawler_config, llm_extractor) =
+    let (crawler_config, llm_extractor, pinning_provider) =
         crate::config::resolve_crawler_config(config_path, allow_private_networks_flag)?;
 
     let graph = std::sync::Arc::new(open_graph(data_dir).await?);
-    let crawler = oag_crawler::CrawlerService::new(graph, crawler_config, llm_extractor);
+    let crawler = oag_crawler::CrawlerService::new(graph, crawler_config, llm_extractor, pinning_provider);
 
     let summary = crawler.crawl(&url).await?;
 
@@ -648,6 +648,22 @@ pub async fn crawl(
     if summary.llm_candidates_asserted > 0 {
         println!("LLM candidate assertions: {}", summary.llm_candidates_asserted);
     }
+    Ok(())
+}
+
+/// Retrieve previously-pinned content directly from the configured provider
+/// (spec/29-ipfs-pinning.md) — no `data_dir`/`GraphService` involved, since
+/// this talks to IPFS, not to a peer's graph. Writes raw bytes to stdout
+/// (not JSON-wrapped) so it can be piped to a file/viewer, matching a real
+/// `ipfs cat`'s own behavior.
+pub async fn ipfs_cat(cid: &str, config_path: Option<std::path::PathBuf>) -> anyhow::Result<()> {
+    let (_, _, pinning_provider) = crate::config::resolve_crawler_config(config_path, false)?;
+    let content = pinning_provider
+        .fetch(cid)
+        .await
+        .map_err(|e| anyhow::anyhow!("{e} (is [crawler].ipfs_pinning_provider set in config.toml?)"))?;
+    use std::io::Write;
+    std::io::stdout().write_all(&content)?;
     Ok(())
 }
 

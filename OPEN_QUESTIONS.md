@@ -6,6 +6,36 @@ ask me "are there open questions?" or just edit this file directly.
 
 Format: question, assumption I'm running with, status.
 
+## Native IPFS pinning (spec/29-ipfs-pinning.md)
+
+- **Hand-rolled `KuboHttpProvider` over `reqwest`, not `ipfs-api`/`rust-ipfs`.** `rust-ipfs` is
+  alpha-quality and far heavier than this narrow need (two HTTP calls) justifies; `ipfs-api` is a
+  thin wrapper over the same calls this makes directly. Assumption: same "small hand-rolled
+  implementation over a heavyweight crate" posture already used for the Prometheus metrics
+  endpoint and `oag-embeddings::OpenAiCompatibleProvider`. Status: resolved.
+- **Only the crawler's main page gets auto-pinned**, not the `llms.txt`/ARD/agent-card side-fetches.
+  Assumption: those are metadata-discovery mechanisms, not primary content a human would want
+  independently retrievable via IPFS, and skipping them keeps Phase 1 scope tight. Status: open
+  (revisit if a real need for pinning the side-fetches shows up).
+- **`pinned_cid` lands in `Evidence.metadata` as `{"ipfs_cid": ...}`, not a new typed column.**
+  `metadata: JsonValue` already existed on every evidence row (unused until this feature) — reusing
+  it needed zero schema migration, consistent with "don't build for hypothetical future
+  requirements." A narrowly-named `pinned_cid` field (not a generic, open-ended metadata API) is
+  what threads through `EvidenceInput`/`AddEvidencePayload`/REST/MCP, so the new caller-facing
+  surface stays as validate-able as `content_hash` already is. Status: resolved.
+- **Any caller may set `pinned_cid` directly** (REST/MCP evidence requests, not just the crawler's
+  own automatic pinning) — exactly as caller-asserted and unverified as `content_hash`/`uri`
+  already are; OAG doesn't independently confirm a claimed CID any more than it reverifies a
+  claimed hash. Status: resolved.
+- **Multipart upload needs an explicit filename.** Found live during this feature's own
+  verification (not just a test-fixture quirk): `reqwest::multipart::Part::bytes` with no
+  `.file_name(...)` produced a part some multipart parsers treat as empty, silently pinning zero
+  bytes instead of the real content. Fixed by always setting a filename on the uploaded part.
+  Status: resolved.
+- **No REST/MCP endpoint for pin/fetch.** The write side needs none (it's the existing evidence-add
+  path, one new optional field); `oag ipfs cat` is CLI-only, matching `oag redact`/`oag peer forks`
+  precedent for operator-triggered read tooling. Status: resolved.
+
 ## Semantic search (spec section 64)
 
 - **Local embedding model?** Spec section 64 lists "local model" as a possible `EmbeddingProvider`

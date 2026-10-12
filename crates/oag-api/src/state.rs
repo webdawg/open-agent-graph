@@ -29,6 +29,7 @@ impl AppState {
             graph.clone(),
             oag_crawler::CrawlerConfig::default(),
             Arc::new(oag_crawler::DisabledExtractor),
+            Arc::new(oag_ipfs::DisabledProvider),
         ));
         let sync = SyncService::new(
             graph.pool().clone(),

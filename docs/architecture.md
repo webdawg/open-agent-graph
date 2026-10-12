@@ -60,6 +60,10 @@ oag-sync        Peer-to-peer replication: hello/heads/events/peers HTTP endpoint
 oag-embeddings  EmbeddingProvider abstraction (disabled by default) + brute-force cosine
                 similarity ranking, backing semantic search.
 
+oag-ipfs        PinningProvider abstraction (disabled by default) for IPFS pinning/retrieval of
+                evidence content -- a leaf crate like oag-embeddings, used by oag-crawler and
+                directly by oag-cli's `oag ipfs cat`.
+
 oag-crawler     Safe HTTP fetch (SSRF-guarded), structured extraction (JSON-LD, ARD, A2A,
                 llms.txt, HTML meta), and LLM-extraction fallback — turns a crawled page into
                 the same signed events any other caller would produce.
@@ -175,7 +179,13 @@ remain not yet implemented and change nothing described elsewhere in this docume
   mechanism (Phase 1 uses a soft, local, address-correlation heuristic instead), live config
   reload for the trust-check windows, and PacketCrypt-style proof-of-data-volume.
 - Native IPFS integration for large evidence blobs and static exports (spec section 84's
-  `blobs/<hash>` concept).
+  `blobs/<hash>` concept). **Phase 1 implemented** — opt-in pinning of crawled evidence content
+  (`[crawler].ipfs_pinning_provider`, default disabled), the resulting CID stored in the existing
+  `Evidence.metadata` column (`{"ipfs_cid": "..."}`, no schema change), and `oag ipfs cat <cid>` for
+  retrieval — see `spec/29-ipfs-pinning.md`. OAG's own `content_hash` stays authoritative; the CID
+  is purely a retrieval pointer. Still future work: pinning the crawler's auxiliary side-fetches,
+  any REST/MCP pin/fetch endpoint, and the original `blobs/<hash>` static-export concept beyond
+  evidence content.
 - Granular, per-artifact data versioning. **Phase 1 implemented** for nodes/edges/assertions/
   evidence — an explicit `schema_version` on every row, with both access modes Entry 1 described
   (`USER_INPUT_RECORD.md`) available at read time: migrate a row to the current version in place
