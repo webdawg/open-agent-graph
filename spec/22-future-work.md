@@ -131,3 +131,35 @@ Implemented — see [25-gravity.md](25-gravity.md). (`USER_INPUT_RECORD.md` Entr
 this as an open question between two readings; Entry 5 resolved it and this section's earlier
 "not yet built" draft of the pad-decay reading was superseded, not built — gravity throttles a
 node's own processing speed, and never touches the tensor pad.)
+
+## Ephemeral micro-networks as proof of composite identity, and sensor input as a graph "packet"
+
+Not implemented — captured from `USER_INPUT_RECORD.md` Entries 15 and 16. New application domains
+named (instant vehicle-to-vehicle networks, swarm/fleet control of linked moving devices, branching
+exploratory "direction" trees) need no new mechanism by themselves — a car, a drone, a sensor, and
+an explored hypothesis are all just nodes, same as anything else OAG already models. Two things
+named *do* go beyond what's built:
+
+- **Sub-second ephemerality.** `24-ephemeral-peer-trust.md` assumes identity lasting the lifetime
+  of a running process (minutes to days); even peer clustering's fast intra-cluster gossip
+  (`26-peer-clustering.md`, Phase 2) defaults to a 5-second cadence. A network lasting as little as
+  30 milliseconds leaves no room for a multi-round `oag-sync` `hello`/`heads`/pull exchange —
+  forming the group and recording that it formed would need to collapse into something closer to a
+  single signed broadcast.
+- **Network-formation itself as an identity claim.** Peer clustering already has "a self-declared,
+  signed cluster membership" (`26-peer-clustering.md`), but today that's a pure networking-layer
+  trust-radius knob, explicitly *not* a graph concept (this file's own "Peer clustering" section,
+  above, declined that for lack of a corroboration story). The new idea: the fact that a specific
+  set of peers briefly formed a network together — even for 30ms — becomes itself an assertion in
+  the graph ("these N peers were, for this instant, one thing"), ranked and corroborated the same
+  as any other claim, rather than a transient fact that evaporates with the network. This is the
+  one piece that would actually need new spec work.
+- **"Each graph is a packet."** Reframes sensor input (car telemetry, drone position-and-intent,
+  any device reading) not as a new storage primitive — no new type alongside Node/Edge/Assertion/
+  Evidence — but as a transport concept: a small, self-contained, signed subgraph sized to form,
+  transmit, and be corroborated inside one of the sub-second ephemeral networks above, the way a
+  packet crosses a wire.
+
+No design decisions made yet beyond this pull-apart; genuinely open how a <30ms-lifetime exchange
+could complete a signed handshake at all, and what graph shape ("these peers = one organism for
+this instant") the composite-identity assertion would actually take.

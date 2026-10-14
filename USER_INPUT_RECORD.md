@@ -686,3 +686,81 @@ stated architecture principle the way the ephemeral-trust item does.
 
 See `spec/26-peer-clustering.md`'s new "Phase 2" section for the full mechanism this entry fed
 into.
+
+---
+
+## Entry 15 — 2026-10-14
+
+Recorded verbatim at the user's explicit request ("put that down as original prompt text too for
+further expansion") — captured as-is for a later session to react to, not pre-interpreted here
+beyond the brief pull-apart below:
+
+> okay, so we are going to add on some more things - this can be used for instant car networks -
+> group computer control of linked moving devices etc, also applications in branched infinite
+> expanding quantum upgress, as new directions are made and tracked, as we expand out we build the
+> network - even though a network may only last 30 milli seconds - groups of this software can
+> represent one thing, and is one of the ways you can prove that, that one thing is part of the
+> same unit/grouping/organism
+
+### Response
+
+Three things tangled together, worth separating before anything gets spec'd:
+
+**1. New application domains, not new mechanisms.** Instant car networks (vehicle-to-vehicle),
+group control of linked moving devices (drone/robot swarms, fleets of actuators), and branching
+exploratory "direction" trees that expand as new paths are tried and tracked — none of these
+require anything OAG doesn't already model. A car, a drone, a sensor, and an explored hypothesis
+are all just nodes; "this car talked to that car for an instant" is just an edge/assertion with
+evidence. This is confirmation that the graph-of-claims model generalizes past "web crawling for
+AI agents," not a request for new primitives by itself.
+
+**2. Sub-second ephemerality — well past anything built so far.** `spec/24-ephemeral-peer-trust.md`
+assumes identity lasting "the lifetime of how a process runs" (Entry 0): minutes to days. Even
+peer clustering's fast intra-cluster gossip loop (`spec/26-peer-clustering.md`, Phase 2) defaults
+to a 5-second cadence. A network lasting 30 milliseconds is a different regime entirely — there's
+no time left for a multi-round gossip handshake; forming the group and recording that it formed
+would have to collapse into something closer to a single signed broadcast than `oag-sync`'s
+current `hello`/`heads`/pull exchange.
+
+**3. The one genuinely new idea: network-formation itself as proof of composite identity.**
+Peer clustering already has "a self-declared, signed cluster membership" (`spec/26`) — but today
+that's purely a networking-layer trust-radius knob, explicitly *not* a graph concept (considered
+and declined in `spec/22-future-work.md`'s "Peer clustering" section, for lack of a corroboration
+story). What's new here is recasting that same shape as an identity primitive: the fact that a
+specific set of peers briefly formed a network together — even for 30ms — becomes itself an
+assertion in the graph ("these N peers were, for this instant, one thing"), corroborated and
+ranked the same way any other claim is, rather than a transient fact that evaporates the moment
+the network disappears. That's a direct extension of "claims backed by evidence, not declarations
+of truth" onto group identity itself, and it's the piece that would actually require new spec work
+— not the application domains, and not the latency.
+
+Not implemented. Added to `spec/22-future-work.md` as a new, explicitly deferred direction so a
+future session has this pulled-apart version to start from rather than re-deriving it from the raw
+quote above.
+
+---
+
+## Entry 16 — 2026-10-14
+
+Direct follow-up to Entry 15, same session. The user asked for a new section for "inputs":
+
+> we want to add a section for inputs - this is a sensor input
+
+Asked where this should live and what it was for (new spec concept vs. a new
+`USER_INPUT_RECORD.md` entry category vs. something else). The user picked the first, and added
+the key framing detail:
+
+> sensor input as graph data is a good one yes, each graph is a packet
+
+### Response
+
+"Each graph is a packet" is the missing piece that ties Entry 15's three threads together. Read
+as: a *subgraph* — some bundle of nodes/edges/assertions/evidence, e.g. one car's sensor readings
+at one instant, or one drone's position-and-intent snapshot — is the unit that travels across one
+of Entry 15's sub-second ephemeral networks, the same way a packet travels across a wire. That
+reframes "sensor input" as not a new storage primitive (no new table, no new type alongside
+Node/Edge/Assertion/Evidence) but a new *ingestion/transport* concept: a self-contained, signed
+subgraph small enough to form, transmit, and be corroborated inside a 30ms-scale ephemeral network.
+Not implemented — captured in `spec/22-future-work.md` alongside Entry 15 rather than as its own
+numbered spec file, per this project's own rule that speculative work lives in
+`22-future-work.md` until it's real.
