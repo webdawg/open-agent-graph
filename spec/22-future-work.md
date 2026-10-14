@@ -163,3 +163,11 @@ named *do* go beyond what's built:
 No design decisions made yet beyond this pull-apart; genuinely open how a <30ms-lifetime exchange
 could complete a signed handshake at all, and what graph shape ("these peers = one organism for
 this instant") the composite-identity assertion would actually take.
+
+Named example sensor types for the "packet" concept (`USER_INPUT_RECORD.md` Entries 15-17): car
+telemetry, drone position-and-intent, and a fixed groundwater/borehole probe framed as a neutrino
+detector. That last one is flagged honestly in Entry 17: a single narrow borehole's water column
+has nowhere near the shielded target mass real neutrino detectors (Super-Kamiokande, IceCube) use,
+so it's unlikely to detect neutrinos specifically — what actually matters for this concept is the
+shape it shares with the other examples regardless of the physical quantity actually measured: a
+fixed, continuously-sampled environmental sensor at a known location, cheap and frequent to report.

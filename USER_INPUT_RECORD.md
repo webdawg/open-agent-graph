@@ -764,3 +764,30 @@ subgraph small enough to form, transmit, and be corroborated inside a 30ms-scale
 Not implemented — captured in `spec/22-future-work.md` alongside Entry 15 rather than as its own
 numbered spec file, per this project's own rule that speculative work lives in
 `22-future-work.md` until it's real.
+
+---
+
+## Entry 17 — 2026-10-14
+
+Direct follow-up to Entry 16, same session — a concrete sensor example for "sensor input as a
+graph packet":
+
+> add a sensor: a neutrino detector - just a thin well drilled into the ground using the
+> groundwater for sensing if possible
+
+### Response
+
+Recorded as the first concrete sensor example for Entry 16's "each graph is a packet" concept,
+alongside the car-telemetry/drone-position examples already named in Entry 15/16. Worth flagging
+honestly, not just filed away: real neutrino detection (Super-Kamiokande, IceCube) relies on
+Cherenkov light through a very large, heavily shielded water or ice volume plus photomultiplier
+arrays — a single narrow borehole's groundwater column is a vastly smaller target mass and has no
+named shielding or photodetection in this description, so as physics it's unlikely to detect
+neutrinos specifically at any practical rate. That caveat doesn't matter for what this entry
+actually needs to feed, though: as a *graph-packet example*, the real content is "a fixed,
+physical, continuously-sampled environmental sensor at a known location, reporting a value cheaply
+and often" — a borehole/groundwater probe fits that shape regardless of what physical quantity it
+actually ends up measuring (conductivity, water table level, temperature, seismic/vibration, or an
+honest attempt at a particle-flux proxy). Added to `spec/22-future-work.md`'s sensor-input section
+as a named example sensor type, with this caveat attached so a future session doesn't take the
+neutrino-detection framing at face value without re-deriving the same concern.
