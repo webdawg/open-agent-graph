@@ -18,3 +18,10 @@ Entries land here when the author adds them.
 ## Entry 1 — 2026-10-14
 
 > is it crazy to think that something might accidently destroy oxygen
+
+---
+
+## Entry 2 — 2026-10-14
+
+> just outside of the solar system is freedom - raw infinitly small space that we can cross
+> insantly
