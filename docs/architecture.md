@@ -10,6 +10,54 @@ declarations of truth (spec sections 21-22). There is no global consensus, no le
 no requirement that every peer agree — each peer maintains its own locally-consistent view, built by
 replaying the events it has received (spec sections 5-7).
 
+## Related work
+
+OAG's shape — signed, append-only per-peer logs; gossip-based pull replication; no global
+consensus; claims as evidence-backed assertions rather than bare facts — isn't novel in isolation;
+each piece has real prior art. Naming it is useful orienting context for anyone (human or a
+future context-free AI session) encountering this project cold, not a claim that any one piece
+here is unprecedented:
+
+- **Secure Scuttlebutt** is the closest architectural match for the replication layer: each
+  identity owns one signed, hash-chained, append-only log (an Ed25519 keypair is the identity, the
+  public key is the identifier), and peers gossip-replicate by asking "everything newer than what
+  I already have" — close to `oag-sync`'s own `hello`/`heads`/pull model. SSB has no feed-level
+  consensus either; each log is authoritative for itself. OAG differs mainly in what rides on top
+  of the log: SSB's payload is general social content, OAG's is a typed, graph-projecting event
+  schema (Node/Edge/Assertion/Evidence) with corroboration signals computed over it.
+- **Nostr** is similar in spirit but structurally looser: a signed-event model with the same "no
+  consensus, no required peer mesh" posture, but relays don't sync with each other the way OAG
+  peers do — a *client*, not the network, assembles a consistent view across relays. OAG's peers
+  do the syncing themselves.
+- **Holochain** is the closest match for the identity model specifically — per-agent hash chains
+  with no shared chain, DHT-distributed shared state layered on top. Its own documentation
+  describes conflict resolution as minimal by default ("delete wins, otherwise first write wins"),
+  left to the application. OAG instead resolves "conflict" (two origins disagreeing) by keeping
+  both sides inspectable as competing assertions with their own corroboration scores, never
+  picking a winner at the protocol layer.
+- **OrbitDB** takes the opposite approach from both of the above: a shared, CRDT-merged database
+  over IPFS, no per-agent log at all. Useful as a contrast — OAG deliberately keeps per-origin
+  provenance rather than merging into one shared structure, since *who claimed what* is exactly
+  the signal OAG's ranking depends on.
+- **Nanopublications / the "Knowledge Space" network** (Kuhn et al.) is the closest existing match
+  for the *claims* layer specifically, as opposed to the replication layer: small, signed,
+  uniquely-identified RDF assertions with a dedicated provenance graph, published to a federated
+  network explicitly designed to be queried by humans *and* AI agents, with a bounded
+  trust-propagation algorithm rather than a blockchain. This is the first prior-art citation to
+  reach for before describing OAG's own assertion+evidence+corroboration model as novel.
+- **OriginTrail's Decentralized Knowledge Graph** solves a similar-looking problem (verifiable
+  knowledge, queryable by agents via MCP) but is built on-chain across multiple EVM-compatible
+  blockchains — the opposite of OAG's own "no blockchain, no token, no global ledger" stance.
+- Adjacent, not overlapping: agent-identity/delegation-focused proposals such as the IETF's draft
+  Intent Provenance Protocol and the LOKA Protocol concept address *who may an agent act as, and
+  how far does its delegated authority extend* — a different problem from OAG's *what claims exist
+  and how much should they be believed*. Worth distinguishing rather than folding into this
+  project's own scope.
+- **PKT Network's whitepaper** (DeLisle & Berger, Feb 2021, linked in `ENVIRONMENT.md`) is OAG's
+  direct conceptual inspiration for ephemeral peer identity and trust-from-behavior specifically —
+  see `spec/24-ephemeral-peer-trust.md` and `USER_INPUT_RECORD.md` Entry 0 for the full reasoning
+  and the exact mechanisms borrowed (never PKT's blockchain or token machinery).
+
 ## Legacy compatibility
 
 A permanent, binding principle (see `USER_INPUT_RECORD.md`, Entry 1): **OAG never becomes its own
@@ -63,6 +111,12 @@ oag-embeddings  EmbeddingProvider abstraction (disabled by default) + brute-forc
 oag-ipfs        PinningProvider abstraction (disabled by default) for IPFS pinning/retrieval of
                 evidence content -- a leaf crate like oag-embeddings, used by oag-crawler and
                 directly by oag-cli's `oag ipfs cat`.
+
+oag-tensor      Per-peer tensor pad memory (TensorPad, TENSOR_PAD_DIM = 32) -- a fixed-width
+                Vec<f32>, nudged by real oag-sync outcomes, never by training. See
+                spec/23-tensor-pad-and-evolution-layer.md. (oag-brain/, a separate TensorFlow-
+                backed attention layer that also programs this pad, lives outside this workspace
+                by design -- not a gap in this list, see spec/23.)
 
 oag-crawler     Safe HTTP fetch (SSRF-guarded), structured extraction (JSON-LD, ARD, A2A,
                 llms.txt, HTML meta), and LLM-extraction fallback — turns a crawled page into

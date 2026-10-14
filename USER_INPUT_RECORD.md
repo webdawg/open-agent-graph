@@ -9,6 +9,60 @@ or a response underneath, never a rewrite of what was actually said.
 
 ---
 
+## Entry 0 — 2026-09-27
+
+Numbered 0, not appended at the end, because it's chronologically the *earliest* founding
+statement on record — captured mid-session while backing up/rebuilding was being built, before
+this file existed at all (it was created 2026-10-01, for Entry 1). It lived only in the
+`future_ephemeral_peer_trust.md` auto-memory file until backfilled here on 2026-10-14, during a
+pass specifically aimed at making sure nothing load-bearing exists only in memory. Entries 1-14
+keep their original numbers; nothing already cross-referenced elsewhere needed renumbering.
+
+The user described a significant future direction for OAG's peer-identity/trust model and
+explicitly said not to implement it yet — just capture the concepts (this became
+[24-ephemeral-peer-trust.md](spec/24-ephemeral-peer-trust.md), built 2026-10-09 per Entry 4 below).
+
+> identities only last the lifetime of how long they run
+
+On what trust should attach to, since the key itself resets every restart:
+
+> all it has is its data - if it can use that to try to prove its identity - it can try
+
+And, as a direct follow-up, on uptime itself being a trust signal:
+
+> things need to stay connected and online for it to form trust
+
+The user had read the PKT Network whitepaper in full (DeLisle & Berger, Feb 2021,
+<https://pkt.cash/PKT_Network_v1.0_2021.02.01.pdf>, linked in `ENVIRONMENT.md`) and named it as
+conceptual inspiration, explicitly not for its blockchain/token machinery:
+
+> we do not want to implement it yet, but it highlights the concepts that are needed around an
+> ever living connected network
+
+The specific mechanisms identified as worth stealing the *shape* of: PacketCrypt's commit-then-
+random-challenge pattern (pre-commit a merkle root over data you hold, then get randomly
+challenged to produce a branch proving you really hold it — "prove your identity through your
+data," not a bare claim); the Route Server's signed periodic presence gossip (self-reported but
+independently verifiable by anyone who receives one, no central authority needed); announcements
+decaying in value until unusable (a credential that needs ongoing renewal, not a one-time check);
+the free-tier/fail-open design (a zero-guarantee minimal path always stays reachable rather than
+locking out low-standing peers entirely); and cjdns's address-as-key-fingerprint, no PKI (already
+exactly OAG's own `PeerId` model — confirmation, not a change).
+
+On latency tolerance, verbatim:
+
+> things are like tcp packets, but lets slow down - it could take forever for a packet to arrive -
+> nice and slow - like a slow moving storm of packets that never stop moving - we need to keep
+> this thing alive, even if it is frozen in ice
+
+Read as: the trust/connectivity model should assume very long dormancy periods are normal and
+recoverable, not treated as connection failure — a peer gone quiet for a long time and later
+resumed should be able to pick back up, not be judged the same as one that actively misbehaved.
+This is `spec/24-ephemeral-peer-trust.md`'s "decays patiently, not as a second cliff" trust-decay
+shape, directly.
+
+---
+
 ## Entry 1 — 2026-10-01
 
 > we are going to add long word domains I guess too - this software should hold as one of its core

@@ -12,9 +12,12 @@ and never reads or writes `identity.key` at all — a clean fork at startup
 (`serve.rs::run`), not a new mode layered onto the persistent path. Since the cryptographic
 identity resets every restart, trust can no longer attach to the key — this milestone replaces
 that with trust earned through sustained, independently-verifiable presence, inspired by the PKT
-Network whitepaper's Route Server (see `future_ephemeral_peer_trust.md` memory for the full
-founding reasoning and `USER_INPUT_RECORD.md` Entries 1 and 4 for the verbatim founding
-statements).
+Network whitepaper's Route Server. The verbatim founding statements — "all it has is its data - if
+it can use that to try to prove its identity - it can try," the "frozen in ice" latency-tolerance
+framing, and the specific PKT mechanisms borrowed — are `USER_INPUT_RECORD.md` Entry 0; Entries 1
+and 4 are the follow-up decisions made while actually planning this milestone
+(`future_ephemeral_peer_trust.md` memory has the same material, kept as a secondary
+cross-reference, not the primary source).
 
 ## Signed presence heartbeats
 
@@ -49,7 +52,8 @@ signal (`USER_INPUT_RECORD.md` Entry 4). Exactly `0.0` is the only hard floor: a
 received a single heartbeat from at all. Above that floor, trust is a continuum: it rises from a
 starting point toward `1.0` over `trust_rebuild_seconds` of continuous heartbeats, and — if
 heartbeats go quiet beyond `heartbeat_interval_seconds × 3` — decays back down *patiently*, not as
-a second cliff, matching the "frozen in ice" latency-tolerance framing already on record.
+a second cliff, matching the "frozen in ice" latency-tolerance framing already on record
+(`USER_INPUT_RECORD.md` Entry 0).
 
 Trust is **per-observer**: every peer computes its own score for every other peer, purely from
 its own `peer_presence` row for them. There is no globally agreed trust value anywhere in this
@@ -91,6 +95,13 @@ historical and stale the moment that identity's process exits; nothing links the
 decision, not an oversight — see `future_ephemeral_peer_trust.md` for the full reasoning (a feature
 whose point is needing *less* identity machinery shouldn't grow new crypto to patch over the gap it
 deliberately leaves).
+
+`oag identity backup`/`restore` (built before this milestone existed) exist to protect a durable
+identity worth protecting — their core rationale weakens, though doesn't disappear, once ephemeral
+identity exists as an alternative mode: there's deliberately nothing to back up or restore for a
+peer that never intends to keep its identity past one process lifetime. Still useful for
+pinning/testing scenarios and for the permanent-identity mode, which remains this project's
+default.
 
 ## CLI
 
