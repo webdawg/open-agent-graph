@@ -43,18 +43,21 @@ address-correlation heuristic instead) and PacketCrypt-style merkle-commit-and-r
 proof of data volume — both genuinely open design questions, not scoped further than this
 description.
 
-## Long-word, subdomain-based node addressing
+## Long-word, subdomain-based peer addressing
 
-Extends [21-petname.md](21-petname.md)'s existing deterministic word-based *display* naming into
-actual *addressing* — using one domain's enormous subdomain space (tens of millions of
-subdomains, each mapping to a `NodeId`/`PeerId`) to mint vast numbers of addressable identities on
-top of DNS's already-deployed namespace, the same "use an existing substrate in a way its
-designers didn't require" spirit as [15-reticulum-transport.md](15-reticulum-transport.md).
-
-Open questions not yet resolved: who controls/pays for the parent domain and what happens if it's
-lost; the exact `NodeId`/`PeerId`-to-subdomain-label mapping scheme; DNS is a *resolution*
-mechanism, not a *discovery* one, so this would need to pair with something else (gossip, a
-directory peer) for discovery.
+**Phase 1 implemented** — see [30-long-word-addressing.md](30-long-word-addressing.md). Extends
+[21-petname.md](21-petname.md)'s existing deterministic word-based *display* naming into actual
+*addressing*, scoped to `PeerId` (a `NodeId` has no network target to resolve to). All three
+original open questions are resolved: domain ownership/cost is the operator's own concern
+(`[addressing].domain`, unset by default — nothing hardcoded, nothing assumed); the mapping scheme
+is a new 4-word, DNS-label-safe sibling of `oag-petname`'s existing word-seeding approach
+(`address_label`); and DNS here is explicitly a second, independent *resolution* path for a
+`PeerId` you already know (via `oag peer resolve`) — not a replacement for `discover_peers`' own
+*discovery* role, the same "use an existing substrate in a way its designers didn't require"
+spirit as [15-reticulum-transport.md](15-reticulum-transport.md). Still not built: any automatic
+DNS-record-publishing/dynamic-DNS integration (the operator publishes the record themselves) and
+any wiring of DNS resolution into `oag-sync`'s automatic discovery/gossip/bootstrap path — both
+deliberately scoped out, not oversights.
 
 ## Native IPFS integration
 

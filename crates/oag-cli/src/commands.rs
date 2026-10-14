@@ -285,11 +285,42 @@ pub async fn edge_corroboration(data_dir: &Path, id: &str) -> anyhow::Result<()>
     Ok(())
 }
 
-pub async fn identity_show(data_dir: &Path) -> anyhow::Result<()> {
+pub async fn identity_show(data_dir: &Path, config_path: Option<std::path::PathBuf>) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
     let peer_id = graph.identity().peer_id();
     println!("peer_id:   {peer_id}");
     println!("peer_name: {}", oag_petname::peer_name_string(&peer_id));
+    // Long-word subdomain addressing, Phase 1 (spec/30): silent when
+    // [addressing].domain isn't set, same "nothing extra when absent"
+    // posture as every other opt-in feature's CLI output.
+    let addressing = crate::config::resolve_addressing_section(config_path)?;
+    if let Some(domain) = addressing.domain {
+        println!("address:   {}", crate::addressing::fqdn_for_peer(&peer_id, &domain));
+    }
+    Ok(())
+}
+
+/// Resolves a peer's long-word DNS address via a real TXT lookup
+/// (spec/30-long-word-addressing.md). `--domain` takes priority over
+/// `[addressing].domain`; errors clearly if neither is given, rather than
+/// silently resolving nothing.
+pub async fn peer_resolve(
+    peer_id: &str,
+    domain_flag: Option<String>,
+    config_path: Option<std::path::PathBuf>,
+) -> anyhow::Result<()> {
+    let peer_id: oag_crypto::PeerId =
+        peer_id.parse().map_err(|_| anyhow::anyhow!("invalid peer id '{peer_id}'"))?;
+    let domain = match domain_flag {
+        Some(domain) => domain,
+        None => crate::config::resolve_addressing_section(config_path)?
+            .domain
+            .ok_or_else(|| anyhow::anyhow!("no domain given -- pass --domain or set [addressing].domain in config.toml"))?,
+    };
+    let values = crate::addressing::resolve_peer_address(&peer_id, &domain).await?;
+    for value in values {
+        println!("{value}");
+    }
     Ok(())
 }
 

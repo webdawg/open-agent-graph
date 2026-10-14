@@ -37,6 +37,7 @@ figment.workspace = true
 sqlx.workspace = true
 axum.workspace = true
 tower.workspace = true
+hickory-resolver = "0.26.2"
 
 [dev-dependencies]
 reqwest.workspace = true

@@ -29,11 +29,14 @@ rows can always either be converted in place or served forever through an in-mem
 applied automatically on every read (see `spec/27-artifact-versioning.md`), self-hosted roadmap
 governance, where a roadmap proposal is just an ordinary assertion backed by evidence, ranked by
 the graph's own corroboration signals with no new consensus mechanism (`GET /api/v1/roadmap`,
-`GET /ui/roadmap` — see `spec/28-roadmap-governance.md`), and opt-in native IPFS pinning
+`GET /ui/roadmap` — see `spec/28-roadmap-governance.md`), opt-in native IPFS pinning
 (`[ipfs].pinning_provider`, default disabled) of both crawled evidence content and `oag backup`
 snapshots (`oag backup <out> --pin`), with each CID stored/printed as a retrieval pointer only and
-`oag ipfs cat <cid>` for retrieval (see `spec/29-ipfs-pinning.md`). See `docs/` for the full
-picture — start with `docs/architecture.md`.
+`oag ipfs cat <cid>` for retrieval (see `spec/29-ipfs-pinning.md`), and opt-in long-word subdomain
+addressing for a peer (`[addressing].domain`, default unset), resolved via a real DNS TXT lookup
+(`oag peer resolve <peer_id>`) as a second, independent path to a `PeerId` you already know, never
+a replacement for gossip-based peer discovery (see `spec/30-long-word-addressing.md`). See `docs/`
+for the full picture — start with `docs/architecture.md`.
 
 ## Specification
 

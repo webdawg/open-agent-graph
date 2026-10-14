@@ -66,6 +66,40 @@ fn wordlist() -> &'static [String] {
     })
 }
 
+/// How many words make up one peer's DNS-addressing label (spec/30-long-
+/// word-addressing.md) — far fewer than [`WORD_COUNT`], since this must fit
+/// a single DNS label (RFC 1035: 63 bytes max), not just look nice.
+const ADDRESS_WORD_COUNT: usize = 4;
+
+/// Addressing labels only draw from words this short, so the worst case
+/// (`ADDRESS_WORD_COUNT` words, each at this max length, joined by
+/// `ADDRESS_WORD_COUNT - 1` hyphens) stays safely under DNS's 63-byte
+/// label limit by construction, not just "usually": `4*12 + 3 = 51`.
+const ADDRESS_WORD_MAX_LEN: usize = 12;
+
+fn address_wordlist() -> &'static [String] {
+    static WORDS: OnceLock<Vec<String>> = OnceLock::new();
+    WORDS.get_or_init(|| {
+        wordlist().iter().filter(|w| w.len() <= ADDRESS_WORD_MAX_LEN).cloned().collect()
+    })
+}
+
+/// A peer's deterministic DNS-addressing label (spec/30-long-word-
+/// addressing.md): [`ADDRESS_WORD_COUNT`] words, hyphen-joined, drawn from
+/// [`address_wordlist`] and seeded from `peer_id` — same determinism
+/// guarantee as [`peer_name`] (same `peer_id` always yields the same
+/// label), but short enough to fit one DNS label, unlike `peer_name`'s own
+/// 128 words. This is an addressing *convenience*, not a trust credential:
+/// a collision between two different peers' labels is an availability
+/// nuisance (they can't both publish under the same name), never a security
+/// concern, since anything resolved through it still goes through this
+/// peer's own, unrelated signature verification before being trusted.
+pub fn address_label(peer_id: &PeerId) -> String {
+    let words = address_wordlist();
+    let mut rng = ChaCha8Rng::from_seed(*peer_id.as_bytes());
+    (0..ADDRESS_WORD_COUNT).map(|_| words[rng.gen_range(0..words.len())].clone()).collect::<Vec<_>>().join("-")
+}
+
 /// A peer's deterministic, human-legible display name: [`WORD_COUNT`] words
 /// drawn (with replacement) from the wordlist, seeded from `peer_id`'s own
 /// bytes. The same `peer_id` always yields the same words; two different
@@ -135,5 +169,41 @@ mod tests {
         let peer_id = peer_id_from_tag(4);
         let words = peer_name(&peer_id);
         assert_eq!(peer_name_string(&peer_id), words.join("-"));
+    }
+
+    #[test]
+    fn address_wordlist_still_has_a_large_candidate_count() {
+        // Documents the real entropy margin (spec/30) rather than asserting
+        // a hand-computed bit count: at ~15 bits/word even restricted to
+        // this shorter candidate set, 4 words comfortably clears the ~24
+        // bits needed to distinguish "tens of millions" of peers.
+        let words = address_wordlist();
+        assert!(words.len() > 10_000, "expected a large candidate set, got {} words", words.len());
+    }
+
+    #[test]
+    fn address_label_is_always_a_valid_dns_label() {
+        for tag in 0..64u8 {
+            let peer_id = peer_id_from_tag(tag);
+            let label = address_label(&peer_id);
+            assert!(!label.is_empty());
+            assert!(label.len() <= 63, "label exceeds the DNS 63-byte limit: {label:?} ({} bytes)", label.len());
+            assert_eq!(label.split('-').count(), ADDRESS_WORD_COUNT, "expected exactly {ADDRESS_WORD_COUNT} words: {label:?}");
+            assert!(
+                label.chars().all(|c| c.is_ascii_lowercase() || c == '-'),
+                "label has non-lowercase-alphabetic-or-hyphen characters: {label:?}"
+            );
+            assert!(!label.starts_with('-') && !label.ends_with('-'), "label starts/ends with a hyphen: {label:?}");
+        }
+    }
+
+    #[test]
+    fn address_label_is_deterministic_and_distinct_per_peer() {
+        let peer_id = peer_id_from_tag(5);
+        assert_eq!(address_label(&peer_id), address_label(&peer_id));
+
+        let a = address_label(&peer_id_from_tag(6));
+        let b = address_label(&peer_id_from_tag(7));
+        assert_ne!(a, b, "two different peer ids collided on a 4-word address label");
     }
 }

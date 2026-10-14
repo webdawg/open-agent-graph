@@ -38,6 +38,8 @@ pub struct FileConfig {
     pub cluster: ClusterSection,
     #[serde(default)]
     pub ipfs: IpfsSection,
+    #[serde(default)]
+    pub addressing: AddressingSection,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -450,6 +452,18 @@ impl Default for ClusterSection {
     }
 }
 
+/// `[addressing]` — long-word subdomain addressing, Phase 1
+/// (spec/30-long-word-addressing.md). `domain` unset (the default): this
+/// feature is entirely absent, same opt-in-by-absence shape as
+/// `[cluster]`/`[reticulum]`. Domain ownership/cost is deliberately left
+/// entirely to the operator -- this is nothing but a config value with no
+/// real default, not wired into `oag serve`'s startup sequence at all (see
+/// spec/30's "deliberately out of scope").
+#[derive(Debug, Deserialize, Default)]
+pub struct AddressingSection {
+    pub domain: Option<String>,
+}
+
 /// The fully resolved settings a `serve` invocation runs with: CLI flags
 /// take priority, falling back to `--config <file>` (file + `OAG_*` env
 /// overrides via figment), falling back to hardcoded defaults.
@@ -626,4 +640,23 @@ pub fn resolve_identity_section(config_path: Option<PathBuf>) -> anyhow::Result<
     };
 
     Ok(file.identity)
+}
+
+/// Lightweight resolver for `oag identity show`/`oag peer resolve`
+/// (spec/30-long-word-addressing.md) -- neither needs `serve`'s full
+/// `ResolvedConfig`, just `[addressing]`.
+pub fn resolve_addressing_section(config_path: Option<PathBuf>) -> anyhow::Result<AddressingSection> {
+    let mut figment = Figment::new();
+    if let Some(path) = &config_path {
+        figment = figment.merge(Toml::file(path));
+    }
+    figment = figment.merge(figment::providers::Env::prefixed("OAG_").split("_"));
+
+    let file: FileConfig = if config_path.is_some() {
+        figment.extract()?
+    } else {
+        FileConfig::default()
+    };
+
+    Ok(file.addressing)
 }

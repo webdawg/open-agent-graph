@@ -69,7 +69,8 @@ oag-crawler     Safe HTTP fetch (SSRF-guarded), structured extraction (JSON-LD, 
                 the same signed events any other caller would produce.
 
 oag-petname     Deterministic 128-word human-readable names derived from a peer's identity, for
-                display purposes only (never used as an identifier).
+                display purposes only (never used as an identifier) -- plus a separate, much
+                shorter 4-word `address_label` for DNS addressing (spec/30), which is used.
 
 oag-reticulum   Optional additional peer transport over the Reticulum mesh-networking protocol,
                 alongside (not replacing) oag-sync's HTTP path.
@@ -198,11 +199,15 @@ remain not yet implemented and change nothing described elsewhere in this docume
   shim to), and versioned `EventPayload` variants for a genuinely breaking payload shape change
   (deferred deliberately, not an oversight — see `spec/27`'s own explanation and
   `USER_INPUT_RECORD.md` Entries 7 and 10).
-- Long-word, subdomain-based node addressing: extending `oag-petname`'s existing deterministic
-  word-based peer *display* names into actual *addressing* — using one domain's enormous subdomain
-  space (tens of millions of subdomains, each mapping to a `NodeId`/`PeerId`) as a way to mint vast
-  numbers of addressable identities on top of DNS's existing, already-deployed namespace, the same
-  "use an existing substrate in a way its designers didn't require" spirit as `oag-reticulum`.
+- Long-word, subdomain-based peer addressing: extending `oag-petname`'s existing deterministic
+  word-based peer *display* names into actual *addressing*, the same "use an existing substrate in
+  a way its designers didn't require" spirit as `oag-reticulum`. **Phase 1 implemented** — a new
+  4-word, DNS-label-safe `address_label` (distinct from the existing 128-word display `peer_name`),
+  `[addressing].domain` in `config.toml` (unset by default, nothing hardcoded), `oag identity show`
+  printing the computed FQDN, and `oag peer resolve <peer_id>` doing a real TXT lookup — see
+  `spec/30-long-word-addressing.md`. Scoped to `PeerId` only (a `NodeId` has no network target to
+  resolve to); not wired into `oag-sync`'s automatic discovery/gossip path; no automatic DNS-record
+  publishing (the operator publishes it themselves).
 - Self-hosted roadmap governance: rather than a second, separate blockchain for "what should be built
   next" (`USER_INPUT_RECORD.md`, Entry 2), reuse OAG's own assertion/evidence/corroboration machinery
   pointed at itself. **Implemented** — `(proposal, instance_of, concept:oag-roadmap-proposal)` is

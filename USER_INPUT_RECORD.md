@@ -569,3 +569,37 @@ behavior — the backlog item named the trust-check windows specifically, not co
 general capability, and generalizing further wasn't asked for.
 
 See `spec/24-ephemeral-peer-trust.md` for the full mechanism this entry fed into.
+
+---
+
+## Entry 13 — 2026-10-13
+
+Unlike Entries 7-12, this one started with a real elicited answer, not a self-made judgment call —
+a sign the earlier entries' own instinct was right. After Phase 2 of ephemeral peer trust shipped,
+the remaining named backlog items (a real voting/consensus protocol and PacketCrypt-style
+proof-of-data-volume for ephemeral trust, a corroboration mechanism for peer-cluster claims, and
+long-word subdomain addressing) were surfaced via `AskUserQuestion` rather than picked
+unilaterally — each genuinely needed either a resource only the user could provide (a domain) or a
+design decision with real security/architecture implications (building "real consensus" cuts
+against this project's own stated "no global consensus" founding architecture; "corroboration" for
+a cluster claim doesn't actually add security against a copyable bare string the way corroboration
+of independent evidence sources does for the main graph).
+
+**The user picked long-word subdomain addressing**, then a follow-up question resolved the first
+of its three open questions directly: domain ownership/cost is the user's own concern, designed
+*domain-agnostically* — `[addressing].domain` as a plain config value with no real default, no
+specific registrar assumed, nothing hardcoded.
+
+**Two further scoping decisions made without a fresh round of questions, same pattern as Entries
+7-12**:
+
+1. **Scoped to `PeerId`, not `NodeId`**, despite the original idea's "NodeId/PeerId" phrasing — a
+   graph node has no network address to resolve to, so only the half that names something actually
+   reachable (a running peer) got built.
+2. **No automatic DNS record publishing.** The operator publishes the TXT record themselves (by
+   hand, or with their own dynamic-DNS tooling); OAG only computes the name and can resolve it.
+   Automating publication would mean picking one specific registrar/provider API nobody asked for,
+   plus a credential-storage pattern this project has no precedent for — a separate, later
+   decision if ever wanted, not bundled into deciding what to resolve *to*.
+
+See `spec/30-long-word-addressing.md` for the full mechanism this entry fed into.

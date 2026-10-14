@@ -73,6 +73,7 @@ instead.
 | [27-artifact-versioning.md](27-artifact-versioning.md) | Per-artifact `schema_version`, the migrate-or-shim access modes, and `oag migrate` |
 | [28-roadmap-governance.md](28-roadmap-governance.md) | Roadmap proposals as ordinary assertions, ranked by existing corroboration signals, with no new consensus mechanism |
 | [29-ipfs-pinning.md](29-ipfs-pinning.md) | Opt-in IPFS pinning for crawled evidence content, `oag ipfs cat`, and the `pinned_cid` retrieval pointer |
+| [30-long-word-addressing.md](30-long-word-addressing.md) | Deterministic word-based DNS addressing for a peer (`oag identity show`, `oag peer resolve`), `[addressing].domain` |
 
 ## Founding context
 

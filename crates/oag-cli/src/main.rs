@@ -1,3 +1,4 @@
+mod addressing;
 mod commands;
 mod config;
 mod serve;
@@ -360,6 +361,10 @@ enum IdentityCommand {
     Show {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
+        /// If `[addressing].domain` is set here, also prints this peer's
+        /// computed long-word DNS address (spec/30-long-word-addressing.md).
+        #[arg(long)]
+        config: Option<PathBuf>,
     },
     Backup {
         #[arg(long, default_value = "./data")]
@@ -492,6 +497,18 @@ enum PeerCommand {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
+    /// Resolve a peer's long-word DNS address (spec/30-long-word-
+    /// addressing.md) -- a real TXT lookup, not a local data-dir operation
+    /// (no `data_dir` needed). `--domain` takes priority over
+    /// `[addressing].domain` in `--config`; errors clearly if neither is
+    /// given.
+    Resolve {
+        peer_id: String,
+        #[arg(long)]
+        domain: Option<String>,
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -560,8 +577,8 @@ async fn main() -> anyhow::Result<()> {
         Command::Migrate { command: MigrateCommand::Actor { id, force, data_dir } } => {
             commands::migrate_actor(&data_dir, &id, force).await
         }
-        Command::Identity { command: IdentityCommand::Show { data_dir } } => {
-            commands::identity_show(&data_dir).await
+        Command::Identity { command: IdentityCommand::Show { data_dir, config } } => {
+            commands::identity_show(&data_dir, config).await
         }
         Command::Identity { command: IdentityCommand::Backup { data_dir, out } } => {
             commands::identity_backup(&data_dir, &out).await
@@ -599,6 +616,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Peer { command: PeerCommand::AddReticulum { address_hash, via_tcp, data_dir } } => {
             commands::peer_add_reticulum(&data_dir, &address_hash, &via_tcp).await
+        }
+        Command::Peer { command: PeerCommand::Resolve { peer_id, domain, config } } => {
+            commands::peer_resolve(&peer_id, domain, config).await
         }
         Command::Crawl { url, data_dir, config, allow_private_networks } => {
             commands::crawl(&data_dir, &url, config, allow_private_networks).await
