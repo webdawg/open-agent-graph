@@ -42,6 +42,12 @@ resilient rather than instantaneous: a partition heals itself gradually as conne
 `SyncService::sync_with_peer` (`crates/oag-sync/src/service.rs`) is the one-shot version of this same
 logic, also reachable directly via `oag peer sync <address>`.
 
+When `[cluster].name` is configured (`spec/26-peer-clustering.md`), a **second, independent** loop
+(`spawn_cluster_gossip_loop`) runs alongside this one, syncing only with this peer's own
+same-cluster peers on its own, typically faster, cadence (`[cluster].gossip_interval_seconds`,
+default 5s) — the standard loop above keeps its own interval and full peer scope unchanged for
+everyone, clustered or not.
+
 ## Federation policy vs. event trust
 
 `FederationPolicy` (`Open` or `Allowlist(peer_ids)`, `crates/oag-sync/src/federation.rs`) gates

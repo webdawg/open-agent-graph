@@ -22,6 +22,14 @@ mechanism beyond a prior `oag identity backup`. A new `identity.key` means a new
 desyncs from every event previously signed under the old key (see `oag identity restore`'s
 `--force` guard, which exists specifically to prevent this from happening by accident).
 
+**Opt-in ephemeral identity** (`[identity].ephemeral = true`, `spec/24-ephemeral-peer-trust.md`)
+inverts this deliberately: `identity.key` is never read or written at all, and a fresh keypair
+generates on every process restart. This is a *different* security model from the persistent-key
+path above, not a weaker version of it — trust comes from a peer's own recently-observed, signed
+behavior (presence heartbeats, trust-weighted federation) rather than from accumulated standing
+under one key, which is also what prevents a misbehaving ephemeral peer from laundering reputation
+by simply rotating identities.
+
 ## Domain-separated hashing and signing
 
 Every identifier (`NodeId`, `EdgeId`, `EventId`, `ActorId`) is a BLAKE3 hash computed as
@@ -182,6 +190,15 @@ Every signed event carries its own origin peer and a per-origin hash chain
 history is caught by fork detection (`crates/oag-events/src/ingest.rs`) — two different events
 claiming the same `(origin_peer, sequence)` are both recorded, flagged in `peer_forks`, and neither
 is silently trusted over the other.
+
+**Peer clustering's federation override is a bigger bypass than either policy above, by design.**
+When `[cluster].name` is configured (`spec/26-peer-clustering.md`), `federation_allows` checks for
+a same-cluster peer *first*, before either `FederationPolicy` variant — a match always wins, full
+stop, even under `Allowlist` with an empty set. Cluster membership is a bare, self-declared,
+*unauthenticated* claim: any peer that learns or guesses your configured cluster name can declare
+the same one and receive the identical override. Treat `[cluster].name` as a weak shared secret,
+not a security boundary — this is a real, accepted, documented trade-off (see spec/26's own
+"security caveat"), not an oversight, and it is **not** mitigated by anything in this section.
 
 `PeerId` being *derived* from a public key rather than independently chosen (spec section 12) is
 only as strong as every path that stores a `(peer_id, public_key)` pairing actually checking the two

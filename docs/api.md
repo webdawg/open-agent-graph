@@ -145,13 +145,18 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag peer forks <peer_id>` | Show recorded fork evidence (spec section 55) -- both conflicting event ids, plus the rejected event's full signed JSON |
 | `oag peer reticulum-address` | Print this peer's Reticulum destination address, to share out-of-band |
 | `oag peer add-reticulum <address_hash> <via_tcp>` | One-shot sync with a peer reachable over Reticulum instead of HTTP |
+| `oag peer resolve <peer_id>` | Resolve a peer's long-word DNS address via a real TXT lookup (`spec/30-long-word-addressing.md`) |
 | `oag replication status` | Durability view — see `docs/replication.md` |
 | `oag authority recompute` | Batch-recompute the PageRank-style `authority` signal |
 | `oag embeddings recompute` | Batch-recompute node embeddings for semantic search |
-| `oag backup <path>` | Consistent whole-database snapshot (`VACUUM INTO`) |
+| `oag tensor show` | This peer's current tensor pad values (`spec/23-tensor-pad-and-evolution-layer.md`) |
+| `oag gravity show` | This peer's gravity level, rolling and persisting one on first use (`spec/25-gravity.md`) |
+| `oag backup <path> [--pin]` | Consistent whole-database snapshot (`VACUUM INTO`), optionally pinned to IPFS (`spec/29-ipfs-pinning.md`) |
 | `oag rebuild` | Wipe and replay every derived table from the event log |
 | `oag redact evidence/list/suppress-node/unsuppress-node` | Deletion and redaction — see `docs/security.md` |
+| `oag migrate node/edge/assertion/evidence/actor <id> [--force]` | Permanently rewrite one artifact's row to its current schema shape (`spec/27-artifact-versioning.md`) |
 | `oag crawl <url>` | Fetch a URL, extract structured facts, assert them as evidence-backed claims (also available remotely as `POST /crawl` / `graph_crawl`, requiring `graph:crawl`) |
+| `oag ipfs cat <cid>` | Retrieve previously-pinned content by CID (`spec/29-ipfs-pinning.md`) |
 | `oag doctor [--config]` | Local health checks -- data dir, identity, database/migrations; validates `config.toml` (via the exact same resolver `oag serve` uses) if `--config` is given |
 
 ## Configuration (`config.toml`, spec section 94)
@@ -159,6 +164,10 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 Sections: `[data]`, `[server]`, `[search]` (semantic search / embeddings, disabled by default),
 `[mcp]`, `[network]` (bootstrap peers, sync interval), `[federation]` (`open` or `allowlist` — see
 `docs/security.md`), `[crawler]` (SSRF defaults, LLM extraction config, disabled by default),
-`[reticulum]` (optional additional transport, disabled by default). Every section has a safe
+`[reticulum]` (optional additional transport, disabled by default), `[identity]` (opt-in ephemeral
+per-restart identity + trust windows, `spec/24-ephemeral-peer-trust.md`), `[cluster]` (opt-in
+signed cluster membership + its own gossip cadence, `spec/26-peer-clustering.md`), `[ipfs]` (opt-in
+pinning provider, disabled by default, `spec/29-ipfs-pinning.md`), `[addressing]` (long-word DNS
+addressing domain, unset by default, `spec/30-long-word-addressing.md`). Every section has a safe
 default; an empty or absent `config.toml` is a fully functional single-peer, no-external-service
 configuration. `OAG_<SECTION>_<KEY>` environment variables override file values.

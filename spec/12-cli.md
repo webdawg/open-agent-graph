@@ -20,13 +20,18 @@ subcommand accepts `--data-dir` (default `./data`); network-facing ones also acc
 | `oag peer add/list/remove/sync` | Manage known peer addresses and trigger one-shot sync |
 | `oag peer forks <peer_id>` | Show recorded fork evidence |
 | `oag peer reticulum-address` / `add-reticulum` | Reticulum transport peer management |
+| `oag peer resolve <peer_id>` | Resolve a peer's long-word DNS address via a real TXT lookup (spec/30) |
 | `oag replication status` | Durability view |
 | `oag authority recompute` | Batch-recompute node authority |
 | `oag embeddings recompute` | Batch-recompute node embeddings |
-| `oag backup <path>` | Consistent whole-database snapshot |
+| `oag tensor show` | This peer's current tensor pad values (spec/23) |
+| `oag gravity show` | This peer's gravity level, rolling and persisting one on first use (spec/25) |
+| `oag backup <path> [--pin]` | Consistent whole-database snapshot, optionally pinned to IPFS (spec/29) |
 | `oag rebuild` | Wipe and replay every derived table from the event log |
 | `oag redact evidence/list/suppress-node/unsuppress-node` | Deletion and redaction |
+| `oag migrate node/edge/assertion/evidence/actor <id> [--force]` | Permanently rewrite one artifact's row to its current schema shape (spec/27) |
 | `oag crawl <url>` | One-shot crawl |
+| `oag ipfs cat <cid>` | Retrieve previously-pinned content by CID (spec/29) |
 | `oag doctor [--config]` | Local health checks |
 
 ## Design principle: thin wrapper
@@ -47,10 +52,12 @@ reject.
 
 ## `oag serve`'s startup sequence
 
-Create/load identity → open/migrate SQLite → bootstrap admin key if this is a fresh data
-directory → assemble REST+sync router → assemble MCP (with its own rate-limit layer, see
-[11-mcp-server.md](11-mcp-server.md)) → bind and serve → spawn the gossip loop against any
-configured bootstrap peers.
+Create/load identity (ephemeral or permanent, spec/24) → open/migrate SQLite → bootstrap admin key
+if this is a fresh data directory → assemble REST+sync router → assemble MCP (with its own
+rate-limit layer, see [11-mcp-server.md](11-mcp-server.md)) → bind and serve → spawn the standard
+gossip loop against any configured bootstrap peers, plus (when configured) the heartbeat loop and
+trust-config reload loop (spec/24), the cluster-announce and cluster-only gossip loops (spec/26),
+and the Reticulum listener (spec/15).
 
 ## Tests
 

@@ -19,6 +19,10 @@ config file through the *exact* resolver `oag serve` itself uses.
 | `[federation]` | `open` or `allowlist` | `open` |
 | `[crawler]` | SSRF defaults, LLM extraction config | Private-network crawling off; LLM extraction off |
 | `[reticulum]` | Optional mesh transport | Disabled |
+| `[identity]` | Ephemeral per-restart peer identity, heartbeats, trust windows (spec/24) | `ephemeral = false` — permanent, persisted identity |
+| `[cluster]` | Self-declared signed cluster membership + its own gossip cadence (spec/26) | `name` unset — not in any cluster |
+| `[ipfs]` | Evidence/backup pinning provider (spec/29) | `pinning_provider = "disabled"` |
+| `[addressing]` | Long-word DNS addressing domain (spec/30) | `domain` unset — feature entirely absent |
 
 ## Why `127.0.0.1` and not `0.0.0.0` by default
 
