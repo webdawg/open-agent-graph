@@ -171,3 +171,32 @@ has nowhere near the shielded target mass real neutrino detectors (Super-Kamioka
 so it's unlikely to detect neutrinos specifically — what actually matters for this concept is the
 shape it shares with the other examples regardless of the physical quantity actually measured: a
 fixed, continuously-sampled environmental sensor at a known location, cheap and frequent to report.
+
+## Flood/broadcast propagation with traffic-analysis resistance ("fire like neuron mode")
+
+Not implemented — captured from `USER_INPUT_RECORD.md` Entry 18. A deliberately different
+propagation model from today's: `14-replication-sync.md` is pull-based throughout (a peer fetches
+events past its local head from peers it already knows about); this entry asks for a push-flood
+instead — every transaction reaches out to all connected nodes, the way an action potential fires
+down every synapse regardless of which downstream neuron needs it.
+
+The point of the flood isn't redundancy, it's anonymity: when every peer receives every message,
+an observer watching any one link can't distinguish real traffic from traffic a "trusted member"
+is about to discard, so who-talks-to-whom stops being visible on the wire — a Dining-Cryptographers/
+mixnet-style cover-traffic technique, not currently addressed anywhere in `docs/security.md` (which
+covers content confidentiality and pseudonymous identity, not traffic-analysis/metadata resistance).
+"Trusted members" doing the discarding reuses existing trust machinery
+(`24-ephemeral-peer-trust.md`'s trust-weighted federation, `26-peer-clustering.md`'s signed cluster
+membership) for a new purpose — gating flood participation — rather than inventing a new trust
+signal.
+
+Flagged, not resolved: flooding every transaction to every connected node multiplies bandwidth by
+fan-out, in direct tension with `18-rate-limiting-and-resource-limits.md` and the bandwidth
+reasoning `14-replication-sync.md` itself gives for preferring pull over push. Likely wants scoping
+(e.g. flood within a cluster, not graph-wide) rather than replacing `oag-sync`'s pull model
+wholesale — not designed here.
+
+Also named, not specified: a "never ending morphing encryption" where the encryption state itself
+keeps changing hop to hop as a message propagates — same family as onion routing's layered
+re-encryption, but open what state morphs, what triggers a change, and what a receiver needs to
+undo it.
