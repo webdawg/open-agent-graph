@@ -72,6 +72,16 @@ signal. Still not built: pinning the crawler's `llms.txt`/ARD/agent-card side-fe
 pin/fetch endpoint, automatic/scheduled backup pinning, and inlining large evidence bodies into
 IPFS in place of local storage (no local full-body evidence storage exists to replace).
 
+**Next named direction: static page hosting** (`USER_INPUT_RECORD.md` Entry 19). Three concrete
+gaps between today's single-file evidence pinning and actually hosting a page: (1) no local
+full-body storage yet for the page's own bytes, as already noted above; (2) Phase 1's
+`KuboHttpProvider` pins one file at a time — a page is a bundle (HTML/CSS/JS), which needs a UnixFS
+*directory* CID, a genuinely new mechanism, not a config change; (3) "load from IPFS instead of an
+HTTP server" names three non-equivalent client options with different trust/latency properties —
+a public gateway (still an HTTP server, just not OAG's own), Helia running in-browser over
+bitswap/libp2p with no gateway at all, or a service-worker gateway-in-browser cache — and which one
+is meant decides most of the rest of the design. Nothing designed yet beyond this breakdown.
+
 ## Self-hosted roadmap governance
 
 **Implemented** — see [28-roadmap-governance.md](28-roadmap-governance.md). Rather than a second,

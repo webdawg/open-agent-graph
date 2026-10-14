@@ -850,3 +850,47 @@ recorded as the thing this entry is reaching for.
 Not implemented. Added to `spec/22-future-work.md` as a new deferred section so the propagation-
 model/anonymity-model split above doesn't need re-deriving before any of this gets designed for
 real.
+
+---
+
+## Entry 19 — 2026-10-14
+
+> lets store data in this thing, and start figuring out how to host a page - ipfs can do file
+> stuff, and there are js libs to load stuff from ipfs instead of from a http server
+
+### Response
+
+Builds directly on `spec/29-ipfs-pinning.md`, which already proves the single-file half of this:
+evidence content can be pinned to IPFS today (opt-in, `[ipfs].pinning_provider`), with
+`Evidence.metadata.ipfs_cid` as the retrieval pointer and `oag ipfs cat <cid>` reading it back.
+Three real gaps stand between that and "host a page," worth naming precisely rather than treating
+this as already solved:
+
+**1. "Store data in this thing" is not yet true in the literal sense.** Today OAG stores a
+`content_hash` and, optionally, a CID — a pointer to content pinned on an external Kubo node — not
+the bytes themselves. `spec/22-future-work.md`'s existing IPFS section already names this directly:
+"no local full-body evidence storage exists to replace." A page's HTML/CSS/JS would need to live
+*somewhere* retrievable (OAG's own storage, or the configured IPFS node) — right now neither path
+stores a page's actual bytes inside OAG itself.
+
+**2. A page is a bundle of files, and Phase 1 only pins one file at a time.**
+`oag-ipfs::KuboHttpProvider` does two HTTP calls against a single file (same pattern as the
+crawler's main-page pinning). A real static page is `index.html` + CSS + JS as a set — IPFS's
+answer to that is a UnixFS directory CID (pin a whole directory, get back one CID that resolves
+subpaths), which Phase 1 never implemented or needed to, since it only ever pinned one evidence
+body at a time. This is the actual missing mechanism, not a config toggle.
+
+**3. "JS libs to load from IPFS instead of a HTTP server" names a real choice, not one thing.**
+Worth being precise about what "instead of a HTTP server" means, since the options aren't
+equivalent: (a) a **public IPFS HTTP gateway** (`ipfs.io/ipfs/<cid>`, or a self-run Kubo gateway) —
+still an HTTP server in the loop, just not OAG's own; (b) **Helia** (the current JS/TS IPFS
+implementation, successor to the deprecated js-ipfs) running directly in the browser, fetching
+over bitswap/libp2p with no HTTP gateway at all — the genuinely serverless reading of "instead of
+an HTTP server"; (c) a **service-worker gateway-in-browser** pattern (fetch once through a gateway,
+then intercept and resolve subsequent requests from a local/peer cache). These have very different
+trust and latency properties and aren't interchangeable — which one "host a page" means decides
+most of the design.
+
+Not implemented. Extended `spec/22-future-work.md`'s existing "Native IPFS integration" section
+with this as a named next direction rather than opening a new section, since it's a continuation of
+the same Phase 1/2 work, not a separate concept.
