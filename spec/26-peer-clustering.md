@@ -1,8 +1,9 @@
-# Peer Clustering, Phase 1
+# Peer Clustering
 
-**Source**: `crates/oag-sync/src/cluster.rs`, `crates/oag-storage/migrations/0011_peer_cluster.sql`,
+**Source**: `crates/oag-sync/src/cluster.rs`, `crates/oag-sync/src/gossip.rs`,
+`crates/oag-storage/migrations/0011_peer_cluster.sql`,
 `crates/oag-storage/src/repo/peer_cluster.rs`, `crates/oag-cli/src/config.rs`'s `ClusterSection`,
-`crates/oag-sync/src/service.rs`'s `federation_allows`/`same_cluster`.
+`crates/oag-sync/src/service.rs`'s `federation_allows`/`same_cluster`/`cluster_peer_addrs`.
 
 Opt-in (`[cluster] name = "..."` in `config.toml`, unset by default — zero behavior change for
 every deployment that doesn't configure one). The other half of the "ant colony" founding
@@ -74,14 +75,39 @@ evidence-backed) version exists.
 
 `oag peer list` gains a `cluster=<name|->` column, reading the same `peer_cluster_claims` table.
 
+## Phase 2: differentiated sync cadence for same-cluster peers
+
+The user picked up this feature from the backlog directly (`AskUserQuestion`, `USER_INPUT_RECORD.md`
+Entry 14). On inspection, both open questions `future_peer_clustering.md` originally posed —
+"first-class graph concept or pure networking?" and "does intra-cluster replication need extra
+rigor?" — turned out to already be answered by Phase 1, above (pure networking; no, not this
+phase). The one item genuinely still unbuilt from Phase 1's own "Explicitly deferred" list below is
+differentiated sync *cadence*, which this phase adds.
+
+`SyncService::cluster_peer_addrs` (`service.rs`) returns every known address belonging to a peer
+whose latest signed cluster claim matches this service's own configured cluster — empty whenever no
+cluster is configured. `gossip::spawn_cluster_gossip_loop` is a **second, independent** gossip loop
+(not a parameter on the existing one) that syncs only against those addresses, on its own interval
+(`[cluster].gossip_interval_seconds`, default 5s — meaningfully faster than `[network]`'s own 30s
+default `sync_interval_seconds`). The standard `spawn_gossip_loop` keeps running unchanged, at its
+own interval, for everyone, clustered or not — this is a strictly additive faster cadence for a
+cluster's own members, not a replacement for anything. Both loops share the exact same per-address
+sync/log/gravity-slowdown behavior (`gossip::sync_round`), so the only difference between them is
+*which* addresses and *how often*.
+
+`oag serve` spawns this loop unconditionally alongside `spawn_cluster_announce_loop`, inside the
+same `if let Some(cluster_name) = ...` block — no separate gate is needed, since an unconfigured
+cluster already makes `cluster_peer_addrs` return nothing, and the whole block is skipped anyway
+when `[cluster].name` is unset.
+
 ## Explicitly deferred
 
 - Any corroboration or verification of a claimed cluster name beyond proof that the claiming peer
   signed it.
-- Differentiated sync *cadence* for same-cluster peers (faster gossip interval) — the chosen v1
-  effect is the federation override only, not a performance/topology change.
 - Multiple simultaneous cluster memberships per peer — v1 is one cluster name per peer, matching
   the "one cluster per physical location" framing already in `future_peer_clustering.md`.
+- Tying `gossip_interval_seconds`'s *default* to `sync_interval_seconds`'s configured value
+  programmatically — both are independent, operator-tunable knobs.
 - The graph-level representation considered and declined above, should a stronger, corroborated
   version ever be wanted.
 
@@ -100,3 +126,13 @@ cluster from a third peer does not trigger the override. Live: two real `oag ser
 `[cluster].name = "home-lab"`, confirmed the startup log shows the configured cluster, confirmed
 `oag peer list`'s cluster column reflects each side's real received declaration after an ordinary
 sync round.
+
+Phase 2's new tests, `oag-sync`'s `tests.rs`: `cluster_peer_addrs_is_empty_without_a_configured_cluster`;
+`cluster_peer_addrs_only_includes_matching_cluster_members` (same three-peer, two-cluster setup as
+the Phase 1 override test, now checking the address list the new loop drives off of);
+`same_cluster_peers_sync_on_their_own_faster_cadence` — two real, same-cluster `SyncService`s over
+real HTTP, A's *standard* gossip loop deliberately given a far-too-slow interval (1 hour) so it
+cannot explain anything observed, A's *cluster* loop given a short one (200ms); B creates a new
+assertion without A's test code ever calling `sync_with_peer` directly, and the assertion is
+confirmed present on A shortly after — proof the cluster-only loop, not the standard one and not a
+direct test call, is what delivered it.

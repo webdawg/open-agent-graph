@@ -22,7 +22,9 @@ identity with signed presence heartbeats and trust-weighted federation (`[identi
 `config.toml`), a small, truly-random per-node "gravity level" that very slightly throttles that
 node's own processing speed, opt-in peer clustering (`[cluster].name`) where a self-declared,
 signed cluster membership grants a full federation override — a deliberate, documented security
-trade-off, not a verified fact (see `spec/26-peer-clustering.md`) — and per-artifact data
+trade-off, not a verified fact — plus a second, faster, independently-configured gossip loop for
+same-cluster peers only (`[cluster].gossip_interval_seconds`, default 5s, see
+`spec/26-peer-clustering.md`) — and per-artifact data
 versioning for nodes/edges/assertions/evidence/actors/node-aliases/disputes/retractions/
 observations (`oag migrate <type> <id>` for the five with a singular lookup to extend), so legacy
 rows can always either be converted in place or served forever through an in-memory adapter

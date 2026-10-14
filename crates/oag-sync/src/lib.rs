@@ -16,7 +16,7 @@ pub mod wire;
 pub use client::{SyncClient, SyncClientError};
 pub use cluster::{spawn_cluster_announce_loop, ClusterDeclaration, ClusterError};
 pub use federation::FederationPolicy;
-pub use gossip::spawn_gossip_loop;
+pub use gossip::{spawn_cluster_gossip_loop, spawn_gossip_loop};
 pub use presence::{spawn_heartbeat_loop, PresenceError, PresenceHeartbeat, PresenceStatus};
 pub use replication::{target_replication_factor, LaggingPeer, ReplicationStatus};
 pub use server::router;

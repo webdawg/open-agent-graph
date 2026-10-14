@@ -85,15 +85,23 @@ recommendation named — a predicate/concept-namespace convention and a Human In
 browsing/ranking — are both built; a generic "list instances of any hub node" capability was
 considered and deliberately not built (see `USER_INPUT_RECORD.md` Entry 8).
 
-## First-class peer clustering
+## Peer clustering
 
-Groups of mutually cooperating peers — an "ant colony" of small, cooperating units doing
-real-world physical work (sensors, traffic lights, smart objects) — as a concept distinct from
-today's flat peer set. Separate from ephemeral identity above: clustering is a topology/trust-
-radius question (how tightly a group of peers cooperates relative to the rest of the graph), not
-an identity-lifetime one. Open questions: is a cluster a first-class graph concept or a pure
-networking-layer notion; do intra-cluster vs. inter-cluster replication get different trust
-defaults.
+**Phase 1 and 2 implemented** — see [26-peer-clustering.md](26-peer-clustering.md). Groups of
+mutually cooperating peers — an "ant colony" of small, cooperating units doing real-world physical
+work (sensors, traffic lights, smart objects) — as a concept distinct from ephemeral identity
+above: clustering is a topology/trust-radius question (how tightly a group of peers cooperates
+relative to the rest of the graph), not an identity-lifetime one. Both of this section's original
+open questions were resolved by Phase 1, explicitly, not left open: a cluster stays a pure
+networking-layer notion, not a first-class graph concept (considered and declined, since it would
+need a corroboration story the project doesn't have yet); and intra-cluster replication
+deliberately does *not* get extra rigor — the opposite, actually, a same-cluster peer gets a full
+federation override, a real documented security trade-off (self-declared, unauthenticated cluster
+membership). Phase 2 adds the one remaining item from Phase 1's own deferred list: same-cluster
+peers now also sync with each other on their own, faster, independently configurable cadence
+(`[cluster].gossip_interval_seconds`), alongside (not instead of) the standard graph-wide gossip
+loop. Still not built: any corroboration/authorization of a cluster claim, and multiple
+simultaneous cluster memberships per peer.
 
 ## Code as graph data (speculative aside, not a direction yet)
 

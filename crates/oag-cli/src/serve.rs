@@ -63,6 +63,7 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     if let Some(cluster_name) = config.cluster_name.clone() {
         sync_service = sync_service.with_cluster(identity_for_cluster, cluster_name);
         oag_sync::spawn_cluster_announce_loop(sync_service.clone(), config.cluster_announce_interval);
+        oag_sync::spawn_cluster_gossip_loop(sync_service.clone(), config.cluster_gossip_interval);
     }
     let sync_router = oag_sync::router(sync_service.clone());
     oag_sync::spawn_gossip_loop(sync_service.clone(), config.bootstrap_peers.clone(), config.sync_interval);

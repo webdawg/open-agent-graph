@@ -437,10 +437,22 @@ pub struct ClusterSection {
     pub name: Option<String>,
     #[serde(default = "default_cluster_announce_interval_seconds")]
     pub announce_interval_seconds: u64,
+    /// Peer clustering, Phase 2 (spec/26): how often this peer syncs with
+    /// its *own* same-cluster peers specifically, independent of
+    /// `[network].sync_interval_seconds`'s standard, graph-wide cadence.
+    /// Defaults meaningfully faster (5s vs. that section's own 30s
+    /// default) -- a cluster is meant to be a tightly-cooperating group,
+    /// not just a federation-override label.
+    #[serde(default = "default_cluster_gossip_interval_seconds")]
+    pub gossip_interval_seconds: u64,
 }
 
 fn default_cluster_announce_interval_seconds() -> u64 {
     60
+}
+
+fn default_cluster_gossip_interval_seconds() -> u64 {
+    5
 }
 
 impl Default for ClusterSection {
@@ -448,6 +460,7 @@ impl Default for ClusterSection {
         Self {
             name: None,
             announce_interval_seconds: default_cluster_announce_interval_seconds(),
+            gossip_interval_seconds: default_cluster_gossip_interval_seconds(),
         }
     }
 }
@@ -486,6 +499,9 @@ pub struct ResolvedConfig {
     pub trust_config: oag_sync::TrustConfig,
     pub cluster_name: Option<String>,
     pub cluster_announce_interval: std::time::Duration,
+    /// Peer clustering, Phase 2 (spec/26): `spawn_cluster_gossip_loop`'s
+    /// own interval, independent of `sync_interval` above.
+    pub cluster_gossip_interval: std::time::Duration,
     pub embedding_provider: Box<dyn oag_embeddings::EmbeddingProvider>,
     pub crawler_config: oag_crawler::CrawlerConfig,
     pub llm_extractor: std::sync::Arc<dyn oag_crawler::LlmExtractor>,
@@ -531,6 +547,7 @@ pub fn resolve(
         trust_config: file.identity.to_trust_config(),
         cluster_name: file.cluster.name,
         cluster_announce_interval: std::time::Duration::from_secs(file.cluster.announce_interval_seconds),
+        cluster_gossip_interval: std::time::Duration::from_secs(file.cluster.gossip_interval_seconds),
         embedding_provider: file.search.to_embedding_provider(),
         // `false` here, always -- unlike `oag crawl`'s one-shot
         // `--allow-private-networks` flag (an operator's own explicit,

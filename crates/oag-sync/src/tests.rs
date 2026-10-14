@@ -803,3 +803,69 @@ async fn matching_cluster_declaration_overrides_an_allowlist_rejection() {
         "C declared a *different* cluster -- must still be rejected by the unchanged allowlist"
     );
 }
+
+/// Peer clustering, Phase 2 (spec/26): `cluster_peer_addrs` is empty for a
+/// plain, non-clustered peer -- this is exactly what makes
+/// `spawn_cluster_gossip_loop` a harmless no-op for every deployment that
+/// hasn't set `[cluster].name`.
+#[tokio::test]
+async fn cluster_peer_addrs_is_empty_without_a_configured_cluster() {
+    let a = spawn_peer("no-cluster-addrs").await;
+    assert!(a.sync.cluster_peer_addrs().await.is_empty());
+}
+
+/// Peer clustering, Phase 2 (spec/26): `cluster_peer_addrs` only ever
+/// returns addresses for peers whose latest signed cluster claim matches
+/// this service's own configured cluster -- same three-peer, two-cluster
+/// setup as `matching_cluster_declaration_overrides_an_allowlist_rejection`
+/// above, now checking the address list the new cluster-only gossip loop
+/// actually drives off of, rather than `federation_allows`.
+#[tokio::test]
+async fn cluster_peer_addrs_only_includes_matching_cluster_members() {
+    let a = spawn_clustered_peer("cluster-addrs-a", FederationPolicy::Open, "home-lab").await;
+    let b = spawn_clustered_peer("cluster-addrs-b", FederationPolicy::Open, "home-lab").await;
+    let c = spawn_clustered_peer("cluster-addrs-c", FederationPolicy::Open, "other-site").await;
+
+    a.sync.sync_with_peer(&b.addr).await.unwrap();
+    a.sync.sync_with_peer(&c.addr).await.unwrap();
+    b.sync.sync_with_peer(&a.addr).await.unwrap();
+    c.sync.sync_with_peer(&a.addr).await.unwrap();
+
+    assert!(b.sync.broadcast_cluster_declaration().await > 0, "B must have at least A's address known");
+    assert!(c.sync.broadcast_cluster_declaration().await > 0, "C must have at least A's address known");
+
+    let addrs = a.sync.cluster_peer_addrs().await;
+    assert!(addrs.contains(&b.addr), "same-cluster peer B's address should be included: {addrs:?}");
+    assert!(!addrs.contains(&c.addr), "different-cluster peer C's address should be excluded: {addrs:?}");
+}
+
+/// Peer clustering, Phase 2 (spec/26): proves the *cluster-only* gossip
+/// loop itself -- not the standard one, and not a direct test call to
+/// `sync_with_peer` -- is what delivers a same-cluster peer's new event.
+/// A's standard loop is given a deliberately far-too-slow interval so it
+/// cannot explain anything this test observes; only A's fast cluster loop
+/// ever runs on a cadence short enough to matter here.
+#[tokio::test]
+async fn same_cluster_peers_sync_on_their_own_faster_cadence() {
+    let a = spawn_clustered_peer("cluster-gossip-a", FederationPolicy::Open, "home-lab").await;
+    let b = spawn_clustered_peer("cluster-gossip-b", FederationPolicy::Open, "home-lab").await;
+
+    a.sync.sync_with_peer(&b.addr).await.unwrap();
+    b.sync.sync_with_peer(&a.addr).await.unwrap();
+    assert!(a.sync.broadcast_cluster_declaration().await > 0);
+    assert!(b.sync.broadcast_cluster_declaration().await > 0);
+
+    crate::gossip::spawn_gossip_loop(a.sync.clone(), vec![], std::time::Duration::from_secs(3600));
+    crate::gossip::spawn_cluster_gossip_loop(a.sync.clone(), std::time::Duration::from_millis(200));
+
+    let assertion_id = b
+        .graph
+        .assert(&b.auth, sample_assertion("https://example.com/cluster-gossip", "Model Context Protocol"))
+        .await
+        .unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let fetched = a.graph.get_assertion(assertion_id).await.unwrap();
+    assert!(fetched.is_some(), "A's cluster-only gossip loop should have pulled B's new assertion on its own, fast cadence");
+}

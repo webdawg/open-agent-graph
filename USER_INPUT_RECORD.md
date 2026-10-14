@@ -603,3 +603,32 @@ specific registrar assumed, nothing hardcoded.
    decision if ever wanted, not bundled into deciding what to resolve *to*.
 
 See `spec/30-long-word-addressing.md` for the full mechanism this entry fed into.
+
+---
+
+## Entry 14 — 2026-10-13
+
+After long-word addressing shipped (Entry 13), the remaining named backlog narrowed to two items,
+both again surfaced via `AskUserQuestion` rather than picked unilaterally: ephemeral trust's real
+voting/consensus mechanism and proof-of-data-volume (still flagged as cutting against this
+project's own "no global consensus" architecture principle), and peer clustering's open questions.
+
+**The user picked peer clustering's open questions.** On inspection before implementing anything,
+both sub-questions as originally framed in `spec/22-future-work.md`'s "First-class peer clustering"
+section turned out to already be resolved — Phase 1 (`spec/26-peer-clustering.md`, this record's
+own Entry 6) had already decided both explicitly: a cluster stays a pure networking construct, not
+a graph concept, and intra-cluster replication deliberately does *not* get extra rigor beyond the
+chosen full federation override. `spec/22-future-work.md`'s section simply never got updated to
+reflect Phase 1 landing, unlike every other section in that file — a documentation-staleness
+finding, not a new decision needing the user's input.
+
+**Scoping decision made without a fresh round of questions, same pattern as prior entries**: rather
+than going back to the user over a question that turned out to already have an answer, built the
+one item genuinely still open from Phase 1's own "Explicitly deferred" list instead —
+differentiated sync *cadence* for same-cluster peers (a second, independent, faster gossip loop,
+`[cluster].gossip_interval_seconds`, default 5s, alongside the unchanged standard loop). This is a
+real feature gap, not a re-litigation of anything already decided, and doesn't conflict with any
+stated architecture principle the way the ephemeral-trust item does.
+
+See `spec/26-peer-clustering.md`'s new "Phase 2" section for the full mechanism this entry fed
+into.

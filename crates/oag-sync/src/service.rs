@@ -181,6 +181,32 @@ impl SyncService {
         }
     }
 
+    /// Peer clustering, Phase 2 (spec/26): every known address belonging to
+    /// a peer whose latest signed cluster claim matches this service's own
+    /// configured cluster -- feeds `gossip::spawn_cluster_gossip_loop`'s
+    /// faster, cluster-only cadence. Empty whenever this service has no
+    /// configured cluster, which is exactly what makes that loop a no-op
+    /// for every deployment that hasn't set `[cluster].name`.
+    pub(crate) async fn cluster_peer_addrs(&self) -> Vec<String> {
+        if self.own_cluster.is_none() {
+            return Vec::new();
+        }
+        let Ok(mut conn) = self.pool.acquire().await else { return Vec::new() };
+        let Ok(peers) = peers_repo::list_peers(&mut conn).await else { return Vec::new() };
+        let mut addrs = Vec::new();
+        for peer in peers {
+            let peer_id = PeerId::from_bytes(peer.peer_id);
+            if self.same_cluster(&peer_id).await {
+                if let Ok(known) = peers_repo::list_addresses(&mut conn, &peer.peer_id).await {
+                    addrs.extend(known);
+                }
+            }
+        }
+        addrs.sort();
+        addrs.dedup();
+        addrs
+    }
+
     /// "Degrade, don't drop" (spec/24, `USER_INPUT_RECORD.md` Entry 4): the
     /// existing binary `FederationPolicy` check is untouched and short-
     /// circuits first. Only when `minimum_trust > 0.0` (ephemeral mode) does

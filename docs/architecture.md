@@ -220,9 +220,10 @@ remain not yet implemented and change nothing described elsewhere in this docume
 - Peer clustering: groups of mutually cooperating peers (an "ant colony" of small, cooperating
   units doing real-world physical work — sensors, traffic lights, smart objects), a concept
   distinct from the ephemeral-identity direction above since it's a topology/trust-radius question,
-  not an identity-lifetime one. **Phase 1 implemented** (self-declared, signed cluster membership
-  as a full federation override — `[cluster].name` in `config.toml` — see
+  not an identity-lifetime one. **Phase 1 and 2 implemented** (self-declared, signed cluster
+  membership as a full federation override — `[cluster].name` in `config.toml` — see
   `spec/26-peer-clustering.md`, including its explicit security caveat: an unauthenticated cluster
-  name is a weak shared secret, not a verified fact). Still future work: any corroboration
-  mechanism for a claimed cluster, and the graph-level representation considered and declined for
-  this phase.
+  name is a weak shared secret, not a verified fact; Phase 2 adds a second, independent, faster
+  gossip loop — `[cluster].gossip_interval_seconds`, default 5s — for same-cluster peers only,
+  alongside the unchanged standard loop). Still future work: any corroboration mechanism for a
+  claimed cluster, and the graph-level representation considered and declined for this phase.
