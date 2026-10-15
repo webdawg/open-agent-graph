@@ -59,6 +59,20 @@ understand how the pieces fit together; see `spec/` instead to look up one featu
 - [`docs/predicates.md`](docs/predicates.md) — the predicate vocabulary
 - [`docs/api.md`](docs/api.md) — REST, MCP, and CLI reference
 
+## Record-keeping
+
+- [`USER_INPUT_RECORD.md`](USER_INPUT_RECORD.md) — verbatim, append-only record of founding
+  philosophical/architectural statements from the project's creator, each paired with the
+  technical response it led to. The *why* behind decisions that show up elsewhere as principles,
+  deferred-future notes, or spec sections.
+- [`authors_dream.md`](authors_dream.md) — a second, distinct record in the creator's other voice
+  (he is also a science-fiction writer): scenes and dreams, not architectural statements, mostly
+  about OAG's space applications. Treated with the same append-only rigor as the record above.
+- [`other-people-building-too.md`](other-people-building-too.md) — a running list of active,
+  adjacent contemporary projects, checked before describing any OAG capability as novel.
+- [`OPEN_QUESTIONS.md`](OPEN_QUESTIONS.md) — day-to-day scope questions that came up during
+  background work, each with the default assumption being run with.
+
 ## Build & test
 
 ```bash
