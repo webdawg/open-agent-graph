@@ -242,7 +242,11 @@ remain not yet implemented and change nothing described elsewhere in this docume
   either source — see `spec/29-ipfs-pinning.md`. OAG's own `content_hash` stays authoritative; a
   CID is purely a retrieval pointer. Still future work: pinning the crawler's auxiliary
   side-fetches, any REST/MCP pin/fetch endpoint, automatic/scheduled backup pinning, and inlining
-  large evidence bodies into IPFS in place of local storage.
+  large evidence bodies into IPFS in place of local storage. Next named direction, not built:
+  hosting an actual static page (`USER_INPUT_RECORD.md` Entry 19) — needs a UnixFS *directory* CID
+  (Phase 1/2 only ever pin one file at a time) and a decision between three non-equivalent "no HTTP
+  server" client options (a public gateway, in-browser Helia over bitswap/libp2p, or a
+  service-worker gateway-cache).
 - Granular, per-artifact data versioning. **Phase 1 and 2 implemented** for nodes/edges/
   assertions/evidence (Phase 1) and actors/node-aliases/disputes/retractions/observations
   (Phase 2) — an explicit `schema_version` on every row, with the in-memory shim Entry 1 described
@@ -281,3 +285,27 @@ remain not yet implemented and change nothing described elsewhere in this docume
   gossip loop — `[cluster].gossip_interval_seconds`, default 5s — for same-cluster peers only,
   alongside the unchanged standard loop). Still future work: any corroboration mechanism for a
   claimed cluster, and the graph-level representation considered and declined for this phase.
+- Ephemeral micro-networks and sensor input as a graph "packet" (`USER_INPUT_RECORD.md` Entries
+  15-17). Not built at all — no phase landed. New application domains (instant vehicle-to-vehicle
+  networks, drone/robot swarm control, branching exploratory "direction" trees) need no new
+  mechanism by themselves; a car, a drone, a sensor, and an explored hypothesis are all just nodes.
+  Two things named do go beyond what's built: networks lasting as little as 30 milliseconds, well
+  past `spec/24-ephemeral-peer-trust.md`'s process-lifetime assumption, with no room for a
+  multi-round `hello`/`heads`/pull exchange; and the fact that a specific set of peers briefly
+  formed a network becoming itself a graph assertion ("these N peers were, for this instant, one
+  thing") — recasting peer clustering's existing networking-only membership claim as an identity
+  claim, something this project's own clustering direction above explicitly declined for lack of a
+  corroboration story. "Each graph is a packet" reframes sensor input as a transport concept (a
+  small, self-contained, signed subgraph), not a new storage type alongside Node/Edge/Assertion/
+  Evidence. No design decided yet.
+- Flood/broadcast propagation with traffic-analysis resistance, "fire like neuron mode"
+  (`USER_INPUT_RECORD.md` Entry 18). Not built. A push-flood-to-every-connected-node model, the
+  opposite of the pull-based gossip in `docs/replication.md`, used for Dining-Cryptographers/
+  mixnet-style anonymity: when every peer receives every message, an observer watching one link
+  can't tell real traffic from traffic a trusted peer is about to discard, so who-talks-to-whom
+  stops being visible on the wire — see `docs/security.md`'s "Metadata / traffic-analysis
+  resistance" section for why that's explicitly not true today. Flagged, not resolved: flooding
+  multiplies bandwidth by fan-out, in real tension with
+  `spec/18-rate-limiting-and-resource-limits.md` and the pull-over-push reasoning
+  `docs/replication.md` itself gives. "Never ending morphing encryption" is named but not
+  specified.

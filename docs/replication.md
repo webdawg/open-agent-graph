@@ -48,6 +48,15 @@ same-cluster peers on its own, typically faster, cadence (`[cluster].gossip_inte
 default 5s) — the standard loop above keeps its own interval and full peer scope unchanged for
 everyone, clustered or not.
 
+**A deliberately different model remains future work, not built**: a push-flood instead of this
+pull model — every transaction reaching out to all connected nodes on write, "fire like neuron
+mode" (`USER_INPUT_RECORD.md` Entry 18). The point would be anonymity, not redundancy: when every
+peer receives every message, an observer watching one link can't distinguish real traffic from
+traffic a trusted peer is about to discard. Not pursued today because it multiplies bandwidth by
+fan-out, in direct tension with the bandwidth reasoning that motivates pull gossip in the first
+place — see `docs/security.md`'s "Metadata / traffic-analysis resistance" section and
+`spec/22-future-work.md` for the full breakdown.
+
 ## Federation policy vs. event trust
 
 `FederationPolicy` (`Open` or `Allowlist(peer_ids)`, `crates/oag-sync/src/federation.rs`) gates

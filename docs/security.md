@@ -221,6 +221,23 @@ Both paths now validate the pairing identically (`crates/oag-sync/src/service.rs
 three tests: one plays the relay role and checks a poisoned pairing is never adopted; the other two
 pin down exactly what a bad pairing does and doesn't enable, directly (`crates/oag-sync/src/tests.rs`).
 
+## Metadata / traffic-analysis resistance — explicitly out of scope today
+
+Everything above covers content confidentiality and identity/federation trust, not *who talks to
+whom*. Today, who-sent-what-to-whom is visible on the wire to anyone watching the sync protocol:
+`oag-sync`'s gossip is pull-based (`docs/replication.md`), each exchange is a direct request/
+response between two known peers, and nothing obscures which peer asked which other peer for
+which range of events. OAG makes no attempt at traffic-analysis resistance, and a network-level
+adversary who can observe peer-to-peer connections can map the replication topology.
+
+A deliberately different, not-built direction exists for this specifically: push-flooding every
+transaction to every connected node, with trusted peers discarding what isn't theirs, so real and
+discarded traffic are indistinguishable on the wire — a Dining-Cryptographers/mixnet-style cover-
+traffic technique (`USER_INPUT_RECORD.md` Entry 18, `spec/22-future-work.md`). This would be a
+large design commitment (closer to Tor/mixnet territory than anything built here) and is in real
+tension with the bandwidth-conscious pull model this document and `docs/replication.md` both
+assume — flagged as a real future direction, not designed or scheduled.
+
 ## Deletion and redaction — what it actually does, and doesn't (spec section 85)
 
 **This is the single most important thing to understand before running a public-facing peer.**

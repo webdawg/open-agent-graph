@@ -10,35 +10,55 @@ per-feature specification — code comments referring to "spec section N" point 
 document that was never committed to this repository and is no longer retrievable anywhere;
 `spec/` is what replaced it.
 
-Status: signed event log, REST API, MCP server, and peer-to-peer replication (`oag-sync`, plus an
-optional Reticulum mesh transport) are all implemented and share one service layer. Also built:
-corroboration/ranking signals, semantic search, an LLM-extraction fallback for the crawler,
-Prometheus-style metrics, structured request logging, local evidence redaction, a minimal
-human-browsable HTML view (`/ui/search`, `/ui/nodes/{id}`, `/ui/assertions/{id}`), and a small
-per-peer tensor-pad memory (`oag-tensor`) nudged by real sync outcomes. A separate, optional
-evolution layer (`oag-brain/` — outside this workspace; needs `libtensorflow`) programs that pad
-via real scaled dot-product self-attention between two peers. Also built: opt-in ephemeral peer
-identity with signed presence heartbeats and trust-weighted federation (`[identity].ephemeral` in
-`config.toml`), a small, truly-random per-node "gravity level" that very slightly throttles that
-node's own processing speed, opt-in peer clustering (`[cluster].name`) where a self-declared,
-signed cluster membership grants a full federation override — a deliberate, documented security
-trade-off, not a verified fact — plus a second, faster, independently-configured gossip loop for
-same-cluster peers only (`[cluster].gossip_interval_seconds`, default 5s, see
-`spec/26-peer-clustering.md`) — and per-artifact data
-versioning for nodes/edges/assertions/evidence/actors/node-aliases/disputes/retractions/
-observations (`oag migrate <type> <id>` for the five with a singular lookup to extend), so legacy
-rows can always either be converted in place or served forever through an in-memory adapter
-applied automatically on every read (see `spec/27-artifact-versioning.md`), self-hosted roadmap
-governance, where a roadmap proposal is just an ordinary assertion backed by evidence, ranked by
-the graph's own corroboration signals with no new consensus mechanism (`GET /api/v1/roadmap`,
-`GET /ui/roadmap` — see `spec/28-roadmap-governance.md`), opt-in native IPFS pinning
-(`[ipfs].pinning_provider`, default disabled) of both crawled evidence content and `oag backup`
-snapshots (`oag backup <out> --pin`), with each CID stored/printed as a retrieval pointer only and
-`oag ipfs cat <cid>` for retrieval (see `spec/29-ipfs-pinning.md`), and opt-in long-word subdomain
-addressing for a peer (`[addressing].domain`, default unset), resolved via a real DNS TXT lookup
-(`oag peer resolve <peer_id>`) as a second, independent path to a `PeerId` you already know, never
-a replacement for gossip-based peer discovery (see `spec/30-long-word-addressing.md`). See `docs/`
-for the full picture — start with `docs/architecture.md`.
+## Status
+
+Core (one shared service layer, all implemented): signed event log, REST API, MCP server, and
+peer-to-peer replication (`oag-sync`, plus an optional Reticulum mesh transport).
+
+Also built:
+
+- **Corroboration/ranking, search, crawling** — ranking signals over competing assertions,
+  semantic search, an LLM-extraction fallback for the crawler, Prometheus-style metrics,
+  structured request logging, local evidence redaction, a minimal human-browsable HTML view
+  (`/ui/search`, `/ui/nodes/{id}`, `/ui/assertions/{id}`).
+- **Tensor-pad memory** — a small per-peer pad (`oag-tensor`) nudged by real sync outcomes. A
+  separate, optional evolution layer (`oag-brain/`, outside this workspace, needs
+  `libtensorflow`) programs that pad via real scaled dot-product self-attention between two
+  peers.
+- **Ephemeral peer identity** (`[identity].ephemeral` in `config.toml`) — opt-in identity rotation
+  with signed presence heartbeats and trust-weighted federation, see
+  [`spec/24-ephemeral-peer-trust.md`](spec/24-ephemeral-peer-trust.md).
+- **Gravity** — a small, truly-random per-node "gravity level" that very slightly throttles that
+  node's own processing speed.
+- **Peer clustering** (`[cluster].name`) — a self-declared, signed cluster membership that grants
+  a full federation override (a deliberate, documented security trade-off, not a verified fact),
+  plus a second, faster, independently-configured gossip loop for same-cluster peers only
+  (`[cluster].gossip_interval_seconds`, default 5s), see
+  [`spec/26-peer-clustering.md`](spec/26-peer-clustering.md).
+- **Per-artifact data versioning** — nodes/edges/assertions/evidence/actors/node-aliases/
+  disputes/retractions/observations each carry a schema version; legacy rows are converted in
+  place or served through an automatic in-memory shim on every read (`oag migrate <type> <id>`
+  for the five types with a singular lookup), see
+  [`spec/27-artifact-versioning.md`](spec/27-artifact-versioning.md).
+- **Self-hosted roadmap governance** — a roadmap proposal is just an ordinary assertion backed by
+  evidence, ranked by the graph's own corroboration signals, no new consensus mechanism
+  (`GET /api/v1/roadmap`, `GET /ui/roadmap`), see
+  [`spec/28-roadmap-governance.md`](spec/28-roadmap-governance.md).
+- **Native IPFS pinning** (`[ipfs].pinning_provider`, default disabled) — opt-in pinning of
+  crawled evidence content and `oag backup` snapshots (`oag backup <out> --pin`); each CID is
+  stored/printed as a retrieval pointer only, `oag ipfs cat <cid>` retrieves it, see
+  [`spec/29-ipfs-pinning.md`](spec/29-ipfs-pinning.md).
+- **Long-word subdomain addressing** (`[addressing].domain`, default unset) — resolves a `PeerId`
+  via a real DNS TXT lookup (`oag peer resolve <peer_id>`), a second, independent path alongside
+  gossip-based discovery, never a replacement for it, see
+  [`spec/30-long-word-addressing.md`](spec/30-long-word-addressing.md).
+
+Captured, not yet built — see `docs/architecture.md`'s "What's deliberately not built yet" and
+[`spec/22-future-work.md`](spec/22-future-work.md): a real multi-peer trust-consensus mechanism,
+ephemeral (sub-second) micro-networks with sensor input as a graph "packet," and flood/broadcast
+propagation for traffic-analysis resistance.
+
+See `docs/` for the full picture — start with [`docs/architecture.md`](docs/architecture.md).
 
 ## Specification
 
@@ -51,7 +71,9 @@ capability promises.
 `docs/` is the narrative, architecture-and-request-flow-oriented walkthrough — start here to
 understand how the pieces fit together; see `spec/` instead to look up one feature in detail.
 
-- [`docs/architecture.md`](docs/architecture.md) — crate map and request/data flow
+- [`docs/architecture.md`](docs/architecture.md) — crate map, request/data flow, prior art
+  (Secure Scuttlebutt, Nostr, Holochain, OrbitDB, nanopublications, and others), and what's
+  deliberately not built yet
 - [`docs/event-protocol.md`](docs/event-protocol.md) — the signed event envelope and hash chain
 - [`docs/data-model.md`](docs/data-model.md) — nodes, edges, assertions, evidence, ranking signals
 - [`docs/replication.md`](docs/replication.md) — peer sync protocol, gossip, durability
