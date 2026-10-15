@@ -894,3 +894,66 @@ most of the design.
 Not implemented. Extended `spec/22-future-work.md`'s existing "Native IPFS integration" section
 with this as a named next direction rather than opening a new section, since it's a continuation of
 the same Phase 1/2 work, not a separate concept.
+
+---
+
+## Entry 20 — 2026-10-15
+
+> keep going - can this thing serv a website yet? i wanted to use ipfs to feed files to a web
+> browser - there is an ipfs js library - so we still serve some http stuff, but all the
+> cdn/content is from ipfs - ipfs mode should not use an ipfs proxy - iirc ipfs js libary has this
+> as a config - we are going to have to model this locally so we will have to figure that out too
+> - also report back - there should be one rust process here right - how big is this rust.exe
+> file, and how much memory does it take when it is running, and how much cpu does it take when
+> it is running
+
+Direct follow-up (same day) to Entry 19's static-page-hosting direction, now with concrete design
+choices: in-browser fetch over bitswap/libp2p, explicitly never through an HTTP gateway/proxy
+(the user's own memory of a real Helia config option, confirmed correct — see below), plus a
+"model this locally" requirement and a direct resource-usage question.
+
+### Response, part 1 — resource report
+
+Confirmed one process, no subprocess/worker fork, 11 threads (tokio runtime). Measured against a
+pre-this-feature release build: ~65 MB unstripped / ~56 MB stripped binary, ~20.5 MB RSS at
+startup staying flat through a full idle gossip-loop tick, and immeasurably small idle CPU (0.03s
+of CPU time across 50s of wall-clock idle). 30 light REST writes cost ~1-2 CPU ticks combined.
+
+### Response, part 2 — built this session, with one correction along the way
+
+Built `oag ipfs host-page <dir>` (pins a directory as one UnixFS tree) and `GET /ipfs-site/{cid}`
+(a bootstrap page loading a vendored, gateway-free browser bundle — Helia, composed without ever
+calling `withHTTP`, so the HTTP-gateway code path isn't even included in the bundle, a structural
+guarantee rather than a config flag). First implementation used `KuboHttpProvider` — pinning via
+a *separately run* Kubo daemon over HTTP, same as Phase 1/2's existing provider.
+
+**The user caught a real inconsistency before live verification**: "we want to package this in
+the end... everything is supposed to go in a single exe... what are we doing with kubo?" Right —
+a separate daemon contradicts this project's own "single self-contained binary" posture everywhere
+else. Researched whether a real embedded Rust IPFS node was viable (an old internal note had
+dismissed `rust-ipfs` as "alpha-quality... far heavier than this narrow need justifies," written
+for Phase 1/2's much narrower "one HTTP client call" need) — confirmed live that the actively-
+maintained `dariusc93` fork (pushed within a day of this work) supports exactly what's needed:
+bitswap, Kademlia DHT, mDNS, and a browser-dialable websocket listener, composable with
+`default-features = false` to exclude its own HTTP-touching features. Swapped to a new
+`EmbeddedIpfsProvider` as the new default-recommended `[ipfs].pinning_provider = "embedded"`
+value; kept `KuboHttpProvider` as `"kubo"`, a legitimate option for an operator with existing Kubo
+infrastructure, just not the one this project's own docs point to first.
+
+**Real bugs found only by live end-to-end testing** (a real headless browser against a real
+embedded node, not just `cargo test`): the browser's default connection gater silently refuses to
+dial private/insecure (`ws`, non-TLS) addresses — exactly what our own local embedded node's
+address always is — with zero network activity and no error; `@helia/verified-fetch` does its own
+public-network provider lookup before trying bitswap, which stalls for many seconds against a
+direct, already-connected peer that was never going to show up in a public DHT lookup (dropped it
+entirely in favor of `@helia/unixfs`'s direct `ls`/`stat`/`cat`); `fs.ls()`'s own yielded entries
+carry no usable `type` field despite the underlying library's own type declarations suggesting
+otherwise (worked around with `fs.stat()` instead); `libp2p.dial()` needs a real `Multiaddr`
+object, not the plain string the server hands the page. Final state, confirmed live: a real
+two-file test site (`index.html` + `css/style.css`), pinned and served entirely by one `oag`
+process with zero other processes running anywhere, rendered correctly in a real headless
+Chromium with its CSS actually applied, fetched purely over bitswap.
+
+Full mechanism, all judgment calls, and the "explicitly deferred" list (notably: the browser
+client could in principle be the same `rust-ipfs` crate compiled to WASM instead of a separate JS
+bundle — not pursued this round) are in `spec/29-ipfs-pinning.md`'s "Static page hosting" section.

@@ -108,9 +108,13 @@ oag-sync        Peer-to-peer replication: hello/heads/events/peers HTTP endpoint
 oag-embeddings  EmbeddingProvider abstraction (disabled by default) + brute-force cosine
                 similarity ranking, backing semantic search.
 
-oag-ipfs        PinningProvider abstraction (disabled by default) for IPFS pinning/retrieval of
-                evidence content -- a leaf crate like oag-embeddings, used by oag-crawler and
-                directly by oag-cli's `oag ipfs cat`.
+oag-ipfs        PinningProvider abstraction (disabled by default) for IPFS pinning/retrieval --
+                a leaf crate like oag-embeddings, used by oag-crawler and directly by oag-cli's
+                `oag ipfs cat`/`host-page`. Two real implementations: KuboHttpProvider (a thin
+                reqwest client against a separately-run Kubo daemon) and EmbeddedIpfsProvider (a
+                real IPFS node -- bitswap, Kademlia DHT, mDNS, a browser-dialable websocket
+                listener -- embedded directly in this process via the `rust-ipfs` crate, no
+                separate daemon).
 
 oag-tensor      Per-peer tensor pad memory (TensorPad, TENSOR_PAD_DIM = 32) -- a fixed-width
                 Vec<f32>, nudged by real oag-sync outcomes, never by training. See
@@ -235,18 +239,23 @@ remain not yet implemented and change nothing described elsewhere in this docume
   real multi-peer voting/consensus mechanism (Phase 1 uses a soft, local, address-correlation
   heuristic instead), and PacketCrypt-style proof-of-data-volume.
 - Native IPFS integration for large evidence blobs and static exports (spec section 84's
-  `blobs/<hash>` concept). **Phase 1 and 2 implemented** — opt-in pinning of crawled evidence
+  `blobs/<hash>` concept). **Phase 1, 2, and 3 implemented** — opt-in pinning of crawled evidence
   content (Phase 1) and `oag backup` snapshots (Phase 2), both via `[ipfs].pinning_provider`
-  (default disabled). Evidence's CID lands in the existing `Evidence.metadata` column
-  (`{"ipfs_cid": "..."}`, no schema change); `oag ipfs cat <cid>` retrieves pinned content from
-  either source — see `spec/29-ipfs-pinning.md`. OAG's own `content_hash` stays authoritative; a
-  CID is purely a retrieval pointer. Still future work: pinning the crawler's auxiliary
-  side-fetches, any REST/MCP pin/fetch endpoint, automatic/scheduled backup pinning, and inlining
-  large evidence bodies into IPFS in place of local storage. Next named direction, not built:
-  hosting an actual static page (`USER_INPUT_RECORD.md` Entry 19) — needs a UnixFS *directory* CID
-  (Phase 1/2 only ever pin one file at a time) and a decision between three non-equivalent "no HTTP
-  server" client options (a public gateway, in-browser Helia over bitswap/libp2p, or a
-  service-worker gateway-cache).
+  (default disabled, now `"disabled" | "kubo" | "embedded"`). Evidence's CID lands in the existing
+  `Evidence.metadata` column (`{"ipfs_cid": "..."}`, no schema change); `oag ipfs cat <cid>`
+  retrieves pinned content from either source — see `spec/29-ipfs-pinning.md`. OAG's own
+  `content_hash` stays authoritative; a CID is purely a retrieval pointer. Phase 3: `oag ipfs
+  host-page <dir>` pins a whole directory as one UnixFS tree, and `GET /ipfs-site/{cid}` serves a
+  bootstrap page that loads a vendored, gateway-free browser bundle fetching the entire site (not
+  just `index.html`) purely over bitswap/libp2p — `"embedded"` runs a real IPFS node (via
+  `rust-ipfs`) directly inside this same process, no separate daemon, the thing that actually
+  keeps this project's "single self-contained binary" promise for this feature; `"kubo"` (Phase
+  1/2's original provider, talking to a *separately run* process over HTTP) remains a legitimate
+  choice for an operator with existing Kubo infrastructure, just not the default recommendation.
+  Still future work: pinning the crawler's auxiliary side-fetches, any REST/MCP pin/fetch
+  endpoint, automatic/scheduled backup pinning, inlining large evidence bodies into IPFS in place
+  of local storage, and compiling the browser-side client as Rust-to-WASM using the same
+  `rust-ipfs` crate instead of the current JS/Helia bundle.
 - Granular, per-artifact data versioning. **Phase 1 and 2 implemented** for nodes/edges/
   assertions/evidence (Phase 1) and actors/node-aliases/disputes/retractions/observations
   (Phase 2) — an explicit `schema_version` on every row, with the in-memory shim Entry 1 described

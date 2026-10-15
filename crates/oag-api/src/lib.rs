@@ -4,6 +4,7 @@ pub mod dto;
 pub mod error;
 pub mod handlers;
 pub mod human;
+pub mod ipfs_site;
 pub mod logging;
 pub mod metrics;
 pub mod rate_limit;
@@ -81,6 +82,11 @@ pub fn build_router(state: AppState) -> Router {
         .route("/ui/roadmap", get(human::roadmap_page))
         .route("/ui/nodes/{id}", get(human::node_page))
         .route("/ui/assertions/{id}", get(human::assertion_page))
+        // Deliberately unauthenticated, unlike `/ui/*` above -- a hosted
+        // site is meant to be publicly viewable like any other website
+        // (spec/29-ipfs-pinning.md, "static page hosting").
+        .route("/ipfs-site/_bundle.js", get(ipfs_site::bundle_js))
+        .route("/ipfs-site/{cid}", get(ipfs_site::bootstrap_page))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             rate_limit::rate_limit_middleware,

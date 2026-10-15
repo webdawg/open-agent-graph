@@ -65,6 +65,8 @@ hex = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 http = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+rust-ipfs = { version = "0.16.0", default-features = false, features = ["tcp", "websocket", "noise", "ed25519"] }
+futures = "0.3"
 scraper = "0.27"
 url = "2"
 open-english-pronouncing-dictionary = "=0.1.0"

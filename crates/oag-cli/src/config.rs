@@ -297,6 +297,19 @@ pub struct IpfsSection {
     pub pinning_provider: String,
     pub api_base_url: Option<String>,
     pub api_key: Option<String>,
+    /// The operator's own Kubo node's dialable libp2p WebSocket multiaddr
+    /// (e.g. `/ip4/1.2.3.4/tcp/4002/ws/p2p/<peer-id>`), unset by default.
+    /// Purely informational: handed to a browser loading `oag ipfs
+    /// host-page`-served content as a direct dial target, so it can reach
+    /// this specific Kubo node without waiting on public DHT discovery.
+    /// Never used for anything server-side -- `oag serve` itself never
+    /// dials it.
+    pub libp2p_ws_multiaddr: Option<String>,
+    /// Only used by `pinning_provider = "embedded"`: multiaddrs for the
+    /// embedded node to listen on. Default (when unset): one ephemeral-port
+    /// `/ip4/0.0.0.0/tcp/0/ws` entry -- the only transport a browser can
+    /// dial directly. Set this for a fixed, firewall-forwardable port.
+    pub embedded_listen_addrs: Option<Vec<String>>,
 }
 
 fn default_ipfs_pinning_provider() -> String {
@@ -309,25 +322,54 @@ impl Default for IpfsSection {
             pinning_provider: default_ipfs_pinning_provider(),
             api_base_url: None,
             api_key: None,
+            libp2p_ws_multiaddr: None,
+            embedded_listen_addrs: None,
         }
     }
 }
 
+fn default_embedded_listen_addrs() -> Vec<String> {
+    vec!["/ip4/0.0.0.0/tcp/0/ws".to_string()]
+}
+
 impl IpfsSection {
-    /// `"disabled"` (the default) or a missing `api_base_url` both yield
-    /// `DisabledProvider` -- same "incomplete config degrades to the safe
-    /// default rather than erroring at startup" posture as
-    /// `to_llm_extractor`/`to_embedding_provider`.
-    pub fn to_pinning_provider(&self) -> std::sync::Arc<dyn oag_ipfs::PinningProvider> {
+    /// `"disabled"` (the default) or a missing `api_base_url` (for `"kubo"`)
+    /// both yield `DisabledProvider` -- same "incomplete config degrades to
+    /// the safe default rather than erroring at startup" posture as
+    /// `to_llm_extractor`/`to_embedding_provider`. `"embedded"` is the only
+    /// branch that's genuinely async/fallible (it starts a real libp2p
+    /// node), which is why this whole function is -- a real signature
+    /// change from the single-file-pinning milestone that first wrote this,
+    /// when every branch was a cheap, synchronous constructor. `data_dir`
+    /// is only used by `"embedded"`, to place its on-disk blockstore at
+    /// `<data_dir>/ipfs/`, separate from OAG's own SQLite database.
+    pub async fn to_pinning_provider(
+        &self,
+        data_dir: &std::path::Path,
+    ) -> anyhow::Result<std::sync::Arc<dyn oag_ipfs::PinningProvider>> {
         match self.pinning_provider.as_str() {
-            "kubo" => match &self.api_base_url {
+            "kubo" => Ok(match &self.api_base_url {
                 Some(base_url) => std::sync::Arc::new(oag_ipfs::KuboHttpProvider::new(
                     base_url.clone(),
                     self.api_key.clone(),
                 )),
                 None => std::sync::Arc::new(oag_ipfs::DisabledProvider),
-            },
-            _ => std::sync::Arc::new(oag_ipfs::DisabledProvider),
+            }),
+            "embedded" => {
+                let listen_addrs = self
+                    .embedded_listen_addrs
+                    .clone()
+                    .unwrap_or_else(default_embedded_listen_addrs)
+                    .iter()
+                    .map(|addr| addr.parse())
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|e| anyhow::anyhow!("invalid [ipfs].embedded_listen_addrs entry: {e}"))?;
+                let provider = oag_ipfs::EmbeddedIpfsProvider::new(data_dir.join("ipfs"), listen_addrs)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("failed to start embedded IPFS node: {e}"))?;
+                Ok(std::sync::Arc::new(provider))
+            }
+            _ => Ok(std::sync::Arc::new(oag_ipfs::DisabledProvider)),
         }
     }
 }
@@ -506,9 +548,10 @@ pub struct ResolvedConfig {
     pub crawler_config: oag_crawler::CrawlerConfig,
     pub llm_extractor: std::sync::Arc<dyn oag_crawler::LlmExtractor>,
     pub pinning_provider: std::sync::Arc<dyn oag_ipfs::PinningProvider>,
+    pub ipfs_libp2p_ws_multiaddr: Option<String>,
 }
 
-pub fn resolve(
+pub async fn resolve(
     config_path: Option<PathBuf>,
     data_dir_override: Option<PathBuf>,
     listen_override: Option<SocketAddr>,
@@ -532,6 +575,7 @@ pub fn resolve(
         .unwrap_or_else(|| PathBuf::from("./data"));
     let listen = listen_override.unwrap_or(file.server.listen);
     let federation = file.federation.to_policy()?;
+    let pinning_provider = file.ipfs.to_pinning_provider(&data_dir).await?;
 
     Ok(ResolvedConfig {
         config_path,
@@ -558,7 +602,8 @@ pub fn resolve(
         // widen this peer's own SSRF policy for their request.
         crawler_config: file.crawler.to_crawler_config(false),
         llm_extractor: file.crawler.to_llm_extractor(),
-        pinning_provider: file.ipfs.to_pinning_provider(),
+        pinning_provider,
+        ipfs_libp2p_ws_multiaddr: file.ipfs.libp2p_ws_multiaddr.clone(),
     })
 }
 
@@ -575,9 +620,10 @@ type CrawlerProviders = (
 /// Returns the LLM extractor (spec section 74) and pinning provider (spec/29)
 /// alongside the fetch config since all three come from the same
 /// `[crawler]` section.
-pub fn resolve_crawler_config(
+pub async fn resolve_crawler_config(
     config_path: Option<PathBuf>,
     allow_private_networks_flag: bool,
+    data_dir: &std::path::Path,
 ) -> anyhow::Result<CrawlerProviders> {
     let mut figment = Figment::new();
     if let Some(path) = &config_path {
@@ -591,10 +637,11 @@ pub fn resolve_crawler_config(
         FileConfig::default()
     };
 
+    let pinning_provider = file.ipfs.to_pinning_provider(data_dir).await?;
     Ok((
         file.crawler.to_crawler_config(allow_private_networks_flag),
         file.crawler.to_llm_extractor(),
-        file.ipfs.to_pinning_provider(),
+        pinning_provider,
     ))
 }
 
@@ -620,8 +667,9 @@ pub fn resolve_search_section(config_path: Option<PathBuf>) -> anyhow::Result<Se
 /// Lightweight resolver for `oag backup --pin`, which — unlike `oag crawl`
 /// — has nothing to do with the `[crawler]` section at all; it only needs
 /// `[ipfs]`'s pinning provider.
-pub fn resolve_pinning_provider(
+pub async fn resolve_pinning_provider(
     config_path: Option<PathBuf>,
+    data_dir: &std::path::Path,
 ) -> anyhow::Result<std::sync::Arc<dyn oag_ipfs::PinningProvider>> {
     let mut figment = Figment::new();
     if let Some(path) = &config_path {
@@ -635,7 +683,7 @@ pub fn resolve_pinning_provider(
         FileConfig::default()
     };
 
-    Ok(file.ipfs.to_pinning_provider())
+    file.ipfs.to_pinning_provider(data_dir).await
 }
 
 /// Lightweight resolver for `oag serve`'s trust-config reload loop

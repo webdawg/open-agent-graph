@@ -44,10 +44,14 @@ Also built:
   evidence, ranked by the graph's own corroboration signals, no new consensus mechanism
   (`GET /api/v1/roadmap`, `GET /ui/roadmap`), see
   [`spec/28-roadmap-governance.md`](spec/28-roadmap-governance.md).
-- **Native IPFS pinning** (`[ipfs].pinning_provider`, default disabled) — opt-in pinning of
-  crawled evidence content and `oag backup` snapshots (`oag backup <out> --pin`); each CID is
-  stored/printed as a retrieval pointer only, `oag ipfs cat <cid>` retrieves it, see
-  [`spec/29-ipfs-pinning.md`](spec/29-ipfs-pinning.md).
+- **Native IPFS pinning and static site hosting** (`[ipfs].pinning_provider`, default disabled,
+  `"disabled" | "kubo" | "embedded"`) — opt-in pinning of crawled evidence content and `oag backup`
+  snapshots (`oag backup <out> --pin`); each CID is stored/printed as a retrieval pointer only,
+  `oag ipfs cat <cid>` retrieves it. `"embedded"` runs a real IPFS node directly inside this same
+  process (bitswap, Kademlia DHT, a browser-dialable websocket listener) — no separate daemon;
+  `oag ipfs host-page <dir>` pins a whole directory and `GET /ipfs-site/<cid>` serves it to a
+  browser, which fetches the entire site (not just one page) purely over bitswap/libp2p, never
+  through an HTTP gateway/proxy. See [`spec/29-ipfs-pinning.md`](spec/29-ipfs-pinning.md).
 - **Long-word subdomain addressing** (`[addressing].domain`, default unset) — resolves a `PeerId`
   via a real DNS TXT lookup (`oag peer resolve <peer_id>`), a second, independent path alongside
   gossip-based discovery, never a replacement for it, see

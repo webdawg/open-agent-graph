@@ -402,7 +402,7 @@ pub async fn backup(
          full re-sync, and is your only copy if this is a lone/first peer."
     );
     if pin {
-        let pinning_provider = crate::config::resolve_pinning_provider(config_path)?;
+        let pinning_provider = crate::config::resolve_pinning_provider(config_path, data_dir).await?;
         let bytes = tokio::fs::read(out).await?;
         let cid = pinning_provider
             .pin(&bytes)
@@ -620,7 +620,7 @@ pub async fn doctor(data_dir: &Path, config_path: Option<std::path::PathBuf>) ->
             // config.toml -- no separate, potentially-divergent validation
             // logic. A config that fails to resolve here would fail `oag
             // serve` identically, just later and less conveniently.
-            match crate::config::resolve(Some(path.clone()), Some(data_dir.to_path_buf()), None) {
+            match crate::config::resolve(Some(path.clone()), Some(data_dir.to_path_buf()), None).await {
                 Ok(_) => println!("ok ({})", path.display()),
                 Err(e) => {
                     println!("FAIL ({e})");
@@ -688,7 +688,7 @@ pub async fn crawl(
 ) -> anyhow::Result<()> {
     let url = url::Url::parse(url).map_err(|e| anyhow::anyhow!("invalid URL '{url}': {e}"))?;
     let (crawler_config, llm_extractor, pinning_provider) =
-        crate::config::resolve_crawler_config(config_path, allow_private_networks_flag)?;
+        crate::config::resolve_crawler_config(config_path, allow_private_networks_flag, data_dir).await?;
 
     let graph = std::sync::Arc::new(open_graph(data_dir).await?);
     let crawler = oag_crawler::CrawlerService::new(graph, crawler_config, llm_extractor, pinning_provider);
@@ -711,18 +711,102 @@ pub async fn crawl(
 }
 
 /// Retrieve previously-pinned content directly from the configured provider
-/// (spec/29-ipfs-pinning.md) — no `data_dir`/`GraphService` involved, since
-/// this talks to IPFS, not to a peer's graph. Writes raw bytes to stdout
-/// (not JSON-wrapped) so it can be piped to a file/viewer, matching a real
-/// `ipfs cat`'s own behavior.
-pub async fn ipfs_cat(cid: &str, config_path: Option<std::path::PathBuf>) -> anyhow::Result<()> {
-    let (_, _, pinning_provider) = crate::config::resolve_crawler_config(config_path, false)?;
+/// (spec/29-ipfs-pinning.md) — no `GraphService` involved, since this talks
+/// to IPFS, not to a peer's graph. `data_dir` is only read by
+/// `pinning_provider = "embedded"`, to find its on-disk blockstore — must
+/// match the data dir the content was originally pinned under. Writes raw
+/// bytes to stdout (not JSON-wrapped) so it can be piped to a file/viewer,
+/// matching a real `ipfs cat`'s own behavior.
+pub async fn ipfs_cat(cid: &str, config_path: Option<std::path::PathBuf>, data_dir: &Path) -> anyhow::Result<()> {
+    let (_, _, pinning_provider) =
+        crate::config::resolve_crawler_config(config_path, false, data_dir).await?;
     let content = pinning_provider
         .fetch(cid)
         .await
-        .map_err(|e| anyhow::anyhow!("{e} (is [crawler].ipfs_pinning_provider set in config.toml?)"))?;
+        .map_err(|e| anyhow::anyhow!("{e} (is [ipfs].pinning_provider set in config.toml?)"))?;
     use std::io::Write;
     std::io::stdout().write_all(&content)?;
+    Ok(())
+}
+
+/// A whole small static site, generously sized but not unbounded -- same
+/// order of magnitude as the crawler's own `max_response_bytes` (10 MiB for
+/// one fetched page), see `docs/security.md`'s "Response/request size
+/// caps."
+const MAX_HOST_PAGE_TOTAL_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_HOST_PAGE_FILE_COUNT: usize = 200;
+
+/// Recursively collect `(relative_path, content)` pairs for every regular
+/// file under `dir`, using `/`-separated relative paths regardless of host
+/// OS (kubo's UnixFS path semantics, and every browser URL, expect `/`).
+/// Hand-rolled rather than pulling in `walkdir` -- a one-off recursive
+/// directory walk doesn't justify a new dependency, same posture as
+/// `oag-ipfs`'s own hand-rolled HTTP client.
+fn collect_directory_files(root: &Path, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) -> anyhow::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_directory_files(root, &path, out)?;
+        } else if path.is_file() {
+            let relative = path
+                .strip_prefix(root)?
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
+            out.push((relative, std::fs::read(&path)?));
+        }
+    }
+    Ok(())
+}
+
+/// Pin a local directory as one static site (spec/29-ipfs-pinning.md,
+/// "static page hosting" — `USER_INPUT_RECORD.md` Entry 19). Unlike `oag
+/// backup --pin` (one file), this builds a single UnixFS directory tree so
+/// a browser can resolve `index.html`, `css/style.css`, etc. all under one
+/// root CID.
+pub async fn ipfs_host_page(
+    dir: &Path,
+    config_path: Option<std::path::PathBuf>,
+    data_dir: &Path,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(dir.is_dir(), "{} is not a directory", dir.display());
+
+    let mut files = Vec::new();
+    collect_directory_files(dir, dir, &mut files)?;
+    anyhow::ensure!(!files.is_empty(), "{} contains no files to pin", dir.display());
+    anyhow::ensure!(
+        files.len() <= MAX_HOST_PAGE_FILE_COUNT,
+        "{} contains {} files, over this command's {MAX_HOST_PAGE_FILE_COUNT}-file sanity cap",
+        dir.display(),
+        files.len()
+    );
+    let total_bytes: u64 = files.iter().map(|(_, content)| content.len() as u64).sum();
+    anyhow::ensure!(
+        total_bytes <= MAX_HOST_PAGE_TOTAL_BYTES,
+        "{} is {total_bytes} bytes, over this command's {MAX_HOST_PAGE_TOTAL_BYTES}-byte sanity cap",
+        dir.display()
+    );
+    if !files.iter().any(|(path, _)| path == "index.html") {
+        println!(
+            "warning: no top-level index.html found -- this will pin successfully, but \
+             `oag serve`'s /ipfs-site/<cid> bootstrap page expects one at the directory root"
+        );
+    }
+
+    let pinning_provider = crate::config::resolve_pinning_provider(config_path, data_dir).await?;
+    let cid = pinning_provider
+        .pin_directory(&files)
+        .await
+        .map_err(|e| anyhow::anyhow!("{e} (is [ipfs].pinning_provider set in config.toml?)"))?;
+    println!("pinned {} file(s) to IPFS as a directory: {cid}", files.len());
+    println!("open it via a running `oag serve` (same [ipfs] config) at: /ipfs-site/{cid}");
+    println!(
+        "note: this CID is an unverified retrieval pointer only, same as every other pinned_cid \
+         in this project (spec/29-ipfs-pinning.md) -- not independently confirmed, never a trust \
+         signal."
+    );
     Ok(())
 }
 

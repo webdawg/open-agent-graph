@@ -84,8 +84,13 @@ suppression credential.
 A missing or invalid bearer token, or a token whose actor lacks the required permission, is
 rejected before any handler logic runs (`GraphError::InvalidApiKey` / `GraphError::PermissionDenied`).
 A handful of routes need no auth at all by design: `GET /api/v1/status` (so a peer can be health-
-checked without provisioning a credential) and `GET /metrics` (conventional for a scrape target —
-see `docs/api.md`).
+checked without provisioning a credential), `GET /metrics` (conventional for a scrape target —
+see `docs/api.md`), and `GET /ipfs-site/{cid}`/`GET /ipfs-site/_bundle.js` (spec/29-ipfs-pinning.md
+Phase 3) — a hosted site is meant to be publicly viewable like any other website, not gated behind
+a `graph:read` key a visitor would have no way to obtain. Unlike `/ui/*` (graph content, key-gated
+via `?key=`), these two routes never touch `GraphService` at all — they only ever hand a browser a
+CID, an optional IPFS dial address, and a static JS bundle; the actual content (whatever was pinned
+under that CID) is retrieved by the browser directly over bitswap/libp2p, not served by this peer.
 
 Peer-to-peer replication (`oag-sync`) is a *separate* trust boundary from actor API keys — see
 [Federation trust](#federation-trust-vs-data-trust) below.
@@ -149,6 +154,13 @@ treats a negative `LIMIT` as "no limit at all," not as zero or an error — conf
 with no cap on the way out to bound the response either. `GraphService::search` and
 `::semantic_search` (`crates/oag-graph/src/search.rs`/`semantic_search.rs`) now clamp `limit` to
 `[0, 1000]` before it ever reaches a query, at the one service layer REST/MCP/CLI all call through.
+
+`oag ipfs host-page` (spec/29-ipfs-pinning.md Phase 3) is a CLI tool, not an HTTP boundary, but
+gets the same discipline for the same reason: reading a local directory into memory before pinning
+it has no inherent upper bound otherwise. `MAX_HOST_PAGE_TOTAL_BYTES` (16 MiB) and
+`MAX_HOST_PAGE_FILE_COUNT` (200, `crates/oag-cli/src/commands.rs`) are checked before any content
+is read into memory for the actual pin call — generous for a small static site, not a general
+file-hosting limit.
 
 ## Crawler / SSRF defenses
 

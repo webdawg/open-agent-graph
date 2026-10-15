@@ -14,6 +14,28 @@ pub trait PinningProvider: Send + Sync {
     /// Retrieve previously-pinned content by CID.
     async fn fetch(&self, cid: &str) -> Result<Vec<u8>, IpfsError>;
 
+    /// Pin a whole directory as a single UnixFS tree, returning the root
+    /// directory's CID. `files` is `(relative_path, content)` pairs — e.g.
+    /// `("index.html", ...)`, `("css/style.css", ...)`. Distinct from `pin`
+    /// (one file, one CID) rather than a loop calling it once per file,
+    /// because a directory needs one UnixFS tree with a single root CID a
+    /// browser can resolve `/index.html`, `/css/style.css`, etc. under —
+    /// seeing this as "the next step on a future-work list," see
+    /// `spec/29-ipfs-pinning.md`.
+    async fn pin_directory(&self, files: &[(String, Vec<u8>)]) -> Result<String, IpfsError>;
+
+    /// This provider's own real, dialable multiaddrs for a browser to
+    /// connect directly to (e.g. for `GET /ipfs-site/{cid}`'s bootstrap
+    /// page) — empty for every provider except `EmbeddedIpfsProvider`,
+    /// which is the only one that *is* a directly-dialable libp2p node
+    /// itself (`KuboHttpProvider` talks to a separate Kubo process over
+    /// plain HTTP, which has no bearing on what a browser can dial).
+    /// Default empty rather than required, so adding this didn't need to
+    /// touch `DisabledProvider`/`KuboHttpProvider`.
+    async fn dialable_multiaddrs(&self) -> Vec<String> {
+        Vec::new()
+    }
+
     fn provider_name(&self) -> &'static str;
 }
 
@@ -30,6 +52,10 @@ impl PinningProvider for DisabledProvider {
     }
 
     async fn fetch(&self, _cid: &str) -> Result<Vec<u8>, IpfsError> {
+        Err(IpfsError::Disabled)
+    }
+
+    async fn pin_directory(&self, _files: &[(String, Vec<u8>)]) -> Result<String, IpfsError> {
         Err(IpfsError::Disabled)
     }
 
@@ -102,6 +128,38 @@ impl PinningProvider for KuboHttpProvider {
         let response = request.send().await?.error_for_status()?;
         let bytes = response.bytes().await?;
         Ok(bytes.to_vec())
+    }
+
+    async fn pin_directory(&self, files: &[(String, Vec<u8>)]) -> Result<String, IpfsError> {
+        let url = format!(
+            "{}/api/v0/add?recursive=true&wrap-with-directory=true&cid-version=1",
+            self.base_url.trim_end_matches('/')
+        );
+        let mut form = reqwest::multipart::Form::new();
+        for (relative_path, content) in files {
+            // Same "a part needs an explicit filename or it can be silently
+            // dropped" care as the single-file `pin` above -- here the
+            // filename is also load-bearing in a second way: kubo uses each
+            // part's filename as that file's path *inside* the resulting
+            // UnixFS directory, not just as a label.
+            let part = reqwest::multipart::Part::bytes(content.clone()).file_name(relative_path.clone());
+            form = form.part("file", part);
+        }
+        let mut request = self.client.post(url).multipart(form);
+        if let Some(api_key) = &self.api_key {
+            request = request.bearer_auth(api_key);
+        }
+        let response = request.send().await?.error_for_status()?;
+        let body = response.text().await?;
+        // Unlike single-file `pin`'s first line, a directory add returns one
+        // JSON object per file *and* per intermediate directory, with the
+        // wrapping root directory's own object always last -- that line's
+        // Hash is the one CID a caller can resolve every uploaded path
+        // under.
+        let last_line = body.lines().last().unwrap_or("");
+        let parsed: AddResponse =
+            serde_json::from_str(last_line).map_err(|_| IpfsError::EmptyResponse)?;
+        Ok(parsed.hash)
     }
 
     fn provider_name(&self) -> &'static str {
@@ -219,6 +277,62 @@ mod tests {
         let provider = DisabledProvider;
         assert!(matches!(provider.pin(b"x").await, Err(IpfsError::Disabled)));
         assert!(matches!(provider.fetch("cid").await, Err(IpfsError::Disabled)));
+        assert!(matches!(
+            provider.pin_directory(&[]).await,
+            Err(IpfsError::Disabled)
+        ));
         assert_eq!(provider.provider_name(), "disabled");
+    }
+
+    #[tokio::test]
+    async fn pins_a_directory_and_returns_the_root_cid() {
+        let app = Router::new().route(
+            "/api/v0/add",
+            post(|body: axum::body::Bytes| async move {
+                let raw = String::from_utf8_lossy(&body);
+                // Both files' relative paths must survive as part filenames
+                // -- kubo uses them as the path *inside* the resulting
+                // UnixFS directory, not just as a label.
+                assert!(raw.contains(r#"filename="index.html""#), "missing index.html part: {raw}");
+                assert!(
+                    raw.contains(r#"filename="css/style.css""#),
+                    "missing css/style.css part: {raw}"
+                );
+                // kubo's real response is one JSON object per file *plus*
+                // the wrapping directory, newline-separated, root last.
+                concat!(
+                    r#"{"Name":"index.html","Hash":"QmFile1","Size":"5"}"#, "\n",
+                    r#"{"Name":"css/style.css","Hash":"QmFile2","Size":"5"}"#, "\n",
+                    r#"{"Name":"","Hash":"QmRootDir","Size":"10"}"#,
+                )
+            }),
+        );
+        let base_url = spawn_fixture(app).await;
+
+        let provider = KuboHttpProvider::new(base_url, None);
+        let cid = provider
+            .pin_directory(&[
+                ("index.html".to_string(), b"<html>".to_vec()),
+                ("css/style.css".to_string(), b"body{}".to_vec()),
+            ])
+            .await
+            .unwrap();
+
+        // The root directory's CID (the last line), not either file's own.
+        assert_eq!(cid, "QmRootDir");
+    }
+
+    #[tokio::test]
+    async fn malformed_directory_add_response_is_a_typed_error() {
+        let app = Router::new().route("/api/v0/add", post(|| async { "not json" }));
+        let base_url = spawn_fixture(app).await;
+
+        let provider = KuboHttpProvider::new(base_url, None);
+        let err = provider
+            .pin_directory(&[("index.html".to_string(), b"<html>".to_vec())])
+            .await
+            .unwrap_err();
+
+        assert!(matches!(err, IpfsError::EmptyResponse));
     }
 }

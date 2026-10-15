@@ -21,6 +21,12 @@ pub struct AppState {
     /// own pool/identity is exactly as correct and needs no wiring through
     /// `oag serve`'s startup sequence at all.
     pub sync: SyncService,
+    /// The operator's own Kubo node's dialable libp2p WebSocket multiaddr
+    /// (`[ipfs].libp2p_ws_multiaddr`), if configured -- handed to a browser
+    /// loading `/ipfs-site/{cid}` as a direct dial target. `oag serve`
+    /// itself never dials it; this is purely informational for the browser
+    /// bundle (see `crates/oag-api/src/ipfs_site.rs`).
+    pub ipfs_libp2p_ws_multiaddr: Option<Arc<str>>,
 }
 
 impl AppState {
@@ -43,6 +49,7 @@ impl AppState {
             embedding_provider: Arc::new(oag_embeddings::DisabledProvider),
             crawler,
             sync,
+            ipfs_libp2p_ws_multiaddr: None,
         }
     }
 
@@ -60,6 +67,15 @@ impl AppState {
     /// config.toml actually resolves to.
     pub fn with_crawler(mut self, crawler: Arc<CrawlerService>) -> Self {
         self.crawler = crawler;
+        self
+    }
+
+    /// `new`'s default has no configured multiaddr -- this opts a real `oag
+    /// serve` process into whatever `[ipfs].libp2p_ws_multiaddr` resolves
+    /// to (unset by default, same opt-in posture as every other `[ipfs]`
+    /// setting).
+    pub fn with_ipfs_libp2p_ws_multiaddr(mut self, multiaddr: Option<Arc<str>>) -> Self {
+        self.ipfs_libp2p_ws_multiaddr = multiaddr;
         self
     }
 }

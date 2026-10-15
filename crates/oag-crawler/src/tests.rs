@@ -350,6 +350,10 @@ impl PinningProvider for FakePinningProvider {
         unimplemented!("not exercised by these tests")
     }
 
+    async fn pin_directory(&self, _files: &[(String, Vec<u8>)]) -> Result<String, oag_ipfs::IpfsError> {
+        unimplemented!("not exercised by these tests")
+    }
+
     fn provider_name(&self) -> &'static str {
         "fake"
     }
@@ -366,6 +370,10 @@ impl PinningProvider for FailingPinningProvider {
     }
 
     async fn fetch(&self, _cid: &str) -> Result<Vec<u8>, oag_ipfs::IpfsError> {
+        unimplemented!("not exercised by these tests")
+    }
+
+    async fn pin_directory(&self, _files: &[(String, Vec<u8>)]) -> Result<String, oag_ipfs::IpfsError> {
         unimplemented!("not exercised by these tests")
     }
 

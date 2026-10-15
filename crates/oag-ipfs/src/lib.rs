@@ -4,8 +4,10 @@
 //! pay for the HTTP client dependency, and so `oag-cli` can use it directly
 //! for `oag ipfs cat` without depending on all of `oag-crawler`.
 
+pub mod embedded;
 pub mod error;
 pub mod provider;
 
+pub use embedded::EmbeddedIpfsProvider;
 pub use error::IpfsError;
 pub use provider::{DisabledProvider, KuboHttpProvider, PinningProvider};

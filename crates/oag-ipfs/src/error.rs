@@ -9,4 +9,6 @@ pub enum IpfsError {
     Http(#[from] reqwest::Error),
     #[error("IPFS provider returned no CID")]
     EmptyResponse,
+    #[error("embedded IPFS node error: {0}")]
+    Embedded(String),
 }

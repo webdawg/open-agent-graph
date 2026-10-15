@@ -75,6 +75,16 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     }
 
     let embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider> = Arc::from(config.embedding_provider);
+    // `[ipfs].libp2p_ws_multiaddr` (an operator override, e.g. for NAT/a
+    // different public hostname) wins if set; otherwise, when
+    // `pinning_provider = "embedded"`, ask the provider itself for its real,
+    // just-bound dial address -- no separate daemon or manual config needed
+    // for the common case. Every other provider (`disabled`/`kubo`) answers
+    // this with an empty list, same as always.
+    let ipfs_dial_multiaddr = match &config.ipfs_libp2p_ws_multiaddr {
+        Some(configured) => Some(configured.clone()),
+        None => config.pinning_provider.dialable_multiaddrs().await.into_iter().next(),
+    };
     let crawler = Arc::new(oag_crawler::CrawlerService::new(
         graph.clone(),
         config.crawler_config,
@@ -84,7 +94,8 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
 
     let state = oag_api::AppState::new(graph.clone())
         .with_embedding_provider(embedding_provider.clone())
-        .with_crawler(crawler.clone());
+        .with_crawler(crawler.clone())
+        .with_ipfs_libp2p_ws_multiaddr(ipfs_dial_multiaddr.clone().map(Into::into));
     let rate_limit_state = state.clone();
     let rest_router = oag_api::build_router(state).merge(sync_router);
     let mcp_service =
@@ -106,6 +117,9 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         println!("oag: MCP listening on http://{}/mcp", config.listen);
     }
     println!("oag: sync listening on http://{}/oag/sync/v1", config.listen);
+    if let Some(multiaddr) = &ipfs_dial_multiaddr {
+        println!("oag: ipfs listening on {multiaddr}");
+    }
     if config.bootstrap_peers.is_empty() {
         println!("oag: no bootstrap_peers configured — replication is passive until a peer syncs with us, or `oag peer add` is used");
     } else {
