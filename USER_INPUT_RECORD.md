@@ -957,3 +957,107 @@ Chromium with its CSS actually applied, fetched purely over bitswap.
 Full mechanism, all judgment calls, and the "explicitly deferred" list (notably: the browser
 client could in principle be the same `rust-ipfs` crate compiled to WASM instead of a separate JS
 bundle — not pursued this round) are in `spec/29-ipfs-pinning.md`'s "Static page hosting" section.
+
+## Entry 21 — 2026-10-15
+
+> listen man - we are building new things - so get used to new stuff - what do we have to do to
+> implement this - one of the main goals of this system is to enable distributed healing services
+> globally - where people get paid for what they serve - right now we just trade work - like a
+> residential cdn kinda
+
+> we dont want to go that far, for now we just want records - announcments 'i gave user
+> xsdjfklasdjlaksdfjsdfal file dsjfklasdjkldsafjklsfda' - i have some ideas about this, but lets
+> figure it out, recticlium can be a communication back end - i dont know - this stuff needs to
+> mesh togehter
+
+> we have rules - i guess you can document this - but servers emit events like we are talking
+> about, but the thing is - and there are at least two scenerios - the server might be serviing
+> another node server, might be serving another node server - get it - we pass information across
+> a thousand hosts if we need. also, we have a supply chain audit mode where trusted nodes can man
+> in the middle and emit if the server is lieing - the node then gets a lower trust score or can
+> even be booted until it proves itself again. this is not just about malicious intent - we are
+> building a network that guards against any type of corruption - bad actor corruption, bad
+> hadware corruption, bug corruption etc
+
+A real pivot named, then deliberately narrowed: "paid for what they serve" (a residential-CDN-
+style incentive economy) is a genuine future goal, but the user explicitly declined to design
+payment/settlement right now ("we dont want to go that far, for now we just want records") in
+favor of the smaller, immediately buildable piece underneath it — a serving peer announcing what
+it served, to whom. Three requirements layered on top of that basic shape, in order:
+
+1. **Multi-hop, not just two-party.** "the server might be servicing another node server... we
+   pass information across a thousand hosts if we need" — a served request is not always
+   client-to-leaf; a server can be relaying to another server, and a chain of these can span many
+   hops. Today's relay machinery (`oag-sync`'s gossip — see `crates/oag-sync/src/service.rs`)
+   only produces *transitive event propagation* ("I learned about peer C's events through peer
+   B"), never a modeled, signed chain-of-custody for one specific transfer. There is no
+   `hop_count`/`via_peer` field or multi-hop relay-with-witness structure anywhere in the codebase
+   today (confirmed by direct search, not assumed).
+2. **Supply-chain audit mode.** Trusted nodes can sit in a position to independently observe a
+   transfer ("man in the middle") and emit a record if the serving node lied about what it sent.
+   This is new: `DisputeAssertionPayload` (`crates/oag-events/src/payload.rs`, `POST
+   /api/v1/assertions/{id}/dispute`) already lets any actor dispute any assertion with a reason,
+   but it's a bare two-party "I disagree" — there's no notion today of a *witness* independently
+   verifying a specific serving-announcement and the dispute carrying that verification weight
+   differently from an ordinary disagreement.
+3. **Consequence: trust score drop, or a full boot, reversible by re-proving.** This directly
+   contradicts the explicit design philosophy already written into `spec/24-ephemeral-peer-trust.md`
+   ("degrade, don't drop" — trust is a continuum, nothing nonzero is ever hard-excluded from
+   federation; the only hard floor, exactly `0.0`, is for a forked peer or one never heard from at
+   all). Also structurally new: trust scoring today is computed purely from a peer's own signed
+   presence heartbeats — a *third party's* witnessed report never feeds `trust_score` anywhere
+   right now. Confirmed by direct code read, not assumed.
+4. **Framing: corruption-resistance, not just fraud-resistance.** "not just about malicious intent
+   ... bad actor corruption, bad hardware corruption, bug corruption etc" — the audit mechanism is
+   meant to catch any way served content can diverge from what was promised, regardless of intent.
+   Nothing in the dispute model today distinguishes *why* a served artifact was wrong (malice vs.
+   bit-flip vs. bug) — today's `reason` field is free text, not a structured cause.
+
+Reticulum was floated as a possible transport for these announcements ("recticlium can be a
+communication back end - i dont know"). It already is one, structurally: `oag-reticulum`
+(`spec/15-reticulum-transport.md`) carries the exact same `hello`/`heads`/`events`/`peers` calls
+`oag-sync` makes over HTTP, just over a Reticulum `Link` instead — a serving-announcement event
+would propagate over either transport with no new wiring, since both are just alternate carriers
+for the same signed event stream. See `future_service_announcements_and_audit.md` memory and
+`spec/22-future-work.md`'s matching section for the full write-up; nothing has been built yet —
+this entry and its cross-references exist so a future session picks up the real open questions
+(hop-chain modeling, witness-weighted disputes, and the "degrade don't drop" vs. "can be booted"
+tension) rather than re-deriving them.
+
+## Entry 22 — 2026-10-15
+
+> trust in this new type of network is only earned when verified - you are right, we do not boot,
+> but the message from start to end has to get to the end correctly, if a node has figured out
+> delibertly or accidently how to corrupt a message then we fix that - messages in this network
+> can go through 50 nodes just to get at the end - all transmitting the same data - see how that
+> works
+
+Resolves Entry 21's "degrade, don't drop" vs. "can be booted" tension directly: no boot, confirmed.
+The real requirement is end-to-end correctness despite untrusted/corrupting intermediate hops, and
+the mechanism the user named — the same message going through on the order of 50 independent
+node-chains at once, all carrying identical data — makes trust judgment unnecessary for *detecting*
+corruption and only necessary for *degrading* a hop that's actually been caught: a receiving
+endpoint content-hashes what arrives (the same discipline this project already applies to evidence
+and IPFS CIDs), so a mismatch is a deterministic fact, not an accusation; comparing which of the
+many parallel paths agree on the correct hash against which don't, and which specific nodes are
+common to the failing paths but absent from the succeeding ones, attributes the corruption to a
+hop without needing a stationed witness or a man-in-the-middle at all. Delivery itself never
+breaks (the majority-hash copy wins, the rest are discarded) — "we fix that" splits into "the
+message still arrives correctly" (automatic, from redundancy) and "the verified-bad node's trust
+degrades" (never booted, and only after verification, never suspicion). Folded into
+`spec/22-future-work.md`'s existing section as a refinement, not a new entry in the future-work
+list — this is the resolution of Entry 21's open trust question, not a separate direction.
+
+## Entry 23 — 2026-10-15
+
+> it's the flood model, same mechanism
+
+Direct answer to the question left open at the end of Entry 22's write-up: the ~50-independent-
+node-chain redundant delivery is not a new propagation mechanism to design — it's Entry 18's
+already-named "fire like neuron mode" push-flood (`spec/22-future-work.md`'s "Flood/broadcast
+propagation with traffic-analysis resistance" section). One flood mechanism now serves two
+named purposes rather than two separate ones: anonymity (Entry 18's original motivation — flooding
+makes real and discarded traffic indistinguishable on the wire) and corruption attribution (Entry
+21/22's motivation — flooding the same message across many paths lets a receiver compare which
+paths agree on the content hash and localize which hop diverged). Both future-work write-ups
+updated to cross-reference each other as the same mechanism, not two designs.

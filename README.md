@@ -59,8 +59,10 @@ Also built:
 
 Captured, not yet built — see `docs/architecture.md`'s "What's deliberately not built yet" and
 [`spec/22-future-work.md`](spec/22-future-work.md): a real multi-peer trust-consensus mechanism,
-ephemeral (sub-second) micro-networks with sensor input as a graph "packet," and flood/broadcast
-propagation for traffic-analysis resistance.
+ephemeral (sub-second) micro-networks with sensor input as a graph "packet," flood/broadcast
+propagation for traffic-analysis resistance, and — one step toward a larger, explicitly deferred
+pay-for-serving economy — service-rendered announcements with multi-hop relay and a witness-based
+supply-chain audit mode.
 
 See `docs/` for the full picture — start with [`docs/architecture.md`](docs/architecture.md).
 

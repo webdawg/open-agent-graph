@@ -317,4 +317,22 @@ remain not yet implemented and change nothing described elsewhere in this docume
   multiplies bandwidth by fan-out, in real tension with
   `spec/18-rate-limiting-and-resource-limits.md` and the pull-over-push reasoning
   `docs/replication.md` itself gives. "Never ending morphing encryption" is named but not
-  specified.
+  specified. Confirmed as the same mechanism behind the redundant-delivery corruption-attribution
+  bullet above — one flood, two uses.
+- Service-rendered announcements, multi-hop relay, and witness-based supply-chain audit
+  (`USER_INPUT_RECORD.md` Entry 21). Not built. One step toward a larger, explicitly deferred goal
+  — a residential-CDN-style economy where peers get paid for what they serve — narrowed down to
+  just the record-keeping layer: a serving peer announcing what it served, to whom. The basic
+  announcement needs no new mechanism (an ordinary event with an open-string predicate, carried by
+  either existing transport); three things go beyond what's built: a modeled, signed multi-hop
+  chain of custody (today's only "relay" notion is `oag-sync`'s transitive gossip propagation, not
+  a per-transfer chain); a witness node independently verifying — not just disputing — a serving
+  claim (closest existing primitive is the bare two-party `DisputeAssertionPayload`); and
+  attributing corruption to a specific hop without a boot or a stationed witness — resolved, not
+  left open, by content-hash self-verification at the receiving end (no trust needed to detect a
+  mismatch) plus redundant multi-path delivery to localize *which* hop diverged, by comparing which
+  paths agree on the final hash. That redundant-delivery path is the same push-flood mechanism as
+  the "fire like neuron mode" bullet below, confirmed, not a second mechanism — one flood serving
+  both anonymity and corruption attribution. Trust degrades (never a hard boot, consistent with
+  `spec/24-ephemeral-peer-trust.md`'s "degrade, don't drop") only for a node *verified* this way as
+  the corruption source. See `spec/22-future-work.md`'s matching section.

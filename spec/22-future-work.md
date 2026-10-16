@@ -182,6 +182,84 @@ so it's unlikely to detect neutrinos specifically — what actually matters for 
 shape it shares with the other examples regardless of the physical quantity actually measured: a
 fixed, continuously-sampled environmental sensor at a known location, cheap and frequent to report.
 
+## Service-rendered announcements, multi-hop relay, and witness-based supply-chain audit
+
+Not implemented — captured from `USER_INPUT_RECORD.md` Entry 21. Named as one step toward a larger,
+explicitly *deferred* goal ("distributed healing services globally... where people get paid for
+what they serve" — a residential-CDN-style incentive economy); the user drew a firm line against
+designing payment/settlement now and asked only for the record-keeping layer underneath it: a
+serving peer announcing what it served, and to whom.
+
+**The basic shape needs no new mechanism.** A serving announcement is just an ordinary graph event
+— `(serving_peer, served_file_to, receiving_peer)` or similar, evidence carrying the CID/hash, byte
+size, and timestamp. `Predicate` is an open string type (`docs/predicates.md`), so this is a
+documentation addition, not a schema change, and it propagates over whichever transport is live —
+`oag-sync`'s HTTP gossip or `oag-reticulum`'s mesh transport (`spec/15-reticulum-transport.md`)
+carry the identical `hello`/`heads`/`events`/`peers` calls, so a serving-announcement event needs no
+new transport wiring either.
+
+**Three things named that do go beyond what's built:**
+
+1. **Multi-hop chains of custody.** "the server might be servicing another node server... we pass
+   information across a thousand hosts if we need" — a transfer isn't always client-to-leaf; a
+   server can relay to another server, chained arbitrarily deep. Today's only notion of "relay" is
+   `oag-sync`'s transitive event propagation (I learned about peer C's events through peer B,
+   `crates/oag-sync/src/service.rs`) — a byproduct of pull-based gossip, not a modeled, signed
+   chain-of-custody for one specific payload. No `hop_count`/`via_peer` field or multi-hop
+   relay-with-witness structure exists anywhere today.
+2. **Witness-based supply-chain audit.** A trusted node can sit in a position to independently
+   observe a transfer and emit a record if the serving node lied about what it actually sent — "man
+   in the middle" in the auditing sense, not the attack sense. The closest existing primitive is
+   `DisputeAssertionPayload` (`crates/oag-events/src/payload.rs`, `POST
+   /api/v1/assertions/{id}/dispute`) — any actor can already dispute any assertion with a free-text
+   reason — but that's a bare two-party "I disagree," with no concept of a witness's independent
+   verification carrying different evidentiary weight than an ordinary disagreement. Framed
+   explicitly as corruption-resistance, not just fraud-resistance — "not just about malicious intent
+   ... bad actor corruption, bad hardware corruption, bug corruption" — so the audit record would
+   ideally carry *why* a served artifact diverged (malice vs. bit-flip vs. bug), which today's
+   free-text `reason` field doesn't structure.
+3. **Trust consequence, in direct tension with an existing documented philosophy.** The ask is a
+   lower trust score or an outright, reversible boot for a node caught lying. `spec/
+   24-ephemeral-peer-trust.md` already commits, explicitly, to the opposite: "degrade, don't drop" —
+   trust is a continuum with exactly one hard floor (`0.0`, for a forked peer or one never heard
+   from at all); nothing else is ever hard-excluded from federation regardless of how low its
+   nonzero trust gets. Reconciling "can even be booted" with "degrade, don't drop" is a real open
+   design question, not resolved here. Separately, it's also a structurally new input: trust scoring
+   today is computed purely from a peer's own signed presence heartbeats
+   (`crates/oag-core`/`trust.rs`-style logic described in spec 24) — a third party's witnessed
+   report never feeds `trust_score` anywhere today.
+
+Genuinely open, not designed: what a serving-announcement's evidence shape should be; whether a
+hop-chain is a sequence of pairwise events or one signed multi-party structure; whether a witness
+dispute needs its own payload variant distinct from today's `DisputeAssertionPayload`, or reuses it
+with a richer `reason`.
+
+**Refinement (`USER_INPUT_RECORD.md` Entry 22): no boot, and no dedicated witness role needed —
+redundant multi-path delivery plus content-hash self-verification does the attribution.** The
+"degrade, don't drop" tension above is resolved, not left open: the user confirmed no boot. The
+mechanism that makes "trust only earned when verified" actually work without a boot or a stationed
+MITM witness: every relayed message carries a content-hash commitment (the same discipline already
+applied to evidence and IPFS CIDs elsewhere in this project), so a receiving endpoint never needs to
+extend trust to any hop — it simply checks whether what arrived hashes to what was promised,
+a deterministic match/mismatch, not a judgment call. Sending the same message through many (the
+user's example: up to ~50) independent node-chains turns bare *detection* into *attribution*: when
+most parallel paths agree on one hash and a minority disagree, the nodes common to the failing
+paths but absent from the succeeding ones are implicated — probabilistically with one message,
+more sharply as redundant deliveries accumulate over time. Two consequences follow, not one: (a)
+delivery still succeeds — the receiver keeps whichever copy matches the majority hash and discards
+the rest, so one corrupt hop among many redundant paths never breaks the message itself; (b) only
+a node *verified* (by this cross-path comparison) as the corruption source has its trust degraded —
+never booted, and never on mere suspicion. **Resolved (`USER_INPUT_RECORD.md` Entry 23): the path-diversity delivery mechanism is the same
+flood model as "Flood/broadcast propagation with traffic-analysis resistance," below — not a
+second mechanism to design.** One push-flood now serves two named purposes: Entry 18's original
+anonymity motivation (real and discarded traffic look identical on the wire) and this section's
+corruption-attribution motivation (the same message reaching many paths lets a receiver compare
+which paths agree on the final content hash and localize which hop diverged). Still undesigned: how
+much of the hash-mismatch/overlap bookkeeping is itself a new serving-announcement/evidence shape
+versus purely transport-layer; and whether every relayed message needs a content-hash commitment by
+default or only ones flowing through the flood path. The flood section's own open bandwidth-tension
+and "trusted members discard" scoping questions apply here unchanged — see that section.
+
 ## Flood/broadcast propagation with traffic-analysis resistance ("fire like neuron mode")
 
 Not implemented — captured from `USER_INPUT_RECORD.md` Entry 18. A deliberately different
@@ -210,3 +288,10 @@ Also named, not specified: a "never ending morphing encryption" where the encryp
 keeps changing hop to hop as a message propagates — same family as onion routing's layered
 re-encryption, but open what state morphs, what triggers a change, and what a receiver needs to
 undo it.
+
+**Second use confirmed (`USER_INPUT_RECORD.md` Entry 23): this same flood mechanism is also the
+delivery path for "Service-rendered announcements, multi-hop relay, and witness-based supply-chain
+audit," above.** A message flooded across ~50 independent node-chains serves double duty: the
+original anonymity purpose here, and corruption attribution there (comparing which flooded paths
+agree on the final content hash to localize a diverging hop). One mechanism, two consumers — not
+two mechanisms to build.
