@@ -6,7 +6,7 @@ pub mod random;
 pub mod signing;
 
 pub use canonical::canonical_json_bytes;
-pub use hashing::{blake3_content_hash, sha256_content_hash};
+pub use hashing::{blake3_content_hash, mutual_receipt_hash, sha256_content_hash};
 pub use identity::PeerIdentity;
 pub use peer_id::{PeerId, PeerIdParseError};
 pub use random::random_bytes_32;

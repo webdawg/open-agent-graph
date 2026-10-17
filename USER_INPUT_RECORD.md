@@ -1061,3 +1061,36 @@ makes real and discarded traffic indistinguishable on the wire) and corruption a
 21/22's motivation — flooding the same message across many paths lets a receiver compare which
 paths agree on the content hash and localize which hop diverged). Both future-work write-ups
 updated to cross-reference each other as the same mechanism, not two designs.
+
+### Response — Phase 1 (single-hop) implemented, same day
+
+After the design conversation above, the user asked to "start designing the serving-announcement
+predicate and evidence shape," picked `sent_to` as the predicate, and — when asked how the receipt
+should be shaped — said: "some type of mutual hash based on client and server randomness and the
+file they served - build this into the transfer and reception mechanism." Then: "lets go all the
+way - we can plan, but lets code."
+
+Built exactly that, scoped to the single-hop building block (multi-hop chains and the flood-based
+witness audit above remain untouched, as planned): a new `POST /oag/transfer/v1/fetch` endpoint,
+authenticated by the request's own Ed25519 signature rather than a bearer token; both sides
+contribute a random nonce; `oag_crypto::mutual_receipt_hash(client_nonce, server_nonce,
+content_hash)` is the hash neither side could produce alone. Both sides independently write
+`(peer:<server>, sent_to, peer:<client>)` into their own local graph, using the first real
+construction anywhere in the codebase of `ActorType::Peer` (defined since the project's start,
+never instantiated) and a new `EvidenceType::ServiceReceipt`. New CLI command `oag peer fetch
+<address> <server_peer_id> <cid>`.
+
+Found and fixed a real pre-existing gap along the way, not just new feature code: nothing external
+could ever set `Evidence.metadata` before this — `EvidenceInput`/`AddEvidencePayload`/
+`project_add_evidence` gained a generic `metadata: Option<JsonValue>` passthrough (merged with,
+never replacing, the existing `pinned_cid` → `{"ipfs_cid": ...}` convenience key), now usable by
+any evidence producer, not just this one.
+
+Live-verified end-to-end, same discipline as every other feature this session: two real `oag`
+processes (a server with `[ipfs].pinning_provider = "embedded"`, a real `oag backup --pin`'d file,
+and an independent client peer in a separate data directory), a real `oag peer fetch` over real
+HTTP — fetched bytes byte-identical to the original, both peers' independent `oag.sqlite`
+databases carrying the exact same `receipt_hash`, with correctly swapped `peer_role`/
+`counterparty_peer_id` on each side. 422+ existing tests still pass; `cargo clippy --workspace
+--all-targets` is clean. Full design and "what this is not" are in
+`spec/31-service-receipts.md`.

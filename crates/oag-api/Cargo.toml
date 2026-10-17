@@ -26,6 +26,7 @@ tracing.workspace = true
 sqlx.workspace = true
 chrono.workspace = true
 askama.workspace = true
+hex.workspace = true
 
 [dev-dependencies]
 http-body-util = "0.1"

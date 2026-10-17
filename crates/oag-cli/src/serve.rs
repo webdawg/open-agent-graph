@@ -85,6 +85,7 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         Some(configured) => Some(configured.clone()),
         None => config.pinning_provider.dialable_multiaddrs().await.into_iter().next(),
     };
+    let pinning_provider = config.pinning_provider.clone();
     let crawler = Arc::new(oag_crawler::CrawlerService::new(
         graph.clone(),
         config.crawler_config,
@@ -95,7 +96,8 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     let state = oag_api::AppState::new(graph.clone())
         .with_embedding_provider(embedding_provider.clone())
         .with_crawler(crawler.clone())
-        .with_ipfs_libp2p_ws_multiaddr(ipfs_dial_multiaddr.clone().map(Into::into));
+        .with_ipfs_libp2p_ws_multiaddr(ipfs_dial_multiaddr.clone().map(Into::into))
+        .with_pinning_provider(Some(pinning_provider));
     let rate_limit_state = state.clone();
     let rest_router = oag_api::build_router(state).merge(sync_router);
     let mcp_service =

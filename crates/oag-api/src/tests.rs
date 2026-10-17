@@ -892,3 +892,185 @@ async fn get_node_sources_returns_evidence_from_touching_edges() {
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0]["uri"], "https://example.com/sources-docs");
 }
+
+/// `spec/31-service-receipts.md`: a real two-peer exchange over
+/// `POST /oag/transfer/v1/fetch` -- a real `EmbeddedIpfsProvider` backing
+/// the "server" peer's content, a real signed request from an independent
+/// "client" peer's own identity/database, and independent verification +
+/// graph writes on both sides, modeled on
+/// `crates/oag-reticulum/tests/two_peer_sync.rs`'s real-two-peer style.
+mod transfer_tests {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use oag_core::{ActorType, ExtractionMethod};
+    use oag_crypto::PeerIdentity;
+    use oag_graph::GraphService;
+    use oag_ipfs::PinningProvider;
+    use tower::ServiceExt;
+
+    use crate::state::AppState;
+    use crate::transfer::{build_and_sign_request, now_unix, record_transfer, verify_receipt, TransferReceipt};
+
+    use super::temp_db_path;
+
+    #[tokio::test]
+    async fn server_and_client_end_up_with_matching_corroborating_records() {
+        // -- Server peer: a real embedded IPFS node with real pinned content.
+        let server_pool = oag_storage::open_pool(&temp_db_path("transfer-server")).await.unwrap();
+        let server_identity = PeerIdentity::generate();
+        let server_graph = std::sync::Arc::new(GraphService::new(server_pool, server_identity.clone()));
+
+        let ipfs_dir = std::env::temp_dir().join(format!(
+            "oag-api-transfer-test-ipfs-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&ipfs_dir).unwrap();
+        let provider = oag_ipfs::EmbeddedIpfsProvider::new(ipfs_dir, vec![]).await.unwrap();
+        let content = b"hello from the server peer".to_vec();
+        let cid = provider.pin(&content).await.unwrap();
+
+        let state = AppState::new(server_graph.clone()).with_pinning_provider(Some(std::sync::Arc::new(provider)));
+        let app = crate::build_router(state);
+
+        // -- Client peer: a completely separate identity and database.
+        let client_pool = oag_storage::open_pool(&temp_db_path("transfer-client")).await.unwrap();
+        let client_identity = PeerIdentity::generate();
+        let client_graph = GraphService::new(client_pool, client_identity.clone());
+
+        let client_nonce = oag_crypto::random_bytes_32();
+        let request = build_and_sign_request(&client_identity, &cid, &client_nonce, now_unix());
+
+        let response = app
+            .oneshot(
+                Request::post("/oag/transfer/v1/fetch")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let receipt_header = response
+            .headers()
+            .get("x-oag-transfer-receipt")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let receipt: TransferReceipt = serde_json::from_str(&receipt_header).unwrap();
+        let received_bytes = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(received_bytes.as_ref(), content.as_slice());
+
+        let content_hash = oag_crypto::blake3_content_hash(&received_bytes);
+        assert_eq!(content_hash, receipt.unsigned.content_hash);
+
+        let verified_server_peer_id = verify_receipt(&receipt, &cid, &client_nonce, now_unix()).unwrap();
+        assert_eq!(verified_server_peer_id, server_identity.peer_id());
+
+        // Client records its own corroborating assertion, independently.
+        let client_assertion_id = record_transfer(
+            &client_graph,
+            &client_identity,
+            &verified_server_peer_id,
+            &client_identity.peer_id(),
+            &cid,
+            received_bytes.len(),
+            &receipt.unsigned.client_nonce,
+            &receipt.unsigned.server_nonce,
+            &content_hash,
+            &receipt.unsigned.receipt_hash,
+            "client",
+            receipt.unsigned.served_at,
+            ExtractionMethod::Verification,
+        )
+        .await
+        .unwrap();
+
+        // Both sides' local databases now carry the same edge/receipt_hash,
+        // from each one's own perspective -- the "mutual" property: a third
+        // party seeing only one side's record couldn't have told whether it
+        // was fabricated, but having both (as oag-sync gossip would later
+        // deliver) shows they agree on a hash neither could compute alone.
+        let client_assertion = client_graph.get_assertion(client_assertion_id).await.unwrap().unwrap();
+        assert_eq!(client_assertion.extraction_method, ExtractionMethod::Verification);
+        let client_evidence = client_graph.list_evidence(client_assertion_id).await.unwrap();
+        assert_eq!(client_evidence.len(), 1);
+        assert_eq!(
+            client_evidence[0].metadata["receipt_hash"],
+            receipt.unsigned.receipt_hash
+        );
+        assert_eq!(client_evidence[0].metadata["peer_role"], "client");
+
+        // The server's own record, from its perspective, on the exact same
+        // edge (same subject/predicate/object -> same deterministic EdgeId).
+        let edge = server_graph.get_edge(client_assertion.edge_id).await.unwrap().unwrap();
+        assert_eq!(edge.predicate.as_str(), "sent_to");
+        let server_assertions = server_graph.list_assertions_for_node(edge.subject).await.unwrap();
+        assert_eq!(server_assertions.len(), 1);
+        let server_assertion_id = server_assertions[0].id;
+        assert_eq!(server_assertions[0].extraction_method, ExtractionMethod::Direct);
+        let server_evidence = server_graph.list_evidence(server_assertion_id).await.unwrap();
+        assert_eq!(server_evidence.len(), 1);
+        assert_eq!(
+            server_evidence[0].metadata["receipt_hash"],
+            receipt.unsigned.receipt_hash
+        );
+        assert_eq!(server_evidence[0].metadata["peer_role"], "server");
+        assert_eq!(server_evidence[0].content_hash.as_deref(), Some(content_hash.as_str()));
+
+        // Both are actors of the first real `ActorType::Peer` kind.
+        let server_actor = server_graph.get_actor(server_assertions[0].actor_id).await.unwrap().unwrap();
+        assert_eq!(server_actor.actor_type, ActorType::Peer);
+    }
+
+    #[tokio::test]
+    async fn disabled_provider_answers_service_unavailable() {
+        let pool = oag_storage::open_pool(&temp_db_path("transfer-disabled")).await.unwrap();
+        let identity = PeerIdentity::generate();
+        let graph = std::sync::Arc::new(GraphService::new(pool, identity));
+        let state = AppState::new(graph); // default: no pinning_provider configured
+        let app = crate::build_router(state);
+
+        let client_identity = PeerIdentity::generate();
+        let client_nonce = oag_crypto::random_bytes_32();
+        let request = build_and_sign_request(&client_identity, "bafyirrelevantcid", &client_nonce, now_unix());
+
+        let response = app
+            .oneshot(
+                Request::post("/oag/transfer/v1/fetch")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn tampered_request_signature_is_rejected_before_any_fetch_or_graph_write() {
+        let pool = oag_storage::open_pool(&temp_db_path("transfer-tampered")).await.unwrap();
+        let identity = PeerIdentity::generate();
+        let graph = std::sync::Arc::new(GraphService::new(pool, identity));
+        let state = AppState::new(graph);
+        let app = crate::build_router(state);
+
+        let client_identity = PeerIdentity::generate();
+        let client_nonce = oag_crypto::random_bytes_32();
+        let mut request = build_and_sign_request(&client_identity, "bafyirrelevantcid", &client_nonce, now_unix());
+        request.unsigned.cid = "bafyswappedcid".to_string(); // tamper after signing
+
+        let response = app
+            .oneshot(
+                Request::post("/oag/transfer/v1/fetch")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+}

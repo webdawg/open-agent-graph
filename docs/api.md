@@ -146,6 +146,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag peer reticulum-address` | Print this peer's Reticulum destination address, to share out-of-band |
 | `oag peer add-reticulum <address_hash> <via_tcp>` | One-shot sync with a peer reachable over Reticulum instead of HTTP |
 | `oag peer resolve <peer_id>` | Resolve a peer's long-word DNS address via a real TXT lookup (`spec/30-long-word-addressing.md`) |
+| `oag peer fetch <address> <server_peer_id> <cid> [--out <path>]` | Fetch pinned content directly from another peer, verify its mutual nonce-bound receipt, and record a corroborating `sent_to` assertion locally (`spec/31-service-receipts.md`) |
 | `oag replication status` | Durability view — see `docs/replication.md` |
 | `oag authority recompute` | Batch-recompute the PageRank-style `authority` signal |
 | `oag embeddings recompute` | Batch-recompute node embeddings for semantic search |

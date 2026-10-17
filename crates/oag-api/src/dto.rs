@@ -23,6 +23,10 @@ pub struct EvidenceRequest {
     /// An IPFS CID this evidence's content has already been pinned under
     /// (caller-asserted, unverified — see `spec/29-ipfs-pinning.md`).
     pub pinned_cid: Option<String>,
+    /// Free-form structured detail specific to `type` (`spec/31-service-receipts.md`
+    /// is the first caller). Merged with, never replacing, `pinned_cid`'s own
+    /// `{"ipfs_cid": ...}` key.
+    pub metadata: Option<serde_json::Value>,
 }
 
 impl EvidenceRequest {
@@ -36,6 +40,7 @@ impl EvidenceRequest {
             observed_at: self.observed_at.as_deref().map(parse_timestamp).transpose()?,
             retrieved_at: self.retrieved_at.as_deref().map(parse_timestamp).transpose()?,
             pinned_cid: self.pinned_cid,
+            metadata: self.metadata,
         })
     }
 }

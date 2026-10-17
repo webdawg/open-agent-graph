@@ -30,5 +30,5 @@ pub use redaction::Redaction;
 pub use resolve::ResolveOutcome;
 pub use roadmap::{RoadmapProposal, ROADMAP_PROPOSAL_HUB};
 pub use semantic_search::EmbeddingSummary;
-pub use service::{AuthContext, GraphService, PublicKeyProof};
+pub use service::{sign_actor_key_proof, AuthContext, GraphService, PublicKeyProof};
 pub use subgraph::{Subgraph, SubgraphNode};

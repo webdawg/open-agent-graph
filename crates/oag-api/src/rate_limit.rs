@@ -51,7 +51,13 @@ impl RateLimiter {
         }
     }
 
-    fn check(&self, key: &str) -> bool {
+    /// `pub`, not private, so a caller outside the `rate_limit_middleware`
+    /// pipeline — `transfer::fetch_with_receipt`
+    /// (`spec/31-service-receipts.md`), which has a real per-caller identity
+    /// (the signed request's `client_peer_id`) unlike the middleware's
+    /// bearer-token-or-"anonymous" keying — can reuse this exact fixed-window
+    /// logic with its own key, rather than reimplementing it.
+    pub fn check(&self, key: &str) -> bool {
         let mut windows = self.windows.lock().unwrap();
         let now = Instant::now();
 

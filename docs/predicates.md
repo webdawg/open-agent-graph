@@ -57,6 +57,7 @@ slightly differently still produce the same edge.
 | `repository_at` | The object is the source repository for the subject |
 | `documented_at` | The object is documentation for the subject |
 | `homepage` | The object is the subject's homepage |
+| `sent_to` | The subject (a `peer:<PeerId>` node) sent content directly to the object (another `peer:<PeerId>` node) — backed by a mutual nonce-bound receipt, see `spec/31-service-receipts.md` |
 
 ## Adding a predicate
 

@@ -91,4 +91,5 @@ pub const KNOWN_PREDICATES: &[&str] = &[
     "repository_at",
     "documented_at",
     "homepage",
+    "sent_to",
 ];

@@ -65,6 +65,12 @@ known_node_types! {
     place => "place",
     event => "event",
     capability => "capability",
+    // An OAG network peer, addressed as `peer:<PeerId>` (canonicalize.rs's
+    // `canonical_identifier`, spec/31-service-receipts.md) -- distinct from
+    // `ActorType::Peer`, which is an *actor* (who submitted something); this
+    // is the *node* identifying the peer itself as a subject/object a
+    // relationship can be about.
+    peer => "peer",
     unknown => "unknown",
 }
 

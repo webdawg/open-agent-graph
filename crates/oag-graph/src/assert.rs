@@ -23,6 +23,7 @@ const MAX_TITLE_LEN: usize = 512;
 const MAX_EXCERPT_LEN: usize = 4096;
 const MAX_CONTENT_HASH_LEN: usize = 128;
 const MAX_PINNED_CID_LEN: usize = 128;
+const MAX_METADATA_BYTES: usize = 8192;
 const MAX_REASON_LEN: usize = 2048;
 const MAX_EVIDENCE_PER_ASSERTION: usize = 20;
 const MAX_ALIAS_LEN: usize = 512;
@@ -58,6 +59,12 @@ pub struct EvidenceInput {
     /// caller-asserted and unverified, exactly like `content_hash`. See
     /// `spec/29-ipfs-pinning.md`.
     pub pinned_cid: Option<String>,
+    /// Free-form structured detail specific to the evidence's `evidence_type`
+    /// (`spec/31-service-receipts.md` is the first caller: a `service_receipt`'s
+    /// protocol/nonces/receipt hash). Merged with, never replacing,
+    /// `pinned_cid`'s own `{"ipfs_cid": ...}` key — see `build_evidence_metadata`
+    /// in `oag-events`.
+    pub metadata: Option<serde_json::Value>,
 }
 
 impl EvidenceInput {
@@ -67,6 +74,14 @@ impl EvidenceInput {
         check_opt_len("evidence.excerpt", &self.excerpt, MAX_EXCERPT_LEN)?;
         check_opt_len("evidence.content_hash", &self.content_hash, MAX_CONTENT_HASH_LEN)?;
         check_opt_len("evidence.pinned_cid", &self.pinned_cid, MAX_PINNED_CID_LEN)?;
+        if let Some(metadata) = &self.metadata {
+            let len = serde_json::to_string(metadata).map(|s| s.len()).unwrap_or(0);
+            if len > MAX_METADATA_BYTES {
+                return Err(GraphError::InvalidInput(format!(
+                    "evidence.metadata is {len} bytes, exceeds the {MAX_METADATA_BYTES}-byte limit"
+                )));
+            }
+        }
         Ok(())
     }
 }
@@ -185,6 +200,7 @@ impl GraphService {
                 observed_at: evidence.observed_at,
                 retrieved_at: evidence.retrieved_at,
                 pinned_cid: evidence.pinned_cid,
+                metadata: evidence.metadata,
             }),
             self.now(),
         )

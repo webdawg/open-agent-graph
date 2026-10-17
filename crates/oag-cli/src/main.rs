@@ -523,6 +523,22 @@ enum PeerCommand {
         #[arg(long)]
         config: Option<PathBuf>,
     },
+    /// Fetch pinned content directly from another peer over
+    /// `POST /oag/transfer/v1/fetch`, recording a mutual nonce-bound
+    /// receipt on both sides once verified (spec/31-service-receipts.md) --
+    /// distinct from `peer sync`'s graph-event replication.
+    Fetch {
+        /// The target peer's REST base address, e.g. `http://host:8080`.
+        address: String,
+        /// The target peer's expected `PeerId` -- the receipt is rejected,
+        /// and nothing is recorded, if it's signed by anyone else.
+        server_peer_id: String,
+        cid: String,
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -633,6 +649,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Peer { command: PeerCommand::Resolve { peer_id, domain, config } } => {
             commands::peer_resolve(&peer_id, domain, config).await
+        }
+        Command::Peer { command: PeerCommand::Fetch { address, server_peer_id, cid, out, data_dir } } => {
+            commands::peer_fetch(&data_dir, &address, &server_peer_id, &cid, out.as_deref()).await
         }
         Command::Crawl { url, data_dir, config, allow_private_networks } => {
             commands::crawl(&data_dir, &url, config, allow_private_networks).await

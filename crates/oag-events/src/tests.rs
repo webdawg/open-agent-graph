@@ -94,6 +94,7 @@ async fn full_vertical_slice_through_commit_local_event() {
             observed_at: Some(now),
             retrieved_at: Some(now),
             pinned_cid: None,
+            metadata: None,
         }),
         now,
     )
@@ -493,6 +494,7 @@ async fn pinned_cid_is_projected_into_evidence_metadata() {
             observed_at: Some(now),
             retrieved_at: Some(now),
             pinned_cid: Some("QmTestCid".into()),
+            metadata: None,
         }),
         now,
     )
@@ -550,6 +552,7 @@ async fn add_evidence_for_a_nonexistent_assertion_is_not_found() {
             observed_at: Some(now),
             retrieved_at: Some(now),
             pinned_cid: None,
+            metadata: None,
         }),
         now,
     )

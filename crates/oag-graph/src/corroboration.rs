@@ -85,6 +85,10 @@ fn evidence_type_weight(t: EvidenceType) -> f32 {
         EvidenceType::Manual | EvidenceType::UserObservation | EvidenceType::File => 0.45,
         EvidenceType::AgentObservation => 0.35,
         EvidenceType::WebPage => 0.3,
+        // A mutual-nonce receipt (spec/31-service-receipts.md) is bound by both
+        // parties' randomness plus the transferred content's hash — neither side
+        // can fabricate one alone, so it's weighted with the harder-to-fake tier.
+        EvidenceType::ServiceReceipt => 0.85,
         EvidenceType::Other => 0.15,
     }
 }

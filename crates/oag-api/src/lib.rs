@@ -11,6 +11,7 @@ pub mod rate_limit;
 pub mod state;
 #[cfg(test)]
 mod tests;
+pub mod transfer;
 
 pub use auth::{authenticate, authenticate_read};
 pub use state::AppState;
@@ -87,6 +88,11 @@ pub fn build_router(state: AppState) -> Router {
         // (spec/29-ipfs-pinning.md, "static page hosting").
         .route("/ipfs-site/_bundle.js", get(ipfs_site::bundle_js))
         .route("/ipfs-site/{cid}", get(ipfs_site::bootstrap_page))
+        // Also deliberately unauthenticated, for a different reason than
+        // `/ipfs-site/*` above: the request itself is signature-authenticated
+        // peer-to-peer (`spec/31-service-receipts.md`), which the bearer-token
+        // auth layer has no way to express.
+        .route("/oag/transfer/v1/fetch", post(transfer::fetch_with_receipt))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             rate_limit::rate_limit_middleware,

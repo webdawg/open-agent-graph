@@ -92,6 +92,15 @@ via `?key=`), these two routes never touch `GraphService` at all — they only e
 CID, an optional IPFS dial address, and a static JS bundle; the actual content (whatever was pinned
 under that CID) is retrieved by the browser directly over bitswap/libp2p, not served by this peer.
 
+A third route is unauthenticated by the bearer-token layer for a different reason:
+`POST /oag/transfer/v1/fetch` (`spec/31-service-receipts.md`) authenticates each request by its
+own Ed25519 signature (self-certifying `client_peer_id`/`client_public_key` pairing, the same
+posture `/oag/sync/v1/*` already uses below) rather than a bearer token, which has no natural way
+to authenticate one peer to another. It carries its own per-`client_peer_id` rate limit
+(`AppState.transfer_rate_limiter`) separate from the bearer-token middleware's single shared
+"anonymous" bucket, since a real IPFS fetch plus a graph write per request is meaningfully more
+expensive than most other routes.
+
 Peer-to-peer replication (`oag-sync`) is a *separate* trust boundary from actor API keys — see
 [Federation trust](#federation-trust-vs-data-trust) below.
 

@@ -74,6 +74,7 @@ instead.
 | [28-roadmap-governance.md](28-roadmap-governance.md) | Roadmap proposals as ordinary assertions, ranked by existing corroboration signals, with no new consensus mechanism |
 | [29-ipfs-pinning.md](29-ipfs-pinning.md) | Opt-in IPFS pinning for crawled evidence content, `oag ipfs cat`, and the `pinned_cid` retrieval pointer |
 | [30-long-word-addressing.md](30-long-word-addressing.md) | Deterministic word-based DNS addressing for a peer (`oag identity show`, `oag peer resolve`), `[addressing].domain` |
+| [31-service-receipts.md](31-service-receipts.md) | `sent_to` assertions backed by a mutual nonce-bound receipt for a direct peer-to-peer content transfer (`oag peer fetch`) |
 
 ## Founding context
 

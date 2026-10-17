@@ -184,7 +184,15 @@ fixed, continuously-sampled environmental sensor at a known location, cheap and 
 
 ## Service-rendered announcements, multi-hop relay, and witness-based supply-chain audit
 
-Not implemented — captured from `USER_INPUT_RECORD.md` Entry 21. Named as one step toward a larger,
+**The basic single-hop shape is now implemented — see [31-service-receipts.md](31-service-receipts.md).**
+`oag peer fetch` records a `(peer:<server>, sent_to, peer:<client>)` assertion on both sides,
+backed by a mutual nonce-bound receipt (`oag_crypto::mutual_receipt_hash`) neither side could
+fabricate alone — live-verified end-to-end with two real `oag` processes. Multi-hop relay chains
+and the witness/flood-based audit mechanism below remain unbuilt exactly as described; the
+"Refinement" paragraph further down (resolving the "degrade, don't drop" vs. "boot" tension) is
+unaffected by this implementation.
+
+Originally captured from `USER_INPUT_RECORD.md` Entry 21. Named as one step toward a larger,
 explicitly *deferred* goal ("distributed healing services globally... where people get paid for
 what they serve" — a residential-CDN-style incentive economy); the user drew a firm line against
 designing payment/settlement now and asked only for the record-keeping layer underneath it: a

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 
 /// The typed body of every distributed mutation (spec section 31, trimmed to
 /// the event types this milestone's REST/MCP/crawler surfaces actually
@@ -75,6 +76,14 @@ pub struct AddEvidencePayload {
     /// `USER_INPUT_RECORD.md` Entry 1).
     #[serde(default)]
     pub pinned_cid: Option<String>,
+    /// Free-form structured detail specific to `evidence_type` (e.g. a
+    /// `service_receipt`'s protocol/nonces/receipt hash,
+    /// `spec/31-service-receipts.md`) — merged with the `{"ipfs_cid": ...}`
+    /// convenience key `pinned_cid` already produces, not a replacement for
+    /// it. `#[serde(default)]` so events signed before this field existed
+    /// still deserialize ("legacy must flow", `USER_INPUT_RECORD.md` Entry 1).
+    #[serde(default)]
+    pub metadata: Option<JsonValue>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

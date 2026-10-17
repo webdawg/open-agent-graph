@@ -60,6 +60,7 @@ fn evidence_input(p: EvidenceParam) -> EvidenceInput {
         observed_at: None,
         retrieved_at: None,
         pinned_cid: p.pinned_cid,
+        metadata: None,
     }
 }
 

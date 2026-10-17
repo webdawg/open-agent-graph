@@ -44,6 +44,29 @@ pub struct PublicKeyProof {
     pub signature: [u8; 64],
 }
 
+/// Build a valid [`PublicKeyProof`] for a caller that already holds the
+/// signing key in-process (unlike `oag identity create-actor`'s
+/// `--public-key`/`--key-proof` flags, which exist for "the caller's own
+/// tooling" producing a proof entirely out-of-band). First real use:
+/// `spec/31-service-receipts.md`'s transfer endpoint declaring this peer's
+/// own `ActorType::Peer` actor on every request, idempotently, before
+/// asserting as it.
+pub fn sign_actor_key_proof(
+    signing_key: &oag_crypto::SigningKey,
+    actor_type: ActorType,
+    name: Option<&str>,
+    identity_uri: Option<&str>,
+) -> Result<PublicKeyProof, GraphError> {
+    let message = ActorKeyProofMessage { actor_type: actor_type.as_str(), name, identity_uri };
+    let canonical = oag_core::canonical_json_bytes(&message)
+        .map_err(|e| GraphError::InvalidInput(format!("failed to canonicalize proof message: {e}")))?;
+    let signature = oag_crypto::sign_with_domain(signing_key, ACTOR_KEY_PROOF_DOMAIN, &canonical);
+    Ok(PublicKeyProof {
+        public_key: signing_key.verifying_key().to_bytes(),
+        signature: signature.to_bytes(),
+    })
+}
+
 /// The single service layer REST and MCP both call into (spec section 90) —
 /// no business logic lives in either transport's handlers.
 pub struct GraphService {

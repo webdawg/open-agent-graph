@@ -27,6 +27,21 @@ pub struct AppState {
     /// itself never dials it; this is purely informational for the browser
     /// bundle (see `crates/oag-api/src/ipfs_site.rs`).
     pub ipfs_libp2p_ws_multiaddr: Option<Arc<str>>,
+    /// Backs `POST /oag/transfer/v1/fetch` (`spec/31-service-receipts.md`) --
+    /// `None` (the default) makes that endpoint answer every request with
+    /// `ProviderDisabled`, same opt-in posture as every other `[ipfs]`
+    /// setting. Distinct from `crawler`'s own internal provider handle
+    /// (`CrawlerService` holds one but doesn't expose it) -- this is the one
+    /// peer-to-peer serving needs to call directly.
+    pub pinning_provider: Option<Arc<dyn oag_ipfs::PinningProvider>>,
+    /// Per-caller (keyed by the signed request's `client_peer_id`, not the
+    /// bearer-token-or-"anonymous" keying `rate_limit_middleware` uses)
+    /// budget for `POST /oag/transfer/v1/fetch` -- a real IPFS fetch plus a
+    /// graph write per request is meaningfully more expensive than most
+    /// other routes, so it gets its own counter rather than sharing the
+    /// single global "anonymous" bucket every other unauthenticated route
+    /// (`/ipfs-site/*`) falls into.
+    pub transfer_rate_limiter: Arc<RateLimiter>,
 }
 
 impl AppState {
@@ -50,6 +65,8 @@ impl AppState {
             crawler,
             sync,
             ipfs_libp2p_ws_multiaddr: None,
+            pinning_provider: None,
+            transfer_rate_limiter: Arc::new(RateLimiter::default()),
         }
     }
 
@@ -76,6 +93,15 @@ impl AppState {
     /// setting).
     pub fn with_ipfs_libp2p_ws_multiaddr(mut self, multiaddr: Option<Arc<str>>) -> Self {
         self.ipfs_libp2p_ws_multiaddr = multiaddr;
+        self
+    }
+
+    /// `new`'s default has no provider -- this opts a real `oag serve`
+    /// process into whatever `[ipfs].pinning_provider` resolves to, the same
+    /// `Arc<dyn PinningProvider>` the crawler and `oag ipfs`/`oag backup
+    /// --pin` already share.
+    pub fn with_pinning_provider(mut self, provider: Option<Arc<dyn oag_ipfs::PinningProvider>>) -> Self {
+        self.pinning_provider = provider;
         self
     }
 }

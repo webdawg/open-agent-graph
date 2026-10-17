@@ -17,6 +17,9 @@ pub enum EvidenceType {
     Specification,
     UserObservation,
     AgentObservation,
+    /// A mutual, nonce-bound receipt for a peer-to-peer content transfer
+    /// (`spec/31-service-receipts.md`) — backs a `sent_to` assertion.
+    ServiceReceipt,
     Other,
 }
 
@@ -34,6 +37,7 @@ impl EvidenceType {
             EvidenceType::Specification => "specification",
             EvidenceType::UserObservation => "user_observation",
             EvidenceType::AgentObservation => "agent_observation",
+            EvidenceType::ServiceReceipt => "service_receipt",
             EvidenceType::Other => "other",
         }
     }
@@ -51,6 +55,7 @@ impl EvidenceType {
             "specification" => EvidenceType::Specification,
             "user_observation" => EvidenceType::UserObservation,
             "agent_observation" => EvidenceType::AgentObservation,
+            "service_receipt" => EvidenceType::ServiceReceipt,
             "other" => EvidenceType::Other,
             _ => return None,
         })

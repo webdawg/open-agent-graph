@@ -3718,6 +3718,7 @@ dependencies = [
  "askama",
  "axum",
  "chrono",
+ "hex",
  "http-body-util",
  "oag-core",
  "oag-crawler",

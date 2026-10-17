@@ -126,6 +126,26 @@ async fn project_assert_relation(
     Ok(())
 }
 
+/// Merges `pinned_cid`'s `{"ipfs_cid": ...}` convenience key into whatever
+/// free-form `metadata` object the caller supplied (added
+/// `spec/31-service-receipts.md`) — `pinned_cid` always wins on key
+/// collision, since it's the validated, typed field. A non-object
+/// `metadata` value (or none at all) starts from an empty object rather than
+/// rejecting the event; defensive, not expected in practice since callers
+/// build this from a typed Rust struct, not raw JSON.
+fn build_evidence_metadata(pinned_cid: &Option<String>, metadata: &Option<serde_json::Value>) -> serde_json::Value {
+    let mut base = match metadata {
+        Some(serde_json::Value::Object(map)) => serde_json::Value::Object(map.clone()),
+        _ => serde_json::json!({}),
+    };
+    if let Some(cid) = pinned_cid {
+        if let serde_json::Value::Object(map) = &mut base {
+            map.insert("ipfs_cid".to_string(), serde_json::Value::String(cid.clone()));
+        }
+    }
+    base
+}
+
 async fn project_add_evidence(
     conn: &mut SqliteConnection,
     event_id: oag_core::EventId,
@@ -148,10 +168,7 @@ async fn project_add_evidence(
         content_hash: p.content_hash.clone(),
         observed_at: p.observed_at,
         retrieved_at: p.retrieved_at,
-        metadata: match &p.pinned_cid {
-            Some(cid) => serde_json::json!({ "ipfs_cid": cid }),
-            None => serde_json::json!({}),
-        },
+        metadata: build_evidence_metadata(&p.pinned_cid, &p.metadata),
     };
     assertions::insert_evidence(conn, &evidence).await?;
     events::add_ref(conn, event_id, "assertion", assertion_id.as_hash().as_bytes()).await?;
