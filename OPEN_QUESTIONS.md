@@ -369,6 +369,33 @@ Format: question, assumption I'm running with, status.
   and checks a real, legitimate peer introduced via gossip is still correctly rejected once full;
   the 50-peer chaos convergence test (well under the cap) still passes unaffected. Status: resolved.
 
+## Multi-hop relay for service receipts (spec/31-service-receipts.md Phase 2)
+
+- **Static, operator-configured relay topology, not automatic CID/peer discovery or routing.**
+  `[transfer].relay_peers` is a plain list an operator writes by hand; a chain exists exactly as
+  deep as each hop's own config points onward. Assumption: real content-routing/discovery (how
+  would a peer even learn *which* upstream peer has a given CID without being told?) is a
+  separate, much bigger, genuinely unbuilt problem — scoping this to "the operator already knows
+  and says so" keeps Phase 2 implementable without pretending to solve that. Status: open (revisit
+  if/when a real discovery mechanism exists elsewhere in the project to hook into).
+- **Loop/amplification protection is a liveness safeguard, not a security boundary, so it doesn't
+  need its own signature.** `relay_hops_remaining`/`relay_path` are ordinary fields on the already-
+  signed `UnsignedTransferRequest` — each hop re-signs its own fresh outgoing request (never
+  forwards one verbatim), so they're exactly as tamper-evident as every other field already was.
+  Nothing stops an operator from configuring a relay loop in `config.toml` itself, but that's a
+  self-inflicted misconfiguration, caught at runtime by `relay_path`'s cycle check and
+  `relay_hops_remaining`'s budget, not something to design access control around. Status: resolved.
+- **A relaying hop does not cache/pin the content it relayed.** Every repeated fetch for the same
+  `cid` through the same relay re-relays from scratch. Assumption: correct-but-not-optimized is the
+  right v1 scope here, same as several other "revisit if it becomes a real problem" decisions in
+  this file — caching would also raise a genuinely new question (how long does a relay keep
+  content it was never asked to pin?) not worth answering speculatively. Status: open (revisit if
+  relay-heavy usage shows this mattering).
+- **A relay tries its configured upstream peers in listed order, first success wins** — not
+  parallel/fastest-wins, and not retried if the first configured peer is simply slow rather than
+  failed. Assumption: simplest correct behavior for a feature with no production traffic yet.
+  Status: open.
+
 ## Concurrent local commits from the same peer could race (spec section 38)
 
 - **`commit_local_event`'s own doc comment claimed concurrent calls "serialize correctly against

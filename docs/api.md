@@ -146,7 +146,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag peer reticulum-address` | Print this peer's Reticulum destination address, to share out-of-band |
 | `oag peer add-reticulum <address_hash> <via_tcp>` | One-shot sync with a peer reachable over Reticulum instead of HTTP |
 | `oag peer resolve <peer_id>` | Resolve a peer's long-word DNS address via a real TXT lookup (`spec/30-long-word-addressing.md`) |
-| `oag peer fetch <address> <server_peer_id> <cid> [--out <path>]` | Fetch pinned content directly from another peer, verify its mutual nonce-bound receipt, and record a corroborating `sent_to` assertion locally (`spec/31-service-receipts.md`) |
+| `oag peer fetch <address> <server_peer_id> <cid> [--out <path>] [--max-hops <n>]` | Fetch pinned content directly from another peer, verify its mutual nonce-bound receipt, and record a corroborating `sent_to` assertion locally (`spec/31-service-receipts.md`). `--max-hops` (default `8`) permits `address` to relay the fetch onward to its own configured peers if it doesn't have the content locally (Phase 2) |
 | `oag replication status` | Durability view — see `docs/replication.md` |
 | `oag authority recompute` | Batch-recompute the PageRank-style `authority` signal |
 | `oag embeddings recompute` | Batch-recompute node embeddings for semantic search |
@@ -169,6 +169,8 @@ Sections: `[data]`, `[server]`, `[search]` (semantic search / embeddings, disabl
 per-restart identity + trust windows, `spec/24-ephemeral-peer-trust.md`), `[cluster]` (opt-in
 signed cluster membership + its own gossip cadence, `spec/26-peer-clustering.md`), `[ipfs]` (opt-in
 pinning provider, disabled by default, `spec/29-ipfs-pinning.md`), `[addressing]` (long-word DNS
-addressing domain, unset by default, `spec/30-long-word-addressing.md`). Every section has a safe
-default; an empty or absent `config.toml` is a fully functional single-peer, no-external-service
-configuration. `OAG_<SECTION>_<KEY>` environment variables override file values.
+addressing domain, unset by default, `spec/30-long-word-addressing.md`), `[transfer]` (multi-hop
+relay peers for `POST /oag/transfer/v1/fetch`, empty by default, `spec/31-service-receipts.md`
+Phase 2). Every section has a safe default; an empty or absent `config.toml` is a fully functional
+single-peer, no-external-service configuration. `OAG_<SECTION>_<KEY>` environment variables
+override file values.

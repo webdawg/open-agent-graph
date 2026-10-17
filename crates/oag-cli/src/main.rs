@@ -536,6 +536,12 @@ enum PeerCommand {
         cid: String,
         #[arg(long)]
         out: Option<PathBuf>,
+        /// How many times `address` itself may relay this request onward to
+        /// one of its own configured `[transfer].relay_peers` if it doesn't
+        /// have `cid` pinned locally (Phase 2, spec/31-service-receipts.md).
+        /// `0` requires `address` to answer only from its own local pin.
+        #[arg(long, default_value_t = 8)]
+        max_hops: u8,
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
@@ -650,8 +656,8 @@ async fn main() -> anyhow::Result<()> {
         Command::Peer { command: PeerCommand::Resolve { peer_id, domain, config } } => {
             commands::peer_resolve(&peer_id, domain, config).await
         }
-        Command::Peer { command: PeerCommand::Fetch { address, server_peer_id, cid, out, data_dir } } => {
-            commands::peer_fetch(&data_dir, &address, &server_peer_id, &cid, out.as_deref()).await
+        Command::Peer { command: PeerCommand::Fetch { address, server_peer_id, cid, out, max_hops, data_dir } } => {
+            commands::peer_fetch(&data_dir, &address, &server_peer_id, &cid, out.as_deref(), max_hops).await
         }
         Command::Crawl { url, data_dir, config, allow_private_networks } => {
             commands::crawl(&data_dir, &url, config, allow_private_networks).await

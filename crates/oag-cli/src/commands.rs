@@ -81,12 +81,20 @@ pub async fn peer_sync(data_dir: &Path, peer_id_or_url: &str) -> anyhow::Result<
 /// sync`'s graph-event replication, and from `/ipfs-site/{cid}`'s
 /// browser/bitswap serving (this is peer-to-peer, not browser-to-peer, and
 /// fully OAG-owned rather than riding on third-party bitswap).
+///
+/// `max_hops` is how many times `address` itself may relay this request on
+/// to one of *its own* configured `[transfer].relay_peers` if it doesn't
+/// have `cid` pinned locally (Phase 2, spec/31) — set to `0` to require
+/// `address` to answer only from its own local pin. This CLI call is always
+/// exactly one HTTP round trip either way; relaying (if any) happens
+/// entirely on the server side, invisibly to this command.
 pub async fn peer_fetch(
     data_dir: &Path,
     address: &str,
     expected_server_peer_id: &str,
     cid: &str,
     out: Option<&std::path::Path>,
+    max_hops: u8,
 ) -> anyhow::Result<()> {
     let expected_server_peer_id: oag_crypto::PeerId = expected_server_peer_id
         .parse()
@@ -94,72 +102,30 @@ pub async fn peer_fetch(
 
     let graph = open_graph(data_dir).await?;
     let identity = graph.identity();
-
-    let client_nonce = oag_crypto::random_bytes_32();
-    let request = oag_api::transfer::build_and_sign_request(identity, cid, &client_nonce, oag_api::transfer::now_unix());
-
-    let url = format!("{}/oag/transfer/v1/fetch", address.trim_end_matches('/'));
     let http = reqwest::Client::new();
-    let response = http.post(&url).json(&request).send().await?;
-    if !response.status().is_success() {
-        let body = response.text().await.unwrap_or_default();
-        anyhow::bail!("transfer request failed: {body}");
-    }
 
-    let receipt_header = response
-        .headers()
-        .get("x-oag-transfer-receipt")
-        .ok_or_else(|| anyhow::anyhow!("response missing x-oag-transfer-receipt header"))?
-        .to_str()
-        .map_err(|e| anyhow::anyhow!("invalid receipt header encoding: {e}"))?
-        .to_string();
-    let receipt: oag_api::transfer::TransferReceipt = serde_json::from_str(&receipt_header)?;
-    let content = response.bytes().await?.to_vec();
-
-    let content_hash = oag_crypto::blake3_content_hash(&content);
-    if content_hash != receipt.unsigned.content_hash {
-        anyhow::bail!(
-            "content hash mismatch: received content hashes to {content_hash}, receipt claims {}",
-            receipt.unsigned.content_hash
-        );
-    }
-
-    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs() as i64;
-    let verified_server_peer_id = oag_api::transfer::verify_receipt(&receipt, cid, &client_nonce, now)
-        .map_err(|e| anyhow::anyhow!("receipt verification failed: {e}"))?;
-    if verified_server_peer_id != expected_server_peer_id {
-        anyhow::bail!(
-            "receipt signed by {verified_server_peer_id}, not the expected {expected_server_peer_id} \
-             -- refusing to record a corroborating assertion"
-        );
-    }
-
-    if let Some(path) = out {
-        std::fs::write(path, &content)?;
-    }
-
-    oag_api::transfer::record_transfer(
+    let verified = oag_api::transfer::fetch_and_verify(
+        &http,
         &graph,
         identity,
-        &verified_server_peer_id,
-        &identity.peer_id(),
+        address,
+        &expected_server_peer_id,
         cid,
-        content.len(),
-        &receipt.unsigned.client_nonce,
-        &receipt.unsigned.server_nonce,
-        &content_hash,
-        &receipt.unsigned.receipt_hash,
-        "client",
-        receipt.unsigned.served_at,
-        oag_core::ExtractionMethod::Verification,
+        max_hops,
+        &[],
     )
-    .await?;
+    .await
+    .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    if let Some(path) = out {
+        std::fs::write(path, &verified.content)?;
+    }
 
     println!("verified:       true");
-    println!("content_hash:   {content_hash}");
-    println!("receipt_hash:   {}", receipt.unsigned.receipt_hash);
-    println!("server_peer_id: {verified_server_peer_id}");
-    println!("bytes:          {}", content.len());
+    println!("content_hash:   {}", verified.content_hash);
+    println!("receipt_hash:   {}", verified.receipt_hash);
+    println!("server_peer_id: {}", verified.server_peer_id);
+    println!("bytes:          {}", verified.content.len());
     if let Some(path) = out {
         println!("written to:     {}", path.display());
     }

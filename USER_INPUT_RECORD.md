@@ -1094,3 +1094,34 @@ databases carrying the exact same `receipt_hash`, with correctly swapped `peer_r
 `counterparty_peer_id` on each side. 422+ existing tests still pass; `cargo clippy --workspace
 --all-targets` is clean. Full design and "what this is not" are in
 `spec/31-service-receipts.md`.
+
+### Response — Phase 2 (static multi-hop relay), same day
+
+Continued without a new prompt, picking up Entry 21's still-unbuilt "the server might be
+servicing another node server... we pass information across a thousand hosts if we need." A
+server configured with `[transfer].relay_peers` that misses its own local pin on a `cid` now acts
+as the *client* of one of its own statically configured upstream peers (reusing the exact same
+request/verify/record machinery `oag peer fetch` already used), then continues serving downstream
+as if it had the content all along. Each hop stays an entirely independent, freshly re-signed
+pairwise exchange, exactly as the original spec's "each hop here is independent" language
+committed to — no new signed multi-party chain-of-custody structure, consistent with Phase 1's own
+"explicitly deferred" framing of this. `relay_hops_remaining`/`relay_path` (both backward-
+compatible via `#[serde(default)]`) bound the chain depth and prevent a relay loop; a relaying
+hop's own evidence record gets one new metadata field, `relayed_via`, so a later audit pass could
+follow which hops were relays versus origins.
+
+Deliberately *not* built: any automatic CID-to-peer discovery or routing — `relay_peers` is a
+plain, hand-written, operator-configured list; a chain exists exactly as deep as each hop's own
+config points onward. That's recorded as a real, still-open design question
+(`OPEN_QUESTIONS.md`), not quietly assumed.
+
+Live-verified with three real `oag` processes, no shortcuts: an origin peer with content pinned;
+a relay peer with `relay_peers` pointing at the origin and nothing pinned locally itself; a client
+that has never heard of the origin at all, fetching only from the relay. Confirmed: the client's
+received bytes are byte-identical to the origin's; the relay's own database independently ends up
+with *two* records on its own `peer:<id>` node — a `direct` one serving the client (carrying
+`relayed_via` pointing at the origin) and a `verification` one from its own fetch of the origin —
+with the receipt hashes correctly paired leg-by-leg (client↔relay share one `receipt_hash`,
+relay↔origin share a different one); the origin's own record names the relay, never the original
+client, as its counterparty, since it was never contacted directly. All existing tests still
+pass; `cargo clippy --workspace --all-targets` clean.

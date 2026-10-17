@@ -51,6 +51,23 @@ pub struct UnsignedTransferRequest {
     /// Hex-encoded 32 random bytes (`oag_crypto::random_bytes_32`).
     pub client_nonce: String,
     pub requested_at: i64,
+    /// Multi-hop relay (spec/31-service-receipts.md Phase 2): how many more
+    /// times a server that doesn't have `cid` locally may forward this
+    /// request to one of its own configured `[transfer].relay_peers` before
+    /// giving up. `0` (the default, via `#[serde(default)]` — an old client
+    /// that predates this field) means "never relay," not "relay forever."
+    /// Each hop that relays decrements this and re-signs an entirely new
+    /// request as *its own* client of the next hop — this is never
+    /// forwarded verbatim, so it carries no multi-party signature structure,
+    /// consistent with "each hop here is independent" in the original spec.
+    #[serde(default)]
+    pub relay_hops_remaining: u8,
+    /// Peer ids (string form) already visited in this relay chain, oldest
+    /// first — lets a relaying server refuse to forward to a peer already
+    /// in the chain (a cycle) rather than relying on `relay_hops_remaining`
+    /// alone to eventually terminate it.
+    #[serde(default)]
+    pub relay_path: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,6 +126,11 @@ pub enum TransferError {
     Graph(#[from] oag_graph::GraphError),
     #[error("internal error: {0}")]
     Internal(String),
+    /// Local fetch missed and either no `[transfer].relay_peers` are
+    /// configured, every configured one refused/failed, or
+    /// `relay_hops_remaining` was already `0` on the incoming request.
+    #[error("content not available locally and could not be relayed")]
+    RelayFailed,
 }
 
 impl IntoResponse for TransferError {
@@ -124,6 +146,7 @@ impl IntoResponse for TransferError {
             | TransferError::ClockSkew => StatusCode::UNAUTHORIZED,
             TransferError::ProviderDisabled => StatusCode::SERVICE_UNAVAILABLE,
             TransferError::Ipfs(_) => StatusCode::NOT_FOUND,
+            TransferError::RelayFailed => StatusCode::BAD_GATEWAY,
             TransferError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             TransferError::Graph(_) | TransferError::Internal(_) => {
                 tracing::error!(error = %self, "transfer endpoint internal error");
@@ -142,15 +165,19 @@ fn decode_64(s: &str) -> Option<[u8; 64]> {
     hex::decode(s).ok().and_then(|v| v.try_into().ok())
 }
 
-/// Build and sign a fresh request (used by the CLI client). Takes
-/// `requested_at` explicitly, rather than reading the clock itself, so
+/// Build and sign a fresh request (used by the CLI client, and by a
+/// relaying server building a fresh request of its own to the next hop).
+/// Takes `requested_at` explicitly, rather than reading the clock itself, so
 /// tests can exercise `verify_request`'s clock-skew check deterministically
 /// (same reasoning as `oag-sync`'s `presence::build_and_sign`).
+#[allow(clippy::too_many_arguments)]
 pub fn build_and_sign_request(
     identity: &PeerIdentity,
     cid: &str,
     client_nonce: &[u8; 32],
     requested_at: i64,
+    relay_hops_remaining: u8,
+    relay_path: &[String],
 ) -> TransferRequest {
     let unsigned = UnsignedTransferRequest {
         cid: cid.to_string(),
@@ -158,6 +185,8 @@ pub fn build_and_sign_request(
         client_public_key: hex::encode(identity.verifying_key().to_bytes()),
         client_nonce: hex::encode(client_nonce),
         requested_at,
+        relay_hops_remaining,
+        relay_path: relay_path.to_vec(),
     };
     let canonical = oag_core::canonical_json_bytes(&unsigned).expect("UnsignedTransferRequest always serializes");
     let signature = sign_with_domain(identity.signing_key(), TRANSFER_REQUEST_DOMAIN, &canonical);
@@ -293,6 +322,7 @@ pub async fn record_transfer(
     peer_role: &'static str,
     served_at: i64,
     extraction_method: ExtractionMethod,
+    relayed_via: Option<&PeerId>,
 ) -> Result<oag_core::AssertionId, TransferError> {
     let proof = sign_actor_key_proof(local_identity.signing_key(), ActorType::Peer, None, None)?;
     let actor_id = graph
@@ -326,6 +356,26 @@ pub async fn record_transfer(
         )
         .await?;
 
+    let mut metadata = serde_json::json!({
+        "protocol": "oag-transfer-v1",
+        "byte_size": byte_size,
+        "peer_role": peer_role,
+        "counterparty_peer_id": counterparty_peer_id.to_string(),
+        "client_nonce": client_nonce_hex,
+        "server_nonce": server_nonce_hex,
+        "receipt_hash": receipt_hash,
+    });
+    // Phase 2 (multi-hop relay): present only on the server-side record of a
+    // hop that itself had to relay this content from an upstream peer,
+    // rather than serving from its own local pin -- lets a later audit pass
+    // reconstruct which hops were relays versus origins by following this
+    // field across records that share a `content_hash`, without inventing
+    // any new signed multi-party chain structure (see spec/31's "Explicitly
+    // deferred" section for why that's still deliberately not built).
+    if let Some(via) = relayed_via {
+        metadata["relayed_via"] = serde_json::Value::String(via.to_string());
+    }
+
     graph
         .add_evidence(
             &auth,
@@ -335,21 +385,169 @@ pub async fn record_transfer(
                 content_hash: Some(content_hash.to_string()),
                 observed_at: Some(served_at),
                 pinned_cid: Some(cid.to_string()),
-                metadata: Some(serde_json::json!({
-                    "protocol": "oag-transfer-v1",
-                    "byte_size": byte_size,
-                    "peer_role": peer_role,
-                    "counterparty_peer_id": counterparty_peer_id.to_string(),
-                    "client_nonce": client_nonce_hex,
-                    "server_nonce": server_nonce_hex,
-                    "receipt_hash": receipt_hash,
-                })),
+                metadata: Some(metadata),
                 ..Default::default()
             },
         )
         .await?;
 
     Ok(assertion_id)
+}
+
+/// A statically operator-configured upstream peer (`[transfer].relay_peers`
+/// in `config.toml`) this peer may forward a cache-miss fetch to. Static,
+/// operator-chosen topology, not automatic CID/peer discovery/routing --
+/// that's a separate, much bigger, unbuilt problem (see `OPEN_QUESTIONS.md`).
+#[derive(Debug, Clone)]
+pub struct RelayPeer {
+    pub address: String,
+    pub peer_id: PeerId,
+}
+
+/// The result of successfully fetching and verifying content from another
+/// peer, whether that's the CLI's own `oag peer fetch` or a server relaying
+/// a cache miss to an upstream peer on a caller's behalf.
+pub struct VerifiedFetch {
+    pub content: Vec<u8>,
+    pub content_hash: String,
+    pub receipt_hash: String,
+    pub server_peer_id: PeerId,
+}
+
+/// Fetch `cid` directly from the peer at `address`, verify its receipt was
+/// signed by exactly `expected_server_peer_id` and that the mutual-binding
+/// check holds, and record a corroborating `sent_to` assertion in `graph` as
+/// the client side (`ExtractionMethod::Verification`). Only writes anything
+/// if every check passes. Shared by the CLI's `oag peer fetch` and this
+/// crate's own relay-on-cache-miss path below -- both are "be the client of
+/// another peer," just triggered differently.
+#[allow(clippy::too_many_arguments)]
+pub async fn fetch_and_verify(
+    http: &reqwest::Client,
+    graph: &GraphService,
+    local_identity: &PeerIdentity,
+    address: &str,
+    expected_server_peer_id: &PeerId,
+    cid: &str,
+    relay_hops_remaining: u8,
+    relay_path: &[String],
+) -> Result<VerifiedFetch, TransferError> {
+    let client_nonce = oag_crypto::random_bytes_32();
+    let request = build_and_sign_request(
+        local_identity,
+        cid,
+        &client_nonce,
+        now_unix(),
+        relay_hops_remaining,
+        relay_path,
+    );
+
+    let url = format!("{}/oag/transfer/v1/fetch", address.trim_end_matches('/'));
+    let response = http
+        .post(&url)
+        .json(&request)
+        .send()
+        .await
+        .map_err(|e| TransferError::Internal(format!("relay request to {address} failed: {e}")))?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(TransferError::Internal(format!(
+            "relay request to {address} answered {status}: {body}"
+        )));
+    }
+
+    let receipt_header = response
+        .headers()
+        .get("x-oag-transfer-receipt")
+        .ok_or_else(|| TransferError::Internal("response missing x-oag-transfer-receipt header".to_string()))?
+        .to_str()
+        .map_err(|e| TransferError::Internal(e.to_string()))?
+        .to_string();
+    let receipt: TransferReceipt =
+        serde_json::from_str(&receipt_header).map_err(|e| TransferError::Internal(e.to_string()))?;
+    let content = response
+        .bytes()
+        .await
+        .map_err(|e| TransferError::Internal(e.to_string()))?
+        .to_vec();
+
+    let content_hash = oag_crypto::blake3_content_hash(&content);
+    if content_hash != receipt.unsigned.content_hash {
+        return Err(TransferError::ReceiptMismatch);
+    }
+
+    let now = now_unix();
+    let verified_server_peer_id = verify_receipt(&receipt, cid, &client_nonce, now)?;
+    if verified_server_peer_id != *expected_server_peer_id {
+        return Err(TransferError::PeerIdKeyMismatch);
+    }
+
+    record_transfer(
+        graph,
+        local_identity,
+        &verified_server_peer_id,
+        &local_identity.peer_id(),
+        cid,
+        content.len(),
+        &hex::encode(client_nonce),
+        &receipt.unsigned.server_nonce,
+        &content_hash,
+        &receipt.unsigned.receipt_hash,
+        "client",
+        receipt.unsigned.served_at,
+        ExtractionMethod::Verification,
+        None,
+    )
+    .await?;
+
+    Ok(VerifiedFetch {
+        content,
+        content_hash,
+        receipt_hash: receipt.unsigned.receipt_hash,
+        server_peer_id: verified_server_peer_id,
+    })
+}
+
+/// Tries each configured `[transfer].relay_peers` entry in turn (first
+/// success wins), skipping any already in `req`'s `relay_path` (cycle
+/// prevention) or once `relay_hops_remaining` is exhausted. Returns `None`
+/// if relaying isn't possible/permitted or every attempt failed -- the
+/// caller decides what error that becomes (no relay configured vs. a
+/// genuinely failed relay are reported differently, see `fetch_with_receipt_inner`).
+async fn relay_fetch(state: &AppState, identity: &PeerIdentity, req: &TransferRequest) -> Option<VerifiedFetch> {
+    if req.unsigned.relay_hops_remaining == 0 || state.relay_peers.is_empty() {
+        return None;
+    }
+
+    let own_peer_id = identity.peer_id().to_string();
+    let mut next_path = req.unsigned.relay_path.clone();
+    next_path.push(own_peer_id);
+
+    for relay_peer in state.relay_peers.iter() {
+        if next_path.contains(&relay_peer.peer_id.to_string()) {
+            continue; // forwarding here would revisit a peer already in this chain
+        }
+        match fetch_and_verify(
+            &state.http_client,
+            &state.graph,
+            identity,
+            &relay_peer.address,
+            &relay_peer.peer_id,
+            &req.unsigned.cid,
+            req.unsigned.relay_hops_remaining - 1,
+            &next_path,
+        )
+        .await
+        {
+            Ok(verified) => return Some(verified),
+            Err(e) => {
+                tracing::warn!(relay_peer = %relay_peer.peer_id, error = %e, "relay attempt failed, trying next configured relay peer if any");
+                continue;
+            }
+        }
+    }
+    None
 }
 
 pub async fn fetch_with_receipt(State(state): State<AppState>, Json(req): Json<TransferRequest>) -> Response {
@@ -367,15 +565,29 @@ async fn fetch_with_receipt_inner(state: AppState, req: TransferRequest) -> Resu
         return Err(TransferError::RateLimited);
     }
 
+    let identity = state.graph.identity();
     let provider = state.pinning_provider.clone().ok_or(TransferError::ProviderDisabled)?;
-    let content = provider.fetch(&req.unsigned.cid).await.map_err(|e| match e {
-        oag_ipfs::IpfsError::Disabled => TransferError::ProviderDisabled,
-        other => TransferError::Ipfs(other),
-    })?;
+    let (content, relayed_via) = match provider.fetch(&req.unsigned.cid).await {
+        Ok(bytes) => (bytes, None),
+        Err(oag_ipfs::IpfsError::Disabled) => return Err(TransferError::ProviderDisabled),
+        Err(local_err) => {
+            // Multi-hop relay (spec/31 Phase 2): "the server might be
+            // servicing another node server" -- a local cache miss isn't
+            // necessarily the end of the road if this peer has its own
+            // configured upstream relay peers and the incoming request
+            // still has hops left to spend.
+            match relay_fetch(&state, identity, &req).await {
+                Some(verified) => (verified.content, Some(verified.server_peer_id)),
+                None if state.relay_peers.is_empty() || req.unsigned.relay_hops_remaining == 0 => {
+                    return Err(TransferError::Ipfs(local_err))
+                }
+                None => return Err(TransferError::RelayFailed),
+            }
+        }
+    };
 
     let content_hash = oag_crypto::blake3_content_hash(&content);
     let server_nonce = oag_crypto::random_bytes_32();
-    let identity = state.graph.identity();
     let receipt = build_and_sign_receipt(
         identity,
         &req.unsigned.cid,
@@ -399,6 +611,7 @@ async fn fetch_with_receipt_inner(state: AppState, req: TransferRequest) -> Resu
         "server",
         receipt.unsigned.served_at,
         ExtractionMethod::Direct,
+        relayed_via.as_ref(),
     )
     .await?;
 
@@ -423,7 +636,7 @@ mod tests {
     fn request_sign_and_verify_round_trip() {
         let identity = PeerIdentity::generate();
         let nonce = oag_crypto::random_bytes_32();
-        let req = build_and_sign_request(&identity, "bafytestcid", &nonce, 1_000);
+        let req = build_and_sign_request(&identity, "bafytestcid", &nonce, 1_000, 0, &[]);
         let (peer_id, verified_nonce) = verify_request(&req, 1_010).unwrap();
         assert_eq!(peer_id, identity.peer_id());
         assert_eq!(verified_nonce, nonce);
@@ -433,7 +646,7 @@ mod tests {
     fn request_tampered_cid_fails_verification() {
         let identity = PeerIdentity::generate();
         let nonce = oag_crypto::random_bytes_32();
-        let mut req = build_and_sign_request(&identity, "bafytestcid", &nonce, 1_000);
+        let mut req = build_and_sign_request(&identity, "bafytestcid", &nonce, 1_000, 0, &[]);
         req.unsigned.cid = "bafyotherdid".to_string();
         assert!(matches!(verify_request(&req, 1_010), Err(TransferError::BadSignature)));
     }
@@ -443,7 +656,7 @@ mod tests {
         let victim = PeerIdentity::generate();
         let attacker = PeerIdentity::generate();
         let nonce = oag_crypto::random_bytes_32();
-        let mut req = build_and_sign_request(&victim, "bafytestcid", &nonce, 1_000);
+        let mut req = build_and_sign_request(&victim, "bafytestcid", &nonce, 1_000, 0, &[]);
         // Attacker swaps in their own key but keeps the victim's claimed
         // peer_id, re-signing with their own key -- the signature alone
         // would verify fine against the swapped key, so the pairing check
@@ -463,7 +676,7 @@ mod tests {
     fn request_stale_timestamp_is_rejected() {
         let identity = PeerIdentity::generate();
         let nonce = oag_crypto::random_bytes_32();
-        let req = build_and_sign_request(&identity, "bafytestcid", &nonce, 1_000);
+        let req = build_and_sign_request(&identity, "bafytestcid", &nonce, 1_000, 0, &[]);
         let far_future = 1_000 + MAX_CLOCK_SKEW_SECONDS + 1;
         assert!(matches!(
             verify_request(&req, far_future),

@@ -184,13 +184,19 @@ fixed, continuously-sampled environmental sensor at a known location, cheap and 
 
 ## Service-rendered announcements, multi-hop relay, and witness-based supply-chain audit
 
-**The basic single-hop shape is now implemented — see [31-service-receipts.md](31-service-receipts.md).**
-`oag peer fetch` records a `(peer:<server>, sent_to, peer:<client>)` assertion on both sides,
-backed by a mutual nonce-bound receipt (`oag_crypto::mutual_receipt_hash`) neither side could
-fabricate alone — live-verified end-to-end with two real `oag` processes. Multi-hop relay chains
-and the witness/flood-based audit mechanism below remain unbuilt exactly as described; the
-"Refinement" paragraph further down (resolving the "degrade, don't drop" vs. "boot" tension) is
-unaffected by this implementation.
+**The basic single-hop shape, and a Phase 2 static multi-hop relay, are now implemented — see
+[31-service-receipts.md](31-service-receipts.md).** `oag peer fetch` records a `(peer:<server>,
+sent_to, peer:<client>)` assertion on both sides, backed by a mutual nonce-bound receipt
+(`oag_crypto::mutual_receipt_hash`) neither side could fabricate alone. Phase 2 adds
+`[transfer].relay_peers`: a server that misses its own local pin on a `cid` can forward the
+request to one of its own statically configured upstream peers, acting as that peer's client
+itself, then continue serving downstream as if it had the content all along — each hop remains an
+independent pairwise exchange, re-signed fresh at every hop, with no new multi-party chain
+structure. Live-verified end-to-end with three real `oag` processes (client → relay → origin, the
+relay having nothing pinned locally itself). What's still *not* built: any automatic CID/peer
+discovery or routing (relay topology is entirely operator-configured, hop by hop) and the
+witness/flood-based audit mechanism below. The "Refinement" paragraph further down (resolving the
+"degrade, don't drop" vs. "boot" tension) is unaffected by either implementation.
 
 Originally captured from `USER_INPUT_RECORD.md` Entry 21. Named as one step toward a larger,
 explicitly *deferred* goal ("distributed healing services globally... where people get paid for

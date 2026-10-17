@@ -939,7 +939,7 @@ mod transfer_tests {
         let client_graph = GraphService::new(client_pool, client_identity.clone());
 
         let client_nonce = oag_crypto::random_bytes_32();
-        let request = build_and_sign_request(&client_identity, &cid, &client_nonce, now_unix());
+        let request = build_and_sign_request(&client_identity, &cid, &client_nonce, now_unix(), 0, &[]);
 
         let response = app
             .oneshot(
@@ -984,6 +984,7 @@ mod transfer_tests {
             "client",
             receipt.unsigned.served_at,
             ExtractionMethod::Verification,
+            None,
         )
         .await
         .unwrap();
@@ -1035,7 +1036,7 @@ mod transfer_tests {
 
         let client_identity = PeerIdentity::generate();
         let client_nonce = oag_crypto::random_bytes_32();
-        let request = build_and_sign_request(&client_identity, "bafyirrelevantcid", &client_nonce, now_unix());
+        let request = build_and_sign_request(&client_identity, "bafyirrelevantcid", &client_nonce, now_unix(), 0, &[]);
 
         let response = app
             .oneshot(
@@ -1059,7 +1060,7 @@ mod transfer_tests {
 
         let client_identity = PeerIdentity::generate();
         let client_nonce = oag_crypto::random_bytes_32();
-        let mut request = build_and_sign_request(&client_identity, "bafyirrelevantcid", &client_nonce, now_unix());
+        let mut request = build_and_sign_request(&client_identity, "bafyirrelevantcid", &client_nonce, now_unix(), 0, &[]);
         request.unsigned.cid = "bafyswappedcid".to_string(); // tamper after signing
 
         let response = app
@@ -1072,5 +1073,198 @@ mod transfer_tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    /// Phase 2 (multi-hop relay, spec/31): a real three-party chain --
+    /// origin peer C has the content pinned; relay peer B has nothing
+    /// pinned locally but is configured with `relay_peers = [C]`; a client
+    /// fetches from B (never having heard of C) and still gets the correct,
+    /// verified content, because B relayed the cache miss to C on its
+    /// behalf. Both B's and C's real axum servers are bound to real TCP
+    /// listeners (relaying does a real `reqwest` round trip, not an
+    /// in-process `oneshot`), matching this crate's live-verification norm.
+    #[tokio::test]
+    async fn relay_peer_forwards_a_cache_miss_to_its_own_configured_upstream() {
+        // -- Origin peer C: has the content, a real embedded IPFS node.
+        let origin_pool = oag_storage::open_pool(&temp_db_path("transfer-relay-origin")).await.unwrap();
+        let origin_identity = PeerIdentity::generate();
+        let origin_graph = std::sync::Arc::new(GraphService::new(origin_pool, origin_identity.clone()));
+
+        let origin_ipfs_dir = std::env::temp_dir().join(format!(
+            "oag-api-transfer-relay-origin-ipfs-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&origin_ipfs_dir).unwrap();
+        let origin_provider = oag_ipfs::EmbeddedIpfsProvider::new(origin_ipfs_dir, vec![]).await.unwrap();
+        let content = b"hello from the far side of a relay chain".to_vec();
+        let cid = origin_provider.pin(&content).await.unwrap();
+
+        let origin_state =
+            AppState::new(origin_graph.clone()).with_pinning_provider(Some(std::sync::Arc::new(origin_provider)));
+        let origin_app = crate::build_router(origin_state);
+        let origin_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin_addr = origin_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(origin_listener, origin_app).await.unwrap();
+        });
+        let origin_address = format!("http://{origin_addr}");
+
+        // -- Relay peer B: a disabled... no, an *enabled but empty*
+        // pinning provider (so its own local fetch genuinely misses),
+        // configured to relay to the origin above.
+        let relay_pool = oag_storage::open_pool(&temp_db_path("transfer-relay-middle")).await.unwrap();
+        let relay_identity = PeerIdentity::generate();
+        let relay_graph = std::sync::Arc::new(GraphService::new(relay_pool, relay_identity.clone()));
+
+        let relay_ipfs_dir = std::env::temp_dir().join(format!(
+            "oag-api-transfer-relay-middle-ipfs-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&relay_ipfs_dir).unwrap();
+        // B's own node, empty -- it never pinned `cid` itself, so fetching
+        // it locally genuinely misses, same as a real cold cache would.
+        let relay_provider = oag_ipfs::EmbeddedIpfsProvider::new(relay_ipfs_dir, vec![]).await.unwrap();
+
+        let relay_state = AppState::new(relay_graph.clone())
+            .with_pinning_provider(Some(std::sync::Arc::new(relay_provider)))
+            .with_relay_peers(vec![crate::transfer::RelayPeer {
+                address: origin_address.clone(),
+                peer_id: origin_identity.peer_id(),
+            }]);
+        let relay_app = crate::build_router(relay_state);
+        let relay_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let relay_addr = relay_listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(relay_listener, relay_app).await.unwrap();
+        });
+        let relay_address = format!("http://{relay_addr}");
+
+        // -- Client: has never heard of the origin peer, only the relay.
+        let client_pool = oag_storage::open_pool(&temp_db_path("transfer-relay-client")).await.unwrap();
+        let client_identity = PeerIdentity::generate();
+        let client_graph = GraphService::new(client_pool, client_identity.clone());
+        let http = reqwest::Client::new();
+
+        let verified = crate::transfer::fetch_and_verify(
+            &http,
+            &client_graph,
+            &client_identity,
+            &relay_address,
+            &relay_identity.peer_id(),
+            &cid,
+            4, // plenty of hops for a 1-hop relay
+            &[],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(verified.content, content);
+        assert_eq!(verified.server_peer_id, relay_identity.peer_id());
+
+        // The relay's own `peer:<id>` node now touches two edges: it served
+        // the client (Direct) AND it verified a fetch from the origin
+        // (Verification) -- distinguish the two records by extraction
+        // method, each hop here is an independent, ordinary pairwise event.
+        let relay_node = match relay_graph.resolve(&format!("peer:{}", relay_identity.peer_id())).await.unwrap() {
+            oag_graph::ResolveOutcome::Found { node, .. } => node,
+            other => panic!("expected relay's own peer node to exist, got {other:?}"),
+        };
+        let relay_node_assertions = relay_graph.list_assertions_for_node(relay_node.id).await.unwrap();
+        assert_eq!(relay_node_assertions.len(), 2);
+
+        // The relay's server-side record carries `relayed_via` pointing at
+        // the origin -- this is what a later audit pass would follow to
+        // reconstruct the chain, without any new signed multi-party
+        // structure (just an ordinary metadata field on an ordinary
+        // evidence row).
+        let relay_as_server = relay_node_assertions
+            .iter()
+            .find(|a| a.extraction_method == ExtractionMethod::Direct)
+            .expect("relay should have a Direct (server-role) assertion toward the client");
+        let relay_server_evidence = relay_graph.list_evidence(relay_as_server.id).await.unwrap();
+        assert_eq!(relay_server_evidence.len(), 1);
+        assert_eq!(
+            relay_server_evidence[0].metadata["relayed_via"],
+            origin_identity.peer_id().to_string()
+        );
+        assert_eq!(relay_server_evidence[0].metadata["peer_role"], "server");
+
+        // The relay ALSO recorded its own `Verification` assertion as the
+        // *client* of the origin -- it independently verified the origin's
+        // receipt before using the content, exactly like any other client.
+        let relay_as_client = relay_node_assertions
+            .iter()
+            .find(|a| a.extraction_method == ExtractionMethod::Verification)
+            .expect("relay should have a Verification (client-role) assertion toward the origin");
+        assert_ne!(relay_as_server.id, relay_as_client.id);
+
+        // The origin's own record has the relay (not the original client)
+        // as its counterparty -- it never heard of the client at all.
+        let origin_node = match origin_graph.resolve(&format!("peer:{}", origin_identity.peer_id())).await.unwrap() {
+            oag_graph::ResolveOutcome::Found { node, .. } => node,
+            other => panic!("expected origin's own peer node to exist, got {other:?}"),
+        };
+        let origin_assertions = origin_graph.list_assertions_for_node(origin_node.id).await.unwrap();
+        assert_eq!(origin_assertions.len(), 1);
+        let origin_evidence = origin_graph.list_evidence(origin_assertions[0].id).await.unwrap();
+        assert_eq!(
+            origin_evidence[0].metadata["counterparty_peer_id"],
+            relay_identity.peer_id().to_string()
+        );
+    }
+
+    /// `relay_hops_remaining: 0` (the default for an old/plain client that
+    /// predates Phase 2) must behave exactly like Phase 1 always did: a
+    /// local cache miss is a 404, never silently relayed, even when the
+    /// server itself has `relay_peers` configured and reachable.
+    #[tokio::test]
+    async fn zero_hops_remaining_never_relays_even_with_relay_peers_configured() {
+        // No origin server is actually started in this test -- the relay's
+        // configured upstream address is deliberately never dialed, which
+        // is exactly the point: `relay_hops_remaining: 0` must make the
+        // relay give up on its own local cache miss before ever attempting
+        // to contact anyone, so a bogus/unreachable upstream must not
+        // matter. A throwaway identity stands in for "some origin peer" --
+        // only its PeerId is used, to pin a syntactically valid CID.
+        let origin_identity = PeerIdentity::generate();
+        let origin_ipfs_dir = std::env::temp_dir().join(format!(
+            "oag-api-transfer-relay-zerohop-origin-ipfs-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&origin_ipfs_dir).unwrap();
+        let origin_provider = oag_ipfs::EmbeddedIpfsProvider::new(origin_ipfs_dir, vec![]).await.unwrap();
+        let cid = origin_provider.pin(b"irrelevant content").await.unwrap();
+
+        let relay_pool = oag_storage::open_pool(&temp_db_path("transfer-relay-zerohop-middle")).await.unwrap();
+        let relay_identity = PeerIdentity::generate();
+        let relay_graph = std::sync::Arc::new(GraphService::new(relay_pool, relay_identity.clone()));
+        let relay_ipfs_dir = std::env::temp_dir().join(format!(
+            "oag-api-transfer-relay-zerohop-middle-ipfs-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&relay_ipfs_dir).unwrap();
+        let relay_provider = oag_ipfs::EmbeddedIpfsProvider::new(relay_ipfs_dir, vec![]).await.unwrap();
+        let relay_state = AppState::new(relay_graph.clone())
+            .with_pinning_provider(Some(std::sync::Arc::new(relay_provider)))
+            .with_relay_peers(vec![crate::transfer::RelayPeer {
+                address: format!("http://{}", "127.0.0.1:1"), // never actually dialed
+                peer_id: origin_identity.peer_id(),
+            }]);
+        let relay_app = crate::build_router(relay_state);
+
+        let client_identity = PeerIdentity::generate();
+        let client_nonce = oag_crypto::random_bytes_32();
+        let request = build_and_sign_request(&client_identity, &cid, &client_nonce, now_unix(), 0, &[]);
+
+        let response = relay_app
+            .oneshot(
+                Request::post("/oag/transfer/v1/fetch")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&request).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }

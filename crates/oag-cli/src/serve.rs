@@ -97,7 +97,8 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         .with_embedding_provider(embedding_provider.clone())
         .with_crawler(crawler.clone())
         .with_ipfs_libp2p_ws_multiaddr(ipfs_dial_multiaddr.clone().map(Into::into))
-        .with_pinning_provider(Some(pinning_provider));
+        .with_pinning_provider(Some(pinning_provider))
+        .with_relay_peers(config.relay_peers.clone());
     let rate_limit_state = state.clone();
     let rest_router = oag_api::build_router(state).merge(sync_router);
     let mcp_service =
@@ -121,6 +122,12 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     println!("oag: sync listening on http://{}/oag/sync/v1", config.listen);
     if let Some(multiaddr) = &ipfs_dial_multiaddr {
         println!("oag: ipfs listening on {multiaddr}");
+    }
+    if !config.relay_peers.is_empty() {
+        println!(
+            "oag: transfer relay: {} upstream peer(s) configured for cache-miss forwarding",
+            config.relay_peers.len()
+        );
     }
     if config.bootstrap_peers.is_empty() {
         println!("oag: no bootstrap_peers configured — replication is passive until a peer syncs with us, or `oag peer add` is used");

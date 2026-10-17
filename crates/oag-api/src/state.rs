@@ -42,6 +42,17 @@ pub struct AppState {
     /// single global "anonymous" bucket every other unauthenticated route
     /// (`/ipfs-site/*`) falls into.
     pub transfer_rate_limiter: Arc<RateLimiter>,
+    /// Multi-hop relay (`spec/31-service-receipts.md` Phase 2,
+    /// `[transfer].relay_peers` in `config.toml`) -- statically
+    /// operator-configured upstream peers this peer may forward a transfer
+    /// cache-miss to. Empty by default, same opt-in posture as every other
+    /// `[ipfs]`/`[transfer]` setting; a server never relays unless an
+    /// operator explicitly lists at least one upstream peer.
+    pub relay_peers: Arc<Vec<crate::transfer::RelayPeer>>,
+    /// A plain `reqwest::Client` this peer uses to act as the *client* of
+    /// another peer when relaying -- distinct from any client the CLI uses,
+    /// since relaying happens from inside a running `oag serve` process.
+    pub http_client: Arc<reqwest::Client>,
 }
 
 impl AppState {
@@ -67,6 +78,8 @@ impl AppState {
             ipfs_libp2p_ws_multiaddr: None,
             pinning_provider: None,
             transfer_rate_limiter: Arc::new(RateLimiter::default()),
+            relay_peers: Arc::new(Vec::new()),
+            http_client: Arc::new(reqwest::Client::new()),
         }
     }
 
@@ -102,6 +115,15 @@ impl AppState {
     /// --pin` already share.
     pub fn with_pinning_provider(mut self, provider: Option<Arc<dyn oag_ipfs::PinningProvider>>) -> Self {
         self.pinning_provider = provider;
+        self
+    }
+
+    /// `new`'s default has no relay peers -- this opts a running `oag serve`
+    /// process into whatever `[transfer].relay_peers` resolves to (empty by
+    /// default, same opt-in posture as every other `[ipfs]`/`[transfer]`
+    /// setting).
+    pub fn with_relay_peers(mut self, relay_peers: Vec<crate::transfer::RelayPeer>) -> Self {
+        self.relay_peers = Arc::new(relay_peers);
         self
     }
 }

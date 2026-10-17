@@ -61,13 +61,16 @@ Also built:
   a `(peer, sent_to, peer)` assertion backed by a mutual nonce-bound receipt that neither side could
   have fabricated alone. A first, deliberately small step toward a larger, explicitly deferred
   goal (peers getting paid for what they serve) — this piece is only the record-keeping, never
-  payment. See [`spec/31-service-receipts.md`](spec/31-service-receipts.md).
+  payment. **Phase 2**: a server can relay a cache miss to its own statically configured
+  `[transfer].relay_peers`, chaining independent single-hop transfers (live-verified with a real
+  three-peer client→relay→origin chain) without any automatic peer/content discovery. See
+  [`spec/31-service-receipts.md`](spec/31-service-receipts.md).
 
 Captured, not yet built — see `docs/architecture.md`'s "What's deliberately not built yet" and
 [`spec/22-future-work.md`](spec/22-future-work.md): a real multi-peer trust-consensus mechanism,
 ephemeral (sub-second) micro-networks with sensor input as a graph "packet," flood/broadcast
 propagation for traffic-analysis resistance, and — still part of the pay-for-serving direction
-above — multi-hop relay chains and a witness/flood-based supply-chain audit mode.
+above — automatic peer/content discovery/routing and a witness/flood-based supply-chain audit mode.
 
 See `docs/` for the full picture — start with [`docs/architecture.md`](docs/architecture.md).
 

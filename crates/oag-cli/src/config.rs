@@ -40,6 +40,8 @@ pub struct FileConfig {
     pub ipfs: IpfsSection,
     #[serde(default)]
     pub addressing: AddressingSection,
+    #[serde(default)]
+    pub transfer: TransferSection,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -374,6 +376,42 @@ impl IpfsSection {
     }
 }
 
+/// `[transfer]` — multi-hop relay for `POST /oag/transfer/v1/fetch`
+/// (`spec/31-service-receipts.md` Phase 2). Empty `relay_peers` (the
+/// default) means this peer never relays a cache miss to anyone, same
+/// opt-in posture as `[ipfs].pinning_provider`'s own default. A static,
+/// operator-chosen list of upstream peers -- not automatic CID/peer
+/// discovery/routing, which is a separate, much bigger, unbuilt problem
+/// (see `OPEN_QUESTIONS.md`).
+#[derive(Debug, Default, Deserialize)]
+pub struct TransferSection {
+    #[serde(default)]
+    pub relay_peers: Vec<RelayPeerConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RelayPeerConfig {
+    pub address: String,
+    pub peer_id: String,
+}
+
+impl TransferSection {
+    pub fn to_relay_peers(&self) -> anyhow::Result<Vec<oag_api::transfer::RelayPeer>> {
+        self.relay_peers
+            .iter()
+            .map(|p| {
+                Ok(oag_api::transfer::RelayPeer {
+                    address: p.address.clone(),
+                    peer_id: p
+                        .peer_id
+                        .parse()
+                        .map_err(|e| anyhow::anyhow!("invalid [[transfer.relay_peers]] peer_id {:?}: {e}", p.peer_id))?,
+                })
+            })
+            .collect()
+    }
+}
+
 /// `[reticulum]` — an additional, optional peer transport (this milestone's
 /// plan): OAG peers can still only replicate over HTTP by default.
 /// `enabled = false` by default given the dependency's pre-1.0 maturity —
@@ -549,6 +587,10 @@ pub struct ResolvedConfig {
     pub llm_extractor: std::sync::Arc<dyn oag_crawler::LlmExtractor>,
     pub pinning_provider: std::sync::Arc<dyn oag_ipfs::PinningProvider>,
     pub ipfs_libp2p_ws_multiaddr: Option<String>,
+    /// Multi-hop relay, Phase 2 (spec/31): statically configured upstream
+    /// peers this peer may forward a transfer cache-miss to. Empty by
+    /// default.
+    pub relay_peers: Vec<oag_api::transfer::RelayPeer>,
 }
 
 pub async fn resolve(
@@ -604,6 +646,7 @@ pub async fn resolve(
         llm_extractor: file.crawler.to_llm_extractor(),
         pinning_provider,
         ipfs_libp2p_ws_multiaddr: file.ipfs.libp2p_ws_multiaddr.clone(),
+        relay_peers: file.transfer.to_relay_peers()?,
     })
 }
 

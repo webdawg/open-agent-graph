@@ -3729,6 +3729,7 @@ dependencies = [
  "oag-ipfs",
  "oag-storage",
  "oag-sync",
+ "reqwest",
  "serde",
  "serde_json",
  "sqlx",

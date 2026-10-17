@@ -17,11 +17,10 @@ full design conversation this implements Phase 1 of.
   wire protocol is third-party (`rust-ipfs`/libp2p), and this feature does not fork it to inject
   nonces into individual block transfers. This is a separate, small, fully OAG-owned mechanism for
   two real OAG peers (not a browser) to exchange content directly.
-- **Not multi-hop relay or the flood-based corruption-attribution audit** named in the same
-  `spec/22-future-work.md` conversation. Both remain unbuilt. This spec produces the single,
-  independently-verifiable transfer unit a future chain/audit pass would correlate across many
-  paths by `content_hash`/`receipt_hash` — nothing about this design precludes that, and nothing
-  here builds it.
+- **Not the flood-based corruption-attribution audit** named in the same `spec/22-future-work.md`
+  conversation — still entirely unbuilt (see "Explicitly deferred," below). Multi-hop relay
+  chains are now partially built (Phase 2, below) as a *statically operator-configured* chain of
+  independent pairwise exchanges, not the flood/witness mechanism.
 
 ## The mutual receipt
 
@@ -135,17 +134,65 @@ correctly swapped `peer_role`/`counterparty_peer_id` on each side.
 
 | Command | Behavior |
 |---|---|
-| `oag peer fetch <address> <server_peer_id> <cid> [--out <path>] [--data-dir <dir>]` | Fetch `cid` from the peer at `address`, verify the receipt, record a corroborating assertion locally, optionally write the bytes to `--out`. Refuses to record anything if the receipt is signed by anyone other than `<server_peer_id>`. |
+| `oag peer fetch <address> <server_peer_id> <cid> [--out <path>] [--max-hops <n>] [--data-dir <dir>]` | Fetch `cid` from the peer at `address`, verify the receipt, record a corroborating assertion locally, optionally write the bytes to `--out`. Refuses to record anything if the receipt is signed by anyone other than `<server_peer_id>`. `--max-hops` (default `8`) permits `address` to relay the request onward to its own configured upstream peers if it doesn't have `cid` locally (Phase 2). |
+
+### Config: `[transfer]`
+
+```toml
+[[transfer.relay_peers]]
+address = "http://host:port"
+peer_id = "oagp_..."
+```
+
+Empty by default (no relaying). Each entry is an upstream peer this server may forward a transfer
+cache-miss to, tried in listed order, first success wins.
 
 No REST/MCP surface for *initiating* a fetch beyond the peer-to-peer endpoint itself — this is a
 peer operation (`oag peer fetch`), not a REST client-facing one, same category as `oag peer sync`.
 
+## Phase 2: multi-hop relay
+
+"the server might be servicing another node server... we pass information across a thousand
+hosts if we need" (`USER_INPUT_RECORD.md` Entry 21). A server configured with
+`[transfer].relay_peers` that misses its own local pin on a `cid` doesn't just answer 404 — it
+acts as the *client* of one of its own statically configured upstream peers (the exact same
+`fetch_and_verify` the CLI uses), fetches and independently verifies the content from there, then
+continues serving it downstream exactly as if it had the content locally. Each hop is still an
+entirely independent pairwise exchange, consistent with the original Phase 1 design ("each hop
+here is independent") — there is still no signed, multi-party chain-of-custody structure. What's
+new:
+
+- `UnsignedTransferRequest` gained `relay_hops_remaining: u8` and `relay_path: Vec<String>`
+  (both `#[serde(default)]`, so an old client/request with neither field means "never relay," not
+  "relay forever" — a real backward-compatible addition, not a breaking change). A relaying server
+  decrements `relay_hops_remaining` and appends its own `PeerId` to `relay_path` when it builds its
+  *own*, freshly signed request to the next hop — never forwards the original request verbatim.
+- `relay_path` lets a relaying server refuse to forward to a peer already in the chain (a cycle),
+  independent of the hop-count budget eventually running out.
+- The relaying hop's own server-side evidence record gets one new metadata field,
+  `relayed_via: "<upstream_peer_id>"` — present only when this hop itself had to relay rather than
+  serve from its own local pin, so a later audit pass can distinguish relay hops from origins by
+  following this field across records that share a `content_hash`.
+- `[transfer].relay_peers` is a **statically operator-configured** list of upstream peers, not
+  automatic CID-to-peer discovery/routing — a chain exists exactly as deep as operators configure
+  each hop's own `relay_peers` to point onward. There is no peer/content discovery mechanism
+  anywhere in this project today; building one is a separate, much bigger, unbuilt problem (see
+  `OPEN_QUESTIONS.md`).
+- `oag peer fetch` gained `--max-hops` (default `8`) — how many times the directly-addressed peer
+  may relay on the caller's behalf. The CLI client is always exactly one HTTP round trip either
+  way; any relaying happens entirely server-side, invisibly to the client.
+
+Live-verified end-to-end with three real `oag` processes and no shared state beyond each one's own
+pinned/forwarded bytes: an origin peer with the content pinned; a relay peer with `relay_peers`
+pointing at the origin and nothing pinned locally itself; a client that has never heard of the
+origin at all, fetching from the relay. The client receives the correct, verified content; the
+relay's own database ends up with *two* independent records on its own `peer:<id>` node — a
+`Direct` one (it served the client, `relayed_via` pointing at the origin) and a `Verification` one
+(it independently verified the fetch from the origin) — and the origin's database has a record
+whose counterparty is the relay, never the original client, which it never contacted.
+
 ## Explicitly deferred
 
-- **Multi-hop relay chains.** "the server might be servicing another node server... we pass
-  information across a thousand hosts" (`USER_INPUT_RECORD.md` Entry 21). Each hop here is
-  independent — a chain is just several of these records sharing a `content_hash`, reconstructed
-  by whoever queries for it later. No signed, multi-party chain-of-custody structure is built.
 - **The flood-based, ~50-path redundant-delivery corruption-attribution audit** (`USER_INPUT_RECORD.md`
   Entries 22-23) — confirmed to be the same push-flood mechanism as "fire like neuron mode"
   (`spec/22-future-work.md`'s flood-propagation section), not a separate one. Unbuilt; this spec's
