@@ -87,6 +87,28 @@ async fn test_app_with_crawler(name: &str) -> (axum::Router, String) {
     (build_router(state), raw_key)
 }
 
+/// Like `test_app`, but with `admin` granted -- needed for the
+/// redaction/suppression endpoints (spec section 85), which are gated
+/// behind `Permission::Admin` inside `GraphService` itself, not a
+/// per-handler check.
+async fn test_app_with_admin(name: &str) -> (axum::Router, String) {
+    let pool = open_pool(&temp_db_path(name)).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let graph = Arc::new(GraphService::new(pool, identity));
+
+    let actor_id = graph
+        .declare_actor(ActorType::Agent, Some("admin".into()), None, None)
+        .await
+        .unwrap();
+    let raw_key = graph
+        .create_key(actor_id, vec![Permission::GraphRead, Permission::GraphAssert, Permission::Admin])
+        .await
+        .unwrap();
+
+    let state = AppState::new(graph);
+    (build_router(state), raw_key)
+}
+
 #[tokio::test]
 async fn full_rest_vertical_slice() {
     let (app, key) = test_app("vertical-slice").await;
@@ -891,6 +913,215 @@ async fn get_node_sources_returns_evidence_from_touching_edges() {
     let sources = body["sources"].as_array().unwrap();
     assert_eq!(sources.len(), 1);
     assert_eq!(sources[0]["uri"], "https://example.com/sources-docs");
+}
+
+/// Closes the "No REST/MCP surface" gap tracked in `OPEN_QUESTIONS.md`'s
+/// "Deletion and redaction" section -- `GraphService::redact_evidence`
+/// already required `Permission::Admin` and already worked; only a real
+/// authenticated handler was missing.
+#[tokio::test]
+async fn redact_evidence_endpoint_blanks_it_and_rejects_a_repeat_call() {
+    let (app, key) = test_app_with_admin("redact-evidence-endpoint").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/redact-endpoint-test",
+        "predicate": "instance_of",
+        "object": "concept:redact-endpoint-test",
+        "evidence": [{"type": "documentation", "title": "secret title", "excerpt": "secret excerpt", "uri": "https://example.com/redact-docs"}]
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let assertion_id = body_json(response).await["assertion_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/assertions/{assertion_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    let evidence_id = body["evidence"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(body["evidence"][0]["title"], "secret title");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/evidence/{evidence_id}/redact"))
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "reason": "gdpr request" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/assertions/{assertion_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(body["evidence"][0]["title"], Value::Null, "title must be blanked");
+    assert_eq!(body["evidence"][0]["excerpt"], Value::Null, "excerpt must be blanked");
+    assert_eq!(
+        body["evidence"][0]["uri"], "https://example.com/redact-docs",
+        "uri must survive -- only title/excerpt are redacted"
+    );
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/redactions")
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(body["redactions"].as_array().unwrap().len(), 1);
+    assert_eq!(body["redactions"][0]["reason"], "gdpr request");
+
+    // A repeat call against the same evidence id is a typed 409, not a
+    // silent no-op -- same guarantee `GraphService::redact_evidence`'s own
+    // unit tests already confirm, now also reachable over REST.
+    let response = app
+        .oneshot(
+            Request::post(format!("/api/v1/evidence/{evidence_id}/redact"))
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn suppress_and_unsuppress_node_endpoints_round_trip() {
+    let (app, key) = test_app_with_admin("suppress-endpoint").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/suppress-endpoint-test",
+        "predicate": "instance_of",
+        "object": "concept:suppress-endpoint-test",
+    });
+    app.clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/resolve")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "value": "concept:suppress-endpoint-test" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let node_id = body_json(response).await["node_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/nodes/{node_id}/suppress"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/redactions")
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(body["suppressed_nodes"].as_array().unwrap().len(), 1);
+    assert_eq!(body["suppressed_nodes"][0]["node_id"], node_id);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/nodes/{node_id}/unsuppress"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::get("/api/v1/redactions")
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert!(body["suppressed_nodes"].as_array().unwrap().is_empty());
+}
+
+/// `test_app`'s key has `graph:assert`/`graph:read`/etc. but not `admin` --
+/// confirms these new routes really do require it, not just any
+/// authenticated key (the same thing `graph_crawl`'s own tests already
+/// confirm for `graph:crawl`).
+#[tokio::test]
+async fn redaction_endpoints_require_admin_not_just_an_authenticated_key() {
+    let (app, key) = test_app("redact-needs-admin").await;
+    let auth_header = format!("Bearer {key}");
+
+    let response = app
+        .oneshot(
+            Request::post(format!("/api/v1/nodes/{}/suppress", "0".repeat(64)))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 /// `spec/31-service-receipts.md`: a real two-peer exchange over

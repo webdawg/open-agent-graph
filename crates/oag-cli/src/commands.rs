@@ -483,13 +483,17 @@ pub async fn rebuild(data_dir: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Spec section 85's redaction/suppression commands are CLI-only, gated by
-/// filesystem access to the data directory -- the same trust boundary
-/// `oag backup`/`oag rebuild` already rely on. This synthetic `AuthContext`
-/// is never persisted or looked up anywhere; it only needs to carry
-/// `Permission::Admin` through `GraphService`'s existing permission checks,
-/// the same checks a future REST/MCP surface for these commands would reuse
-/// unchanged with a real authenticated actor.
+/// Spec section 85's redaction/suppression commands are gated by filesystem
+/// access to the data directory -- the same trust boundary `oag backup`/
+/// `oag rebuild` already rely on. This synthetic `AuthContext` is never
+/// persisted or looked up anywhere; it only needs to carry
+/// `Permission::Admin` through `GraphService`'s existing permission checks.
+/// A real authenticated actor can reach the exact same checks via REST
+/// (`POST /api/v1/evidence/{id}/redact`, `GET /api/v1/redactions`,
+/// `POST /api/v1/nodes/{id}/suppress|unsuppress`, in `oag-api`'s
+/// `redaction` module) or MCP (`graph_redact_evidence`/
+/// `graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`,
+/// in `oag-mcp`) -- same `GraphService` methods, no duplicated logic.
 fn cli_admin_auth() -> AuthContext {
     AuthContext {
         actor_id: ActorId::derive(b"oag-cli:local-operator"),

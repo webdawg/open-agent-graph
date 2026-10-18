@@ -12,8 +12,8 @@ use tracing::Instrument;
 
 use crate::params::{
     ActorIdParams, AddEvidenceParams, AssertParams, AssertionIdParams, CrawlParams, DisputeParams,
-    EdgeIdParams, EvidenceParam, HistoryParams, NodeIdParams, ResolveParams, RetractParams,
-    SearchParams, SubgraphParams, SupersedeParams, VerifyParams,
+    EdgeIdParams, EvidenceParam, HistoryParams, NodeIdParams, RedactEvidenceParams, ResolveParams,
+    RetractParams, SearchParams, SubgraphParams, SupersedeParams, VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -524,6 +524,68 @@ impl OagMcpServer {
             let summary = self.crawler.crawl(&url).await.map_err(map_crawl_err)?;
             let value = serde_json::to_value(summary).map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
             Ok(Json(value))
+        })
+        .await
+    }
+
+    #[tool(description = "Redact an evidence item: permanently blanks its title/excerpt in this peer's own local database. Irreversible at this tool's level (the signed event itself is untouched in the log). Requires the admin permission, same as list_redactions/suppress_node/unsuppress_node.")]
+    async fn graph_redact_evidence(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<RedactEvidenceParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_redact_evidence", async {
+            let auth = self.authenticate(&parts).await?;
+            let evidence_id = p
+                .evidence_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid evidence_id", None))?;
+            self.graph.redact_evidence(&auth, evidence_id, p.reason).await.map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
+        })
+        .await
+    }
+
+    #[tool(description = "List every redaction tombstone and every currently search-suppressed node on this peer. Admin-only audit view, same data as `oag redact list`.")]
+    async fn graph_list_redactions(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_list_redactions", async {
+            let auth = self.authenticate(&parts).await?;
+            let redactions = self.graph.list_redactions(&auth).await.map_err(map_err)?;
+            let suppressed_nodes = self.graph.list_suppressed_nodes(&auth).await.map_err(map_err)?;
+            Ok(Json(json!({ "redactions": redactions, "suppressed_nodes": suppressed_nodes })))
+        })
+        .await
+    }
+
+    #[tool(description = "Hide a node from search results without touching the node, its edges, or its assertions. Fully reversible via graph_unsuppress_node.")]
+    async fn graph_suppress_node(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<NodeIdParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_suppress_node", async {
+            let auth = self.authenticate(&parts).await?;
+            let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
+            self.graph.suppress_node_from_search(&auth, node_id).await.map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
+        })
+        .await
+    }
+
+    #[tool(description = "Reverse graph_suppress_node -- a no-op, not an error, if the node wasn't suppressed.")]
+    async fn graph_unsuppress_node(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<NodeIdParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_unsuppress_node", async {
+            let auth = self.authenticate(&parts).await?;
+            let node_id = p.node_id.parse().map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
+            self.graph.unsuppress_node_from_search(&auth, node_id).await.map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
         })
         .await
     }

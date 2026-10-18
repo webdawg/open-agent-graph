@@ -83,6 +83,42 @@ async fn spawn_mcp_server_with_crawler_config(
     (format!("http://{addr}/mcp"), raw_key)
 }
 
+/// Like `spawn_mcp_server`, but with `admin` granted instead of
+/// `graph:crawl` -- needed for the redaction/suppression tools (spec
+/// section 85), gated behind `Permission::Admin` inside `GraphService`
+/// itself.
+async fn spawn_mcp_server_with_admin(name: &str) -> (String, String) {
+    let pool = open_pool(&temp_db_path(name)).await.unwrap();
+    let identity = PeerIdentity::generate();
+    let graph = Arc::new(GraphService::new(pool, identity));
+
+    let actor_id = graph
+        .declare_actor(ActorType::Agent, Some("mcp-admin-test".into()), None, None)
+        .await
+        .unwrap();
+    let raw_key = graph
+        .create_key(actor_id, vec![Permission::GraphRead, Permission::GraphAssert, Permission::Admin])
+        .await
+        .unwrap();
+
+    let embedding_provider: Arc<dyn oag_embeddings::EmbeddingProvider> = Arc::new(oag_embeddings::DisabledProvider);
+    let crawler = Arc::new(oag_crawler::CrawlerService::new(
+        graph.clone(),
+        oag_crawler::CrawlerConfig::default(),
+        Arc::new(oag_crawler::DisabledExtractor),
+        Arc::new(oag_ipfs::DisabledProvider),
+    ));
+    let app = axum::Router::new()
+        .route_service("/mcp", crate::streamable_http_service(graph, embedding_provider, crawler));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    (format!("http://{addr}/mcp"), raw_key)
+}
+
 #[tokio::test]
 async fn graph_assert_and_get_subgraph_over_real_http() {
     let (url, raw_key) = spawn_mcp_server("assert-subgraph").await;
@@ -509,4 +545,164 @@ async fn graph_crawl_without_permission_is_rejected() {
         )
         .await;
     assert!(result.is_err(), "expected graph_crawl without graph:crawl permission to fail");
+}
+
+/// Closes the "No REST/MCP surface" gap tracked in `OPEN_QUESTIONS.md`'s
+/// "Deletion and redaction" section -- same `GraphService` methods the CLI's
+/// `oag redact *` already used, now reachable with a real authenticated
+/// actor via MCP too.
+#[tokio::test]
+async fn graph_redact_evidence_blanks_it_and_lists_it() {
+    let (url, raw_key) = spawn_mcp_server_with_admin("mcp-redact-evidence").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let assert_result = client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({
+                "subject": "https://example.com/mcp-redact-test",
+                "predicate": "instance_of",
+                "object": "concept:mcp-redact-test",
+                "evidence": [{"type": "documentation", "title": "secret title", "excerpt": "secret excerpt", "uri": "https://example.com/mcp-redact-docs"}]
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ))
+        .await
+        .unwrap();
+    let assertion_id =
+        assert_result.structured_content.unwrap()["assertion_id"].as_str().unwrap().to_string();
+
+    let get_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_assertion")
+                .with_arguments(json!({ "assertion_id": assertion_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let evidence_id =
+        get_result.structured_content.unwrap()["evidence"][0]["id"].as_str().unwrap().to_string();
+
+    client
+        .call_tool(CallToolRequestParams::new("graph_redact_evidence").with_arguments(
+            json!({ "evidence_id": evidence_id, "reason": "gdpr request" }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+
+    let get_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_assertion")
+                .with_arguments(json!({ "assertion_id": assertion_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let body = get_result.structured_content.unwrap();
+    assert_eq!(body["evidence"][0]["title"], serde_json::Value::Null);
+    assert_eq!(body["evidence"][0]["excerpt"], serde_json::Value::Null);
+    assert_eq!(body["evidence"][0]["uri"], "https://example.com/mcp-redact-docs");
+
+    let list_result = client
+        .call_tool(CallToolRequestParams::new("graph_list_redactions"))
+        .await
+        .unwrap();
+    let body = list_result.structured_content.unwrap();
+    assert_eq!(body["redactions"].as_array().unwrap().len(), 1);
+    assert_eq!(body["redactions"][0]["reason"], "gdpr request");
+
+    // Repeat call against the same evidence id -> a real tool error, not a
+    // silent no-op.
+    let repeat = client
+        .call_tool(CallToolRequestParams::new("graph_redact_evidence").with_arguments(
+            json!({ "evidence_id": evidence_id }).as_object().unwrap().clone(),
+        ))
+        .await;
+    assert!(repeat.is_err(), "expected redacting the same evidence twice to error");
+}
+
+#[tokio::test]
+async fn graph_suppress_and_unsuppress_node_round_trip() {
+    let (url, raw_key) = spawn_mcp_server_with_admin("mcp-suppress-node").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({ "subject": "https://example.com/mcp-suppress-test", "predicate": "instance_of", "object": "concept:mcp-suppress-test" })
+                .as_object()
+                .unwrap()
+                .clone(),
+        ))
+        .await
+        .unwrap();
+
+    let resolve_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_resolve")
+                .with_arguments(json!({ "value": "concept:mcp-suppress-test" }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let node_id = resolve_result.structured_content.unwrap()["node_id"].as_str().unwrap().to_string();
+
+    client
+        .call_tool(
+            CallToolRequestParams::new("graph_suppress_node")
+                .with_arguments(json!({ "node_id": node_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+
+    let list_result = client
+        .call_tool(CallToolRequestParams::new("graph_list_redactions"))
+        .await
+        .unwrap();
+    let body = list_result.structured_content.unwrap();
+    assert_eq!(body["suppressed_nodes"].as_array().unwrap().len(), 1);
+    assert_eq!(body["suppressed_nodes"][0]["node_id"], node_id);
+
+    client
+        .call_tool(
+            CallToolRequestParams::new("graph_unsuppress_node")
+                .with_arguments(json!({ "node_id": node_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+
+    let list_result = client
+        .call_tool(CallToolRequestParams::new("graph_list_redactions"))
+        .await
+        .unwrap();
+    let body = list_result.structured_content.unwrap();
+    assert!(body["suppressed_nodes"].as_array().unwrap().is_empty());
+}
+
+/// Same shape as `graph_crawl_without_permission_is_rejected` -- a plain
+/// `graph:assert`/`graph:read` key, deliberately without `admin`.
+#[tokio::test]
+async fn graph_suppress_node_without_admin_is_rejected() {
+    let (url, raw_key) = spawn_mcp_server("mcp-suppress-no-admin").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_suppress_node")
+                .with_arguments(json!({ "node_id": "0".repeat(64) }).as_object().unwrap().clone()),
+        )
+        .await;
+    assert!(result.is_err(), "expected graph_suppress_node without admin permission to fail");
 }

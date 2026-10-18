@@ -78,8 +78,26 @@ redacted. Redacting evidence after taking a backup does not retroactively redact
 | `oag redact list` | Show every redaction tombstone and every currently-suppressed node |
 | `oag redact suppress-node <id>` / `unsuppress-node <id>` | Toggle search visibility |
 
-CLI-only, gated by filesystem access to the data directory — no REST/MCP surface, since these are
-rare, operator-triggered actions, not something a normal actor calls. Gated by `Permission::Admin`.
+CLI, gated by filesystem access to the data directory, using a synthetic local-operator
+`AuthContext` carrying `Permission::Admin`. `GraphService::redact_evidence`/`list_redactions`/
+`list_suppressed_nodes`/`suppress_node_from_search`/`unsuppress_node_from_search` all check
+`Permission::Admin` internally, so no business logic is duplicated for the REST/MCP surface below
+— only a handler producing a real authenticated `AuthContext` from a bearer key.
+
+## REST / MCP surface
+
+| REST | MCP | Behavior |
+|---|---|---|
+| `POST /api/v1/evidence/{id}/redact` | `graph_redact_evidence` | Blank one evidence record's title/excerpt |
+| `GET /api/v1/redactions` | `graph_list_redactions` | Show every redaction tombstone and every currently-suppressed node |
+| `POST /api/v1/nodes/{id}/suppress` | `graph_suppress_node` | Hide a node from search results |
+| `POST /api/v1/nodes/{id}/unsuppress` | `graph_unsuppress_node` | Reverse suppression |
+
+Both require the `admin` permission, same as the CLI. Unlike the CLI, there is no `--force`
+confirmation step or printed warning — that flag exists only to guard against a human invoking a
+destructive command by muscle memory, not as a security boundary (`admin` is); a REST/MCP caller
+holding a real `admin` key has already made a deliberate, single API call. See
+`crates/oag-api/src/redaction.rs` and `crates/oag-mcp/src/server.rs`.
 
 ## Tests
 
@@ -89,4 +107,13 @@ rare, operator-triggered actions, not something a normal actor calls. Gated by `
 `search_suppression_survives_rebuild`, `redacting_with_an_oversized_reason_is_rejected`);
 `crates/oag-cli/src/commands.rs` (`redact_evidence_refuses_without_force`,
 `redact_evidence_succeeds_with_force_and_lists_the_reason`,
-`redact_suppress_node_shows_up_in_list_suppressed_nodes`).
+`redact_suppress_node_shows_up_in_list_suppressed_nodes`);
+`crates/oag-api/src/tests.rs` (`redact_evidence_endpoint_blanks_it_and_rejects_a_repeat_call`,
+`suppress_and_unsuppress_node_endpoints_round_trip`,
+`redaction_endpoints_require_admin_not_just_an_authenticated_key`);
+`crates/oag-mcp/src/tests.rs` (`graph_redact_evidence_blanks_it_and_lists_it`,
+`graph_suppress_and_unsuppress_node_round_trip`, `graph_suppress_node_without_admin_is_rejected`).
+Also live-verified against a real running `oag serve` process over real HTTP: a non-admin key
+gets `403`, an admin key's redact returns `200` then `409` on repeat, title/excerpt come back
+blanked while `uri` survives, and the suppress/unsuppress round trip visibly changes
+`GET /search` result counts.

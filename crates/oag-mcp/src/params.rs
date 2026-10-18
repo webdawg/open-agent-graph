@@ -111,3 +111,9 @@ pub struct CrawlParams {
     pub url: String,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RedactEvidenceParams {
+    pub evidence_id: String,
+    pub reason: Option<String>,
+}
+

@@ -101,6 +101,11 @@ pub struct SupersedeRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct RedactEvidenceRequest {
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct ResolveRequest {
     pub value: String,
 }

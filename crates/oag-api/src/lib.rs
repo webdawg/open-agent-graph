@@ -8,6 +8,7 @@ pub mod ipfs_site;
 pub mod logging;
 pub mod metrics;
 pub mod rate_limit;
+pub mod redaction;
 pub mod state;
 #[cfg(test)]
 mod tests;
@@ -79,6 +80,19 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/v1/history/{object_type}/{id}", get(handlers::history))
         .route("/api/v1/status", get(handlers::status))
         .route("/api/v1/crawl", post(crawl::crawl))
+        .route(
+            "/api/v1/evidence/{id}/redact",
+            post(redaction::redact_evidence),
+        )
+        .route("/api/v1/redactions", get(redaction::list_redactions))
+        .route(
+            "/api/v1/nodes/{id}/suppress",
+            post(redaction::suppress_node),
+        )
+        .route(
+            "/api/v1/nodes/{id}/unsuppress",
+            post(redaction::unsuppress_node),
+        )
         .route("/ui/search", get(human::search_page))
         .route("/ui/roadmap", get(human::roadmap_page))
         .route("/ui/nodes/{id}", get(human::node_page))

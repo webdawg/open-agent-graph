@@ -188,12 +188,17 @@ Format: question, assumption I'm running with, status.
   id. Status: open (revisit if a real request for assertion-level redaction shows up; the referential-
   integrity problem would need solving first, e.g. a "redacted assertion" tombstone status rather
   than removing the row).
-- **No REST/MCP surface.** `oag redact *` is CLI-only, matching `oag rebuild`/`oag authority
-  recompute`'s precedent for rare, operator-triggered maintenance actions. `GraphService::
-  redact_evidence`/`suppress_node_from_search`/`unsuppress_node_from_search` already take a real
-  `AuthContext` and check `Permission::Admin`, so adding a REST/MCP route later needs no GraphService
-  changes -- only a handler that authenticates a real actor instead of the CLI's synthetic local one.
-  Status: open.
+- **REST/MCP surface added**: `POST /api/v1/evidence/{id}/redact`, `GET /api/v1/redactions`,
+  `POST /api/v1/nodes/{id}/suppress|unsuppress` (`crates/oag-api/src/redaction.rs`), and
+  `graph_redact_evidence`/`graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`
+  (`crates/oag-mcp/src/server.rs`). Exactly the shape this entry predicted: zero `GraphService`
+  changes needed, since `redact_evidence`/`list_redactions`/`list_suppressed_nodes`/
+  `suppress_node_from_search`/`unsuppress_node_from_search` already took a real `AuthContext` and
+  checked `Permission::Admin` internally from the start. `oag redact *` (CLI) is unchanged and still
+  works via its own synthetic local-operator `AuthContext`. One real, newly-introduced asymmetry:
+  the CLI's `--force` flag + printed warning (a fat-finger guard, not a security boundary) has no
+  REST/MCP equivalent -- a caller holding a real `admin` key can redact with no confirmation step,
+  documented in `docs/security.md`. Status: resolved.
 - **No "unredact" / content-recovery command.** Intentional, not an oversight: the CLI's own warning
   text says this is permanent at the tooling level. The original `title`/`excerpt` bytes still exist
   forever inside `events.canonical_payload` (never modified by redaction), but nothing reads them
