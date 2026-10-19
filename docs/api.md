@@ -68,6 +68,7 @@ Hand-rolled Prometheus exposition format, no external metrics platform required:
 ```
 events_total, nodes_total, edges_total, assertions_total, evidence_total   (counters)
 crawl_jobs, crawl_failures                                                 (counters, process-lifetime)
+peer_sync_errors                                                           (counter, process-lifetime)
 peer_count, sqlite_size_bytes                                              (gauges)
 replication_target, replication_peers_caught_up,
 replication_lagging_peers, replication_meets_target                       (gauges; aggregate, not per-peer)
@@ -78,9 +79,15 @@ The `replication_*` gauges are derived from the same computation `oag replicatio
 label set would be an unbounded-cardinality vector as the network grows). Omitted from the response
 entirely (not zeroed) if that query fails.
 
-`events_by_origin`, request-latency histograms, `peer_sync_errors`, `replication_bytes_in`/`out`, and
-verification job counters are not yet implemented — see `OPEN_QUESTIONS.md`'s "Metrics" section for
-the exact scope decision.
+`peer_sync_errors` counts whole-attempt sync failures (`SyncService::sync_with_peer` itself
+returning `Err`) against any peer, across both the standard and cluster-only gossip loops --
+not a partial per-event failure inside an otherwise-successful sync round. Unlike every other
+counter above, it's shared from the exact `SyncService` instance the real gossip loop runs,
+not computed from a read-only query, since no snapshot query can see it.
+
+`events_by_origin`, request-latency histograms, `replication_bytes_in`/`out`, and verification job
+counters are not yet implemented — see `OPEN_QUESTIONS.md`'s "Metrics" section for the exact scope
+decision.
 
 ### Request logging (spec section 87)
 

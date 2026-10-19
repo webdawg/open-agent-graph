@@ -1,3 +1,4 @@
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use oag_crawler::CrawlerService;
@@ -21,6 +22,15 @@ pub struct AppState {
     /// own pool/identity is exactly as correct and needs no wiring through
     /// `oag serve`'s startup sequence at all.
     pub sync: SyncService,
+    /// Spec section 86's `peer_sync_errors` counter. Deliberately *not*
+    /// read from `Self::sync` above -- that handle is its own independent
+    /// `SyncService` instance (see its doc comment), so its own internal
+    /// counter would only ever read zero. `oag serve` instead hands this
+    /// the exact `Arc` the real gossip loop increments
+    /// (`SyncService::sync_errors_counter`), via `Self::with_sync_errors`.
+    /// Defaults to a fresh, always-zero counter so every other construction
+    /// site (including every test) keeps working unchanged.
+    pub sync_errors: Arc<AtomicU64>,
     /// The operator's own Kubo node's dialable libp2p WebSocket multiaddr
     /// (`[ipfs].libp2p_ws_multiaddr`), if configured -- handed to a browser
     /// loading `/ipfs-site/{cid}` as a direct dial target. `oag serve`
@@ -75,6 +85,7 @@ impl AppState {
             embedding_provider: Arc::new(oag_embeddings::DisabledProvider),
             crawler,
             sync,
+            sync_errors: Arc::new(AtomicU64::new(0)),
             ipfs_libp2p_ws_multiaddr: None,
             pinning_provider: None,
             transfer_rate_limiter: Arc::new(RateLimiter::default()),
@@ -124,6 +135,15 @@ impl AppState {
     /// setting).
     pub fn with_relay_peers(mut self, relay_peers: Vec<crate::transfer::RelayPeer>) -> Self {
         self.relay_peers = Arc::new(relay_peers);
+        self
+    }
+
+    /// `new`'s default is a fresh, always-zero counter -- this shares the
+    /// real gossip loop's own `Arc<AtomicU64>` (`SyncService::
+    /// sync_errors_counter`) so `/metrics`'s `peer_sync_errors` reflects
+    /// live sync activity instead of an unrelated handle's zero.
+    pub fn with_sync_errors(mut self, sync_errors: Arc<AtomicU64>) -> Self {
+        self.sync_errors = sync_errors;
         self
     }
 }

@@ -30,6 +30,7 @@ async fn sync_round(service: &SyncService, addrs: &[String], gravity_level: f32)
                 }
             }
             Err(error) => {
+                service.record_sync_error();
                 tracing::warn!(peer = %addr, %error, "sync with peer failed");
             }
         }
@@ -97,4 +98,41 @@ pub fn spawn_cluster_gossip_loop(service: SyncService, interval: Duration) -> Jo
             tokio::time::sleep(interval).await;
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use oag_crypto::PeerIdentity;
+
+    /// Spec section 86's `peer_sync_errors`: a whole-attempt sync failure
+    /// (an unreachable address, never even a real peer) must increment the
+    /// shared counter, and every clone of the same `SyncService` must see
+    /// the increment -- confirming the `Arc<AtomicU64>` is actually shared,
+    /// not just present.
+    #[tokio::test]
+    async fn sync_round_increments_the_shared_error_counter_on_a_whole_attempt_failure() {
+        let dir = std::env::temp_dir().join(format!(
+            "oag-sync-gossip-error-counter-test-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = oag_storage::pool::open_pool(&dir.join("oag.sqlite")).await.unwrap();
+        let identity = PeerIdentity::generate();
+        let service = SyncService::new(
+            pool,
+            identity.peer_id(),
+            identity.verifying_key().to_bytes(),
+            crate::federation::FederationPolicy::Open,
+        );
+        let clone = service.clone();
+        assert_eq!(service.sync_errors(), 0);
+
+        // Port 1 is never a real server in these tests -- a guaranteed,
+        // fast connection failure, not a flaky real-network dependency.
+        sync_round(&service, &["127.0.0.1:1".to_string()], 0.0).await;
+
+        assert_eq!(service.sync_errors(), 1);
+        assert_eq!(clone.sync_errors(), 1, "a clone must see the same increment via the shared Arc");
+    }
 }

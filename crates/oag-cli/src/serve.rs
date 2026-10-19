@@ -41,6 +41,12 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     }
 
     let mut sync_service = oag_sync::SyncService::new(pool_for_sync, peer_id, self_public_key, config.federation);
+    // Shared with `AppState` below so `/metrics`'s `peer_sync_errors`
+    // reflects this real gossip loop's own counter -- `AppState`'s own
+    // `sync` field is a separately-constructed `SyncService` instance (see
+    // its doc comment) whose internal counter would otherwise always read
+    // zero.
+    let sync_errors_counter = sync_service.sync_errors_counter();
     if config.identity_ephemeral {
         sync_service = sync_service
             .with_minimum_trust(oag_sync::EPHEMERAL_MINIMUM_TRUST, config.trust_config)
@@ -98,7 +104,8 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         .with_crawler(crawler.clone())
         .with_ipfs_libp2p_ws_multiaddr(ipfs_dial_multiaddr.clone().map(Into::into))
         .with_pinning_provider(Some(pinning_provider))
-        .with_relay_peers(config.relay_peers.clone());
+        .with_relay_peers(config.relay_peers.clone())
+        .with_sync_errors(sync_errors_counter);
     let rate_limit_state = state.clone();
     let rest_router = oag_api::build_router(state).merge(sync_router);
     let mcp_service =

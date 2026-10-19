@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use oag_crypto::{PeerId, PeerIdentity, VerifyingKey};
@@ -81,6 +82,16 @@ pub struct SyncService {
     /// just ephemeral peers that opted into Phase 1's heartbeats.
     cluster_identity: Option<PeerIdentity>,
     own_cluster: Option<String>,
+    /// Spec section 86's `peer_sync_errors` metric. `Arc`-wrapped for the
+    /// same reason as `trust_config`/`rate_limiter` above: every clone of
+    /// this service (the gossip loop, the cluster gossip loop, the sync
+    /// HTTP router) that calls `Self::sync_with_peer` must increment the
+    /// *same* counter -- a plain field would only ever count attempts made
+    /// through that one clone. `oag serve` hands a clone of this same `Arc`
+    /// to `AppState` (via `Self::sync_errors_counter`) so `/metrics` reads
+    /// the live gossip loop's own count, not an independently-constructed
+    /// handle's always-zero one.
+    sync_errors: Arc<AtomicU64>,
 }
 
 impl SyncService {
@@ -103,7 +114,30 @@ impl SyncService {
             session_started_at: now_ts(),
             cluster_identity: None,
             own_cluster: None,
+            sync_errors: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// A clone of the `Arc` backing `peer_sync_errors` -- share this with
+    /// `AppState` (`AppState::with_sync_errors`) so `/metrics` reads live
+    /// counts from whichever clone of this service the gossip loop is
+    /// actually running, not a separately-constructed instance.
+    pub fn sync_errors_counter(&self) -> Arc<AtomicU64> {
+        self.sync_errors.clone()
+    }
+
+    /// Current `peer_sync_errors` count on *this* clone's shared counter.
+    pub fn sync_errors(&self) -> u64 {
+        self.sync_errors.load(Ordering::Relaxed)
+    }
+
+    /// Spec section 86: one whole-attempt sync failure against one peer
+    /// (`Self::sync_with_peer` itself returning `Err`) -- not incremented
+    /// for a partial, per-event failure inside an otherwise-successful call
+    /// (`SyncSummary::errors`), which is a separate, still-open question
+    /// (`OPEN_QUESTIONS.md`).
+    pub(crate) fn record_sync_error(&self) {
+        self.sync_errors.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Opts this service into ephemeral-peer-trust enforcement: below

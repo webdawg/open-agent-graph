@@ -7,6 +7,8 @@
 //! credential (see `OPEN_QUESTIONS.md`'s "Metrics" section for the full
 //! scoping rationale, including which of the spec's suggested measurements
 //! this milestone leaves out).
+use std::sync::atomic::Ordering;
+
 use axum::extract::State;
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -18,10 +20,11 @@ use crate::state::AppState;
 pub async fn handler(State(state): State<AppState>) -> Result<Response, ApiError> {
     let snapshot = state.graph.metrics_snapshot().await?;
     let crawl_counts = CrawlCounts { total: state.crawler.crawls_total(), failed: state.crawler.crawls_failed() };
+    let sync_errors = state.sync_errors.load(Ordering::Relaxed);
     // Best-effort: a metrics scrape shouldn't fail outright over a hiccup
     // reading replication state -- `None` just omits those gauges below.
     let replication = state.sync.replication_status().await.ok();
-    let body = render(&snapshot, &crawl_counts, replication.as_ref());
+    let body = render(&snapshot, &crawl_counts, sync_errors, replication.as_ref());
     Ok((
         StatusCode::OK,
         [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
@@ -48,6 +51,7 @@ pub struct CrawlCounts {
 pub fn render(
     snapshot: &MetricsSnapshot,
     crawl_counts: &CrawlCounts,
+    sync_errors: u64,
     replication: Option<&oag_sync::ReplicationStatus>,
 ) -> String {
     let mut out = String::new();
@@ -114,12 +118,16 @@ pub fn render(
         "counter",
         crawl_counts.failed as i64,
     );
+    push_metric(
+        &mut out,
+        "peer_sync_errors",
+        "Total whole-attempt sync failures against a peer (SyncService::sync_with_peer returning Err), since process start. Does not count a partial per-event failure inside an otherwise-successful sync round.",
+        "counter",
+        sync_errors as i64,
+    );
     // Spec section 86's `peer_sync_lag`, in aggregate rather than per-peer
     // (a labeled metric here would be an unbounded-cardinality vector as
     // the network grows -- see OPEN_QUESTIONS.md's "Metrics" section).
-    // `peer_sync_errors` still isn't covered: that needs a durable counter
-    // wired through the gossip loop's own error path, not derivable from
-    // this read-only status query.
     if let Some(replication) = replication {
         push_metric(
             &mut out,
@@ -220,6 +228,9 @@ crawl_jobs 9
 # HELP crawl_failures Of crawl_jobs, how many failed (blocked by SSRF/robots policy, fetch error, etc.).
 # TYPE crawl_failures counter
 crawl_failures 1
+# HELP peer_sync_errors Total whole-attempt sync failures against a peer (SyncService::sync_with_peer returning Err), since process start. Does not count a partial per-event failure inside an otherwise-successful sync round.
+# TYPE peer_sync_errors counter
+peer_sync_errors 2
 # HELP replication_target This peer's current target replication factor (spec section 42), scaled by known_peer_count.
 # TYPE replication_target gauge
 replication_target 3
@@ -233,18 +244,18 @@ replication_lagging_peers 1
 # TYPE replication_meets_target gauge
 replication_meets_target 1
 ";
-        assert_eq!(render(&snapshot(), &crawl_counts(), Some(&replication())), expected);
+        assert_eq!(render(&snapshot(), &crawl_counts(), 2, Some(&replication())), expected);
     }
 
     #[test]
     fn replication_gauges_are_omitted_when_status_is_unavailable() {
-        let text = render(&snapshot(), &crawl_counts(), None);
+        let text = render(&snapshot(), &crawl_counts(), 2, None);
         assert!(!text.contains("replication_target"));
     }
 
     #[test]
     fn every_metric_line_parses_as_prometheus_syntax() {
-        let text = render(&snapshot(), &crawl_counts(), Some(&replication()));
+        let text = render(&snapshot(), &crawl_counts(), 2, Some(&replication()));
         let mut value_lines = 0;
         for line in text.lines() {
             if line.starts_with("# HELP") || line.starts_with("# TYPE") {
@@ -258,6 +269,6 @@ replication_meets_target 1
             value.parse::<i64>().unwrap_or_else(|e| panic!("value '{value}' for {name} did not parse as a number: {e}"));
             value_lines += 1;
         }
-        assert_eq!(value_lines, 13, "expected exactly 13 in-scope metrics");
+        assert_eq!(value_lines, 14, "expected exactly 14 in-scope metrics");
     }
 }

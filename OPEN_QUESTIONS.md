@@ -84,23 +84,34 @@ Format: question, assumption I'm running with, status.
   triggerable.** Implemented `events_total`, `nodes_total`, `edges_total`, `assertions_total`,
   `evidence_total`, `peer_count`, `sqlite_size_bytes` (simple `COUNT(*)`/`PRAGMA` queries), plus
   `crawl_jobs`/`crawl_failures` (process-lifetime `AtomicU64` counters on `CrawlerService`,
-  incremented on every `crawl()` call regardless of caller -- CLI, REST, or MCP). Still NOT
-  implemented: `events_by_origin` (a labeled/vector metric -- needs a GROUP BY and a decision on
-  label cardinality), `events_pending_chain`, `peer_sync_errors` (needs a durable counter wired
-  through the gossip loop's own error path -- not derivable from a read-only status query),
+  incremented on every `crawl()` call regardless of caller -- CLI, REST, or MCP), and now
+  `peer_sync_errors` (see below). Still NOT implemented: `events_by_origin` (a labeled/vector
+  metric -- needs a GROUP BY and a decision on label cardinality), `events_pending_chain`,
   `replication_bytes_in`/`out`, `search_latency`, `api_latency` (all need request-duration
   instrumentation -- a middleware/histogram layer, not a snapshot query), `verification_jobs`/
   `verification_failures` (no counter wired through `verify_assertion` yet -- lower priority than
   crawl's were, since local verification has no real external-I/O failure mode the way a crawl
   does), and `blob_store_size` (no blob store exists yet -- spec section 84's `blobs/<hash>` is
-  itself unimplemented). `peer_sync_lag` IS now covered, in aggregate: `replication_target`/
+  itself unimplemented). `peer_sync_lag` is covered, in aggregate: `replication_target`/
   `replication_peers_caught_up`/`replication_lagging_peers`/`replication_meets_target`, derived
   from `SyncService::replication_status()` (the same computation `oag replication status` already
   used) via a second, read-only `SyncService` handle on `AppState` constructed straight from the
   same pool/identity `GraphService` already has -- no threading through `oag serve`'s startup
   needed, since federation policy doesn't affect this read-only query. Status: open (revisit
-  alongside whichever of request-latency histograms, `peer_sync_errors`, or the blob store lands
-  first).
+  alongside whichever of request-latency histograms or the blob store lands first).
+- **`peer_sync_errors` added, counting whole-attempt failures only.** Unlike the gauges above,
+  this needed a real, live counter -- `AppState.sync`'s own independently-constructed `SyncService`
+  handle would always read zero, since it never runs the gossip loop itself. Solved by making
+  `SyncService::sync_errors` an `Arc<AtomicU64>` (same sharing pattern as its existing
+  `trust_config`/`rate_limiter` fields) and having `oag serve` hand the *exact* `Arc` the real
+  gossip loop increments (`SyncService::sync_errors_counter()`) to `AppState` via a new
+  `AppState::with_sync_errors` builder, bypassing `AppState.sync` entirely for this one metric.
+  Incremented once per `SyncService::sync_with_peer` call that returns `Err` (`gossip::sync_round`,
+  shared by both the standard and cluster-only gossip loops) -- deliberately does *not* count a
+  partial per-event failure inside an otherwise-`Ok` call (`SyncSummary::errors`, e.g. one bad
+  event among many successfully-applied ones). Status: open (revisit if partial per-event failures
+  turn out to need their own signal too -- `search_latency`/`api_latency` above are a separate,
+  still-unbuilt metric).
 - **Output format: hand-rolled Prometheus text exposition, no external crate.** `GET /metrics`
   returns `text/plain; version=0.0.4` built by a small pure `render()` function in `oag-api`, rather
   than pulling in `metrics`/`metrics-exporter-prometheus`. Assumption: spec section 86 explicitly
