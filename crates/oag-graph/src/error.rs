@@ -16,4 +16,6 @@ pub enum GraphError {
     Embedding(#[from] oag_embeddings::EmbeddingError),
     #[error("evidence {0} has already been redacted")]
     AlreadyRedacted(oag_core::EventId),
+    #[error("actor {0}'s identity_uri has already been redacted")]
+    ActorAlreadyRedacted(oag_core::ActorId),
 }

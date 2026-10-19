@@ -13,9 +13,9 @@ use axum::http::HeaderMap;
 use axum::Json;
 use serde_json::json;
 
-use crate::dto::RedactEvidenceRequest;
+use crate::dto::RedactReasonRequest;
 use crate::error::ApiResult;
-use crate::handlers::parse_node_id;
+use crate::handlers::{parse_actor_id, parse_node_id};
 use crate::authenticate;
 use crate::state::AppState;
 
@@ -29,7 +29,7 @@ pub async fn redact_evidence(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(id): Path<String>,
-    Json(body): Json<RedactEvidenceRequest>,
+    Json(body): Json<RedactReasonRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let auth = authenticate(&headers, &state.graph).await?;
     let evidence_id = parse_event_id(&id)?;
@@ -45,7 +45,24 @@ pub async fn list_redactions(
     let auth = authenticate(&headers, &state.graph).await?;
     let redactions = state.graph.list_redactions(&auth).await?;
     let suppressed_nodes = state.graph.list_suppressed_nodes(&auth).await?;
-    Ok(Json(json!({ "redactions": redactions, "suppressed_nodes": suppressed_nodes })))
+    let actor_redactions = state.graph.list_actor_redactions(&auth).await?;
+    Ok(Json(json!({
+        "redactions": redactions,
+        "suppressed_nodes": suppressed_nodes,
+        "actor_redactions": actor_redactions,
+    })))
+}
+
+pub async fn redact_actor_identity_uri(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<RedactReasonRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let auth = authenticate(&headers, &state.graph).await?;
+    let actor_id = parse_actor_id(&id)?;
+    state.graph.redact_actor_identity_uri(&auth, actor_id, body.reason).await?;
+    Ok(Json(json!({ "status": "accepted" })))
 }
 
 pub async fn suppress_node(

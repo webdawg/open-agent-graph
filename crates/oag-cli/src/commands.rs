@@ -490,10 +490,12 @@ pub async fn rebuild(data_dir: &Path) -> anyhow::Result<()> {
 /// `Permission::Admin` through `GraphService`'s existing permission checks.
 /// A real authenticated actor can reach the exact same checks via REST
 /// (`POST /api/v1/evidence/{id}/redact`, `GET /api/v1/redactions`,
-/// `POST /api/v1/nodes/{id}/suppress|unsuppress`, in `oag-api`'s
+/// `POST /api/v1/nodes/{id}/suppress|unsuppress`,
+/// `POST /api/v1/actors/{id}/redact-identity-uri`, in `oag-api`'s
 /// `redaction` module) or MCP (`graph_redact_evidence`/
-/// `graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`,
-/// in `oag-mcp`) -- same `GraphService` methods, no duplicated logic.
+/// `graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`/
+/// `graph_redact_actor_identity_uri`, in `oag-mcp`) -- same `GraphService`
+/// methods, no duplicated logic.
 fn cli_admin_auth() -> AuthContext {
     AuthContext {
         actor_id: ActorId::derive(b"oag-cli:local-operator"),
@@ -524,14 +526,37 @@ pub async fn redact_evidence(
     Ok(())
 }
 
+pub async fn redact_actor_identity_uri(
+    data_dir: &Path,
+    actor_id: &str,
+    reason: Option<String>,
+    force: bool,
+) -> anyhow::Result<()> {
+    if !force {
+        anyhow::bail!(
+            "redaction permanently blanks this actor's identity_uri in your local database and \
+             cannot be undone by any command in this tool. It also cannot reach copies of this \
+             actor already replicated to other peers -- an immutable distributed log can't \
+             promise that (spec section 85). Pass --force if you're certain."
+        );
+    }
+    let graph = open_graph(data_dir).await?;
+    let id = actor_id.parse().map_err(|_| anyhow::anyhow!("invalid actor id '{actor_id}'"))?;
+    graph.redact_actor_identity_uri(&cli_admin_auth(), id, reason).await?;
+    println!("redacted identity_uri for actor {actor_id}");
+    Ok(())
+}
+
 pub async fn redact_list(data_dir: &Path) -> anyhow::Result<()> {
     let graph = open_graph(data_dir).await?;
     let auth = cli_admin_auth();
     let redactions = graph.list_redactions(&auth).await?;
     let suppressed_nodes = graph.list_suppressed_nodes(&auth).await?;
+    let actor_redactions = graph.list_actor_redactions(&auth).await?;
     println!("{}", serde_json::to_string_pretty(&serde_json::json!({
         "redactions": redactions,
         "suppressed_nodes": suppressed_nodes,
+        "actor_redactions": actor_redactions,
     }))?);
     Ok(())
 }

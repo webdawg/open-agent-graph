@@ -310,7 +310,7 @@ pub(crate) fn parse_node_id(s: &str) -> Result<NodeId, ApiError> {
         .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid node id '{s}'"))))
 }
 
-fn parse_actor_id(s: &str) -> Result<ActorId, ApiError> {
+pub(crate) fn parse_actor_id(s: &str) -> Result<ActorId, ApiError> {
     s.parse()
         .map_err(|_| ApiError(oag_graph::GraphError::InvalidInput(format!("invalid actor id '{s}'"))))
 }

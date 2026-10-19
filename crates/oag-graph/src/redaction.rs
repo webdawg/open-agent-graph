@@ -16,12 +16,16 @@
 //!   `unsuppress_node_from_search` fully reverses it.
 
 use oag_core::{ActorId, AssertionId, EdgeId, EventId, NodeId, Permission};
-use oag_storage::repo::{redactions as redactions_repo, search_suppressions as search_suppressions_repo};
+use oag_storage::repo::{
+    actor_redactions as actor_redactions_repo, redactions as redactions_repo,
+    search_suppressions as search_suppressions_repo,
+};
 
 use crate::assert::check_opt_len;
 use crate::error::GraphError;
 use crate::service::{AuthContext, GraphService};
 
+pub use oag_storage::repo::actor_redactions::ActorRedaction;
 pub use oag_storage::repo::redactions::Redaction;
 pub use oag_storage::repo::search_suppressions::SuppressedNode;
 pub use oag_storage::MigrationOutcome;
@@ -83,6 +87,52 @@ impl GraphService {
         auth.require(Permission::Admin)?;
         let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
         Ok(search_suppressions_repo::list_all(&mut conn).await?)
+    }
+
+    /// Blanks `identity_uri` on the actor identified by `actor_id` --
+    /// mirrors `Self::redact_evidence` exactly, one field on one row. Safe
+    /// to blank: confirmed by direct code research that `identity_uri` is
+    /// never cryptographic material (that's `public_key`/`PeerId`, an
+    /// entirely separate column) and is never re-verified against anything
+    /// after an actor is declared -- it's descriptive metadata only, used
+    /// solely as a weak ranking input (`identity_assurance_score`).
+    ///
+    /// Never re-runs silently on an already-redacted id -- returns
+    /// `GraphError::ActorAlreadyRedacted` instead, same guarantee
+    /// `Self::redact_evidence` already gives.
+    pub async fn redact_actor_identity_uri(
+        &self,
+        auth: &AuthContext,
+        actor_id: ActorId,
+        reason: Option<String>,
+    ) -> Result<(), GraphError> {
+        auth.require(Permission::Admin)?;
+        check_opt_len("reason", &reason, MAX_REASON_LEN)?;
+
+        let mut tx = self.pool().begin().await.map_err(oag_storage::StorageError::from)?;
+
+        if actor_redactions_repo::exists(&mut tx, actor_id).await? {
+            return Err(GraphError::ActorAlreadyRedacted(actor_id));
+        }
+
+        let updated = oag_storage::repo::actors::redact_identity_uri(&mut tx, actor_id).await?;
+        if !updated {
+            return Err(GraphError::NotFound(format!("actor {actor_id}")));
+        }
+
+        actor_redactions_repo::insert(&mut tx, actor_id, self.now(), reason.as_deref()).await?;
+
+        tx.commit().await.map_err(oag_storage::StorageError::from)?;
+        Ok(())
+    }
+
+    /// Every actor `identity_uri` redaction tombstone (spec section 85),
+    /// for `oag redact list`'s audit view -- the same parallel capability
+    /// `list_redactions`/`list_suppressed_nodes` already have.
+    pub async fn list_actor_redactions(&self, auth: &AuthContext) -> Result<Vec<ActorRedaction>, GraphError> {
+        auth.require(Permission::Admin)?;
+        let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
+        Ok(actor_redactions_repo::list_all(&mut conn).await?)
     }
 
     /// Hides `node_id` from `Self::search` results without touching the
@@ -434,5 +484,101 @@ mod tests {
         let (service, auth) = service_with_admin("migrate-actor-unknown").await;
         let err = service.migrate_actor(&auth, ActorId::derive(b"no-such-actor")).await.unwrap_err();
         assert!(matches!(err, GraphError::Storage(oag_storage::StorageError::NotFound)));
+    }
+
+    #[tokio::test]
+    async fn redact_actor_identity_uri_blanks_it_but_leaves_public_key_and_name_intact() {
+        let (service, auth) = service_with_admin("redact-actor-identity-uri").await;
+        let actor_id = service
+            .declare_actor(ActorType::Agent, Some("has-an-identity-uri".into()), None, None)
+            .await
+            .unwrap();
+        // `declare_actor`'s public surface has no way to set `identity_uri`
+        // directly (every real call site in this codebase passes `None` --
+        // see the research behind this feature), so this test sets it the
+        // same way the one existing non-CLI caller that ever populates it
+        // does: directly through the storage layer, exactly as if an
+        // operator had used `oag key create --identity-uri`.
+        let mut conn = service.pool().acquire().await.unwrap();
+        sqlx::query("UPDATE actors SET identity_uri = ? WHERE actor_id = ?")
+            .bind("https://example.com/me")
+            .bind(actor_id.as_hash().as_bytes().to_vec())
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        drop(conn);
+
+        let actor = service.get_actor(actor_id).await.unwrap().unwrap();
+        assert_eq!(actor.identity_uri.as_deref(), Some("https://example.com/me"));
+
+        service.redact_actor_identity_uri(&auth, actor_id, Some("gdpr request".to_string())).await.unwrap();
+
+        let actor = service.get_actor(actor_id).await.unwrap().unwrap();
+        assert_eq!(actor.identity_uri, None, "identity_uri must be blanked");
+        assert_eq!(actor.name.as_deref(), Some("has-an-identity-uri"), "name must survive");
+        assert_eq!(actor.actor_type, ActorType::Agent, "actor_type must survive");
+
+        let redactions = service.list_actor_redactions(&auth).await.unwrap();
+        assert_eq!(redactions.len(), 1);
+        assert_eq!(redactions[0].actor_id, actor_id);
+        assert_eq!(redactions[0].reason.as_deref(), Some("gdpr request"));
+    }
+
+    #[tokio::test]
+    async fn redacting_an_actors_identity_uri_twice_is_a_typed_error_not_a_silent_noop() {
+        let (service, auth) = service_with_admin("redact-actor-twice").await;
+        let actor_id =
+            service.declare_actor(ActorType::Agent, Some("twice".into()), None, None).await.unwrap();
+
+        service.redact_actor_identity_uri(&auth, actor_id, None).await.unwrap();
+        let err = service.redact_actor_identity_uri(&auth, actor_id, None).await.unwrap_err();
+        assert!(matches!(err, GraphError::ActorAlreadyRedacted(id) if id == actor_id));
+    }
+
+    #[tokio::test]
+    async fn redacting_an_unknown_actors_identity_uri_is_not_found() {
+        let (service, auth) = service_with_admin("redact-actor-unknown").await;
+        let err = service
+            .redact_actor_identity_uri(&auth, ActorId::derive(b"no-such-actor"), None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, GraphError::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn redacting_an_actors_identity_uri_requires_admin_permission() {
+        let (service, _) = service_with_admin("redact-actor-needs-admin").await;
+        let actor_id =
+            service.declare_actor(ActorType::Agent, Some("no-admin".into()), None, None).await.unwrap();
+        let no_admin = AuthContext { actor_id, permissions: vec![Permission::GraphAssert] };
+
+        let err = service.redact_actor_identity_uri(&no_admin, actor_id, None).await.unwrap_err();
+        assert!(matches!(err, GraphError::PermissionDenied(_)));
+    }
+
+    #[tokio::test]
+    async fn actor_identity_uri_redaction_survives_rebuild() {
+        let (service, auth) = service_with_admin("redact-actor-rebuild").await;
+        let actor_id =
+            service.declare_actor(ActorType::Agent, Some("survives-rebuild".into()), None, None).await.unwrap();
+        let mut conn = service.pool().acquire().await.unwrap();
+        sqlx::query("UPDATE actors SET identity_uri = ? WHERE actor_id = ?")
+            .bind("https://example.com/me")
+            .bind(actor_id.as_hash().as_bytes().to_vec())
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        drop(conn);
+
+        service.redact_actor_identity_uri(&auth, actor_id, Some("survives rebuild".to_string())).await.unwrap();
+
+        let summary = service.rebuild_projection().await.unwrap();
+        assert_eq!(summary.actor_redactions_reapplied, 1);
+
+        let actor = service.get_actor(actor_id).await.unwrap().unwrap();
+        assert_eq!(
+            actor.identity_uri, None,
+            "identity_uri redaction must survive rebuild, not be resurrected by replay"
+        );
     }
 }

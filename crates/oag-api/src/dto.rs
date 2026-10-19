@@ -100,8 +100,12 @@ pub struct SupersedeRequest {
     pub new_assertion_id: String,
 }
 
+/// Shared by every redaction endpoint that only ever needs an optional
+/// free-text reason (`POST /api/v1/evidence/{id}/redact`,
+/// `POST /api/v1/actors/{id}/redact-identity-uri`) -- the body shape is
+/// identical, so one struct covers both rather than two near-duplicates.
 #[derive(Debug, Deserialize)]
-pub struct RedactEvidenceRequest {
+pub struct RedactReasonRequest {
     pub reason: Option<String>,
 }
 

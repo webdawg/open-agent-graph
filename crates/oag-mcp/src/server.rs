@@ -12,8 +12,9 @@ use tracing::Instrument;
 
 use crate::params::{
     ActorIdParams, AddEvidenceParams, AssertParams, AssertionIdParams, CrawlParams, DisputeParams,
-    EdgeIdParams, EvidenceParam, HistoryParams, NodeIdParams, RedactEvidenceParams, ResolveParams,
-    RetractParams, SearchParams, SubgraphParams, SupersedeParams, VerifyParams,
+    EdgeIdParams, EvidenceParam, HistoryParams, NodeIdParams, RedactActorIdentityUriParams,
+    RedactEvidenceParams, ResolveParams, RetractParams, SearchParams, SubgraphParams,
+    SupersedeParams, VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -546,7 +547,7 @@ impl OagMcpServer {
         .await
     }
 
-    #[tool(description = "List every redaction tombstone and every currently search-suppressed node on this peer. Admin-only audit view, same data as `oag redact list`.")]
+    #[tool(description = "List every redaction tombstone, every currently search-suppressed node, and every actor identity_uri redaction on this peer. Admin-only audit view, same data as `oag redact list`.")]
     async fn graph_list_redactions(
         &self,
         Extension(parts): Extension<http::request::Parts>,
@@ -555,7 +556,30 @@ impl OagMcpServer {
             let auth = self.authenticate(&parts).await?;
             let redactions = self.graph.list_redactions(&auth).await.map_err(map_err)?;
             let suppressed_nodes = self.graph.list_suppressed_nodes(&auth).await.map_err(map_err)?;
-            Ok(Json(json!({ "redactions": redactions, "suppressed_nodes": suppressed_nodes })))
+            let actor_redactions = self.graph.list_actor_redactions(&auth).await.map_err(map_err)?;
+            Ok(Json(json!({
+                "redactions": redactions,
+                "suppressed_nodes": suppressed_nodes,
+                "actor_redactions": actor_redactions,
+            })))
+        })
+        .await
+    }
+
+    #[tool(description = "Redact an actor's identity_uri: permanently blanks it in this peer's own local database. public_key/name/actor_type are left intact. Irreversible at this tool's level (the signed event itself is untouched in the log). Requires the admin permission, same as redact_evidence/list_redactions/suppress_node/unsuppress_node.")]
+    async fn graph_redact_actor_identity_uri(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<RedactActorIdentityUriParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_redact_actor_identity_uri", async {
+            let auth = self.authenticate(&parts).await?;
+            let actor_id = p
+                .actor_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid actor_id", None))?;
+            self.graph.redact_actor_identity_uri(&auth, actor_id, p.reason).await.map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
         })
         .await
     }

@@ -31,9 +31,10 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | GET | `/history/{object_type}/{id}` | `graph:read` | Full event history for a node/edge/assertion |
 | POST | `/crawl` | `graph:crawl` | Crawl one URL and assert what's found (spec section 71) -- see below |
 | POST | `/evidence/{id}/redact` | `admin` | Permanently blank one evidence item's `title`/`excerpt` locally (spec section 85) -- see below |
-| GET | `/redactions` | `admin` | List every redaction tombstone and every currently search-suppressed node |
+| GET | `/redactions` | `admin` | List every redaction tombstone, every currently search-suppressed node, and every actor identity_uri redaction |
 | POST | `/nodes/{id}/suppress` | `admin` | Hide a node from search results (reversible, doesn't touch the node/edges/assertions) |
 | POST | `/nodes/{id}/unsuppress` | `admin` | Reverse `/nodes/{id}/suppress` |
+| POST | `/actors/{id}/redact-identity-uri` | `admin` | Permanently blank one actor's `identity_uri` locally (spec section 85) -- see below |
 | GET | `/status` | none | Peer id, identity, basic status |
 | GET | `/metrics` (top-level, not under `/api/v1`) | none | Prometheus text-format metrics (spec section 86) |
 
@@ -48,16 +49,19 @@ no `allow_private_networks` request field: a REST/MCP caller can never widen thi
 SSRF policy for their request -- only `[crawler].allow_private_networks` in `config.toml` can, and
 that has nothing to do with any individual request's permissions.
 
-### `/evidence/{id}/redact`, `/redactions`, `/nodes/{id}/suppress|unsuppress` (spec section 85)
+### `/evidence/{id}/redact`, `/redactions`, `/nodes/{id}/suppress|unsuppress`, `/actors/{id}/redact-identity-uri` (spec section 85)
 
 `POST /evidence/{id}/redact { "reason": "..." }` (reason optional) permanently blanks that
 evidence row's `title`/`excerpt` in this peer's own local database -- irreversible at the tooling
 level, and unable to reach any copy already replicated to another peer. Returns `409 Conflict`
-(`AlreadyRedacted`) on a repeat call against the same id, never a silent no-op. All four routes
-require the `admin` permission, the same `Permission::Admin` check `oag redact *` has always run
-against a synthetic local-operator `AuthContext` -- these routes reuse the identical
-`GraphService` methods with a real authenticated actor instead, adding no new business logic.
-`GET /redactions` returns `{"redactions": [...], "suppressed_nodes": [...]}`, the same combined
+(`AlreadyRedacted`) on a repeat call against the same id, never a silent no-op. `POST
+/actors/{id}/redact-identity-uri { "reason": "..." }` is the exact same shape for one actor's
+`identity_uri` field instead (`public_key`/`name`/`actor_type` untouched; `409 Conflict`/
+`ActorAlreadyRedacted` on a repeat call). All five routes require the `admin` permission, the same
+`Permission::Admin` check `oag redact *` has always run against a synthetic local-operator
+`AuthContext` -- these routes reuse the identical `GraphService` methods with a real authenticated
+actor instead, adding no new business logic. `GET /redactions` returns
+`{"redactions": [...], "suppressed_nodes": [...], "actor_redactions": [...]}`, the same combined
 shape `oag redact list` prints. `POST /nodes/{id}/suppress` / `.../unsuppress` are both idempotent
 no-ops when the node is already in (or already out of) that state.
 
@@ -149,6 +153,7 @@ tool per `GraphService` capability:
 | `graph_list_redactions` | `GET /redactions` -- also requires `admin`, not just an authenticated key |
 | `graph_suppress_node` | `POST /nodes/{id}/suppress` -- also requires `admin`, not just an authenticated key |
 | `graph_unsuppress_node` | `POST /nodes/{id}/unsuppress` -- also requires `admin`, not just an authenticated key |
+| `graph_redact_actor_identity_uri` | `POST /actors/{id}/redact-identity-uri` -- also requires `admin`, not just an authenticated key |
 
 ## CLI (`oag`)
 
@@ -182,7 +187,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag gravity show` | This peer's gravity level, rolling and persisting one on first use (`spec/25-gravity.md`) |
 | `oag backup <path> [--pin]` | Consistent whole-database snapshot (`VACUUM INTO`), optionally pinned to IPFS (`spec/29-ipfs-pinning.md`) |
 | `oag rebuild` | Wipe and replay every derived table from the event log |
-| `oag redact evidence/list/suppress-node/unsuppress-node` | Deletion and redaction — see `docs/security.md` (also reachable remotely as `POST /evidence/{id}/redact`, `GET /redactions`, `POST /nodes/{id}/suppress|unsuppress` / `graph_redact_evidence`/`graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`, all requiring `admin`) |
+| `oag redact evidence/list/suppress-node/unsuppress-node/actor-identity-uri` | Deletion and redaction — see `docs/security.md` (also reachable remotely as `POST /evidence/{id}/redact`, `GET /redactions`, `POST /nodes/{id}/suppress|unsuppress`, `POST /actors/{id}/redact-identity-uri` / `graph_redact_evidence`/`graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`/`graph_redact_actor_identity_uri`, all requiring `admin`) |
 | `oag migrate node/edge/assertion/evidence/actor <id> [--force]` | Permanently rewrite one artifact's row to its current schema shape (`spec/27-artifact-versioning.md`) |
 | `oag crawl <url>` | Fetch a URL, extract structured facts, assert them as evidence-backed claims (also available remotely as `POST /crawl` / `graph_crawl`, requiring `graph:crawl`) |
 | `oag ipfs cat <cid>` | Retrieve previously-pinned content by CID (`spec/29-ipfs-pinning.md`) |

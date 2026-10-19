@@ -65,6 +65,20 @@ pub async fn get_by_id(
     row.map(row_to_actor).transpose()
 }
 
+/// Spec section 85: blanks `identity_uri` on one actor row, mirroring
+/// `repo::assertions::redact_evidence` exactly. `public_key`/`name`/
+/// `actor_type` are left intact -- only `identity_uri` is ever in scope.
+pub async fn redact_identity_uri(
+    conn: &mut SqliteConnection,
+    actor_id: ActorId,
+) -> Result<bool, StorageError> {
+    let result = sqlx::query("UPDATE actors SET identity_uri = NULL WHERE actor_id = ?")
+        .bind(actor_id.as_hash().as_bytes().to_vec())
+        .execute(&mut *conn)
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 /// spec/27-artifact-versioning.md's "convert perm" access mode for an
 /// actor, mirroring `repo::nodes::migrate_to_current` exactly.
 pub async fn migrate_to_current(

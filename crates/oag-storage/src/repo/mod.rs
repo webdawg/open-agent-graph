@@ -1,3 +1,4 @@
+pub mod actor_redactions;
 pub mod actors;
 pub mod assertions;
 pub mod edges;

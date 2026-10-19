@@ -706,3 +706,96 @@ async fn graph_suppress_node_without_admin_is_rejected() {
         .await;
     assert!(result.is_err(), "expected graph_suppress_node without admin permission to fail");
 }
+
+/// Closes the same "No REST/MCP surface" gap as `graph_redact_evidence`,
+/// for actor `identity_uri` redaction.
+#[tokio::test]
+async fn graph_redact_actor_identity_uri_blanks_it_and_lists_it() {
+    let (url, raw_key) = spawn_mcp_server_with_admin("mcp-redact-actor-identity-uri").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let assert_result = client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({
+                "subject": "https://example.com/mcp-redact-actor-test",
+                "predicate": "instance_of",
+                "object": "concept:mcp-redact-actor-test",
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ))
+        .await
+        .unwrap();
+    let assertion_id =
+        assert_result.structured_content.unwrap()["assertion_id"].as_str().unwrap().to_string();
+
+    let get_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_assertion")
+                .with_arguments(json!({ "assertion_id": assertion_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let actor_id =
+        get_result.structured_content.unwrap()["assertion"]["actor_id"].as_str().unwrap().to_string();
+
+    client
+        .call_tool(CallToolRequestParams::new("graph_redact_actor_identity_uri").with_arguments(
+            json!({ "actor_id": actor_id, "reason": "gdpr request" }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+
+    let get_result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_actor")
+                .with_arguments(json!({ "actor_id": actor_id }).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let body = get_result.structured_content.unwrap();
+    assert_eq!(body["actor"]["identity_uri"], serde_json::Value::Null);
+
+    let list_result = client
+        .call_tool(CallToolRequestParams::new("graph_list_redactions"))
+        .await
+        .unwrap();
+    let body = list_result.structured_content.unwrap();
+    assert_eq!(body["actor_redactions"].as_array().unwrap().len(), 1);
+    assert_eq!(body["actor_redactions"][0]["reason"], "gdpr request");
+
+    // Repeat call against the same actor -> a real tool error, not a
+    // silent no-op.
+    let repeat = client
+        .call_tool(CallToolRequestParams::new("graph_redact_actor_identity_uri").with_arguments(
+            json!({ "actor_id": actor_id }).as_object().unwrap().clone(),
+        ))
+        .await;
+    assert!(repeat.is_err(), "expected redacting the same actor's identity_uri twice to error");
+}
+
+/// Same shape as `graph_suppress_node_without_admin_is_rejected`.
+#[tokio::test]
+async fn graph_redact_actor_identity_uri_without_admin_is_rejected() {
+    let (url, raw_key) = spawn_mcp_server("mcp-redact-actor-no-admin").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_redact_actor_identity_uri")
+                .with_arguments(json!({ "actor_id": "0".repeat(64) }).as_object().unwrap().clone()),
+        )
+        .await;
+    assert!(result.is_err(), "expected graph_redact_actor_identity_uri without admin permission to fail");
+}

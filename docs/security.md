@@ -70,7 +70,7 @@ Permissions (`Permission` enum, `crates/oag-core/src/actor.rs`):
 | `graph:verify` | Record verification observations |
 | `graph:retract-own` | Retract an assertion your own actor created |
 | `graph:crawl` | Trigger this peer's crawler against a caller-supplied URL (spec section 71) -- separate from `graph:assert` since it makes this peer issue outbound HTTP requests, not just author a claim |
-| `admin` | Evidence redaction, search suppression (spec section 85) — `oag redact *` (CLI), or `POST /api/v1/evidence/{id}/redact`/`GET /api/v1/redactions`/`POST /api/v1/nodes/{id}/suppress\|unsuppress` (REST) / `graph_redact_evidence`/`graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node` (MCP) |
+| `admin` | Evidence redaction, search suppression, actor identity_uri redaction (spec section 85) — `oag redact *` (CLI), or `POST /api/v1/evidence/{id}/redact`/`GET /api/v1/redactions`/`POST /api/v1/nodes/{id}/suppress\|unsuppress`/`POST /api/v1/actors/{id}/redact-identity-uri` (REST) / `graph_redact_evidence`/`graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`/`graph_redact_actor_identity_uri` (MCP) |
 
 **`admin` is a superuser bypass, not just its own scoped permission**: `AuthContext::require`
 (`crates/oag-graph/src/service.rs`) checks `self.permissions.contains(&permission) ||
@@ -292,17 +292,27 @@ assume — flagged as a real future direction, not designed or scheduled.
 hides a node from search results only. The node, its edges, and every assertion about it remain
 fully intact and directly retrievable by id — this is a UI-layer omission, not a data-minimization
 control, and should not be relied on to keep anything actually private. `oag redact list` shows
-both audit views together — every redaction tombstone and every currently-suppressed node — rather
-than just the former.
+all three audit views together — every redaction tombstone, every currently-suppressed node, and
+every actor identity_uri redaction — rather than just one.
+
+`oag redact actor-identity-uri <id>` is the same mechanism as evidence redaction, applied to one
+actor's `identity_uri` field instead of an evidence row's `title`/`excerpt`. `identity_uri` is
+never cryptographic material — that's the separate `public_key` column, and `PeerId` is derived
+purely from the Ed25519 verifying key, never from `identity_uri` — so blanking it cannot break
+peer recognition, signature verification, or API-key auth. The one real side effect: an actor with
+no `identity_uri` and no `public_key` scores lower on the `identity_assurance_score` ranking
+signal, same as any other actor missing identity information.
 
 All of this is also reachable remotely over REST (`POST /api/v1/evidence/{id}/redact`,
-`GET /api/v1/redactions`, `POST /api/v1/nodes/{id}/suppress|unsuppress`) and MCP
-(`graph_redact_evidence`/`graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`),
-gated behind `admin` exactly like the CLI commands — same `GraphService` methods, no separate
-logic. One real difference: the CLI's `--force` flag and printed warning are a *local* confirmation
-step against fat-fingering a destructive command, not a security boundary (`admin` is); a
-REST/MCP caller holding an `admin` key has no equivalent confirmation prompt and no `--force` to
-pass, since a deliberate API call carries no risk of being muscle-memory.
+`GET /api/v1/redactions`, `POST /api/v1/nodes/{id}/suppress|unsuppress`,
+`POST /api/v1/actors/{id}/redact-identity-uri`) and MCP (`graph_redact_evidence`/
+`graph_list_redactions`/`graph_suppress_node`/`graph_unsuppress_node`/
+`graph_redact_actor_identity_uri`), gated behind `admin` exactly like the CLI commands — same
+`GraphService` methods, no separate logic. One real difference: the CLI's `--force` flag and
+printed warning are a *local* confirmation step against fat-fingering a destructive command, not a
+security boundary (`admin` is); a REST/MCP caller holding an `admin` key has no equivalent
+confirmation prompt and no `--force` to pass, since a deliberate API call carries no risk of being
+muscle-memory.
 
 **Bottom line**: OAG's redaction tooling minimizes what *this* peer keeps and serves going forward.
 It is not, and cannot be, a mechanism for retracting data from a network you don't fully control —

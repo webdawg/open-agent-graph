@@ -93,6 +93,10 @@ pub fn build_router(state: AppState) -> Router {
             "/api/v1/nodes/{id}/unsuppress",
             post(redaction::unsuppress_node),
         )
+        .route(
+            "/api/v1/actors/{id}/redact-identity-uri",
+            post(redaction::redact_actor_identity_uri),
+        )
         .route("/ui/search", get(human::search_page))
         .route("/ui/roadmap", get(human::roadmap_page))
         .route("/ui/nodes/{id}", get(human::node_page))

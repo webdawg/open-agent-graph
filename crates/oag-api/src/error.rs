@@ -36,6 +36,8 @@ impl IntoResponse for ApiError {
             // `POST /api/v1/evidence/{id}/redact` (crate::redaction) is the
             // one REST handler that can actually produce this.
             GraphError::AlreadyRedacted(_) => (StatusCode::CONFLICT, self.0.to_string()),
+            // `POST /api/v1/actors/{id}/redact-identity-uri` (crate::redaction).
+            GraphError::ActorAlreadyRedacted(_) => (StatusCode::CONFLICT, self.0.to_string()),
         };
         (status, Json(json!({ "error": message }))).into_response()
     }

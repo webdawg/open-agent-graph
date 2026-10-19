@@ -223,9 +223,18 @@ Format: question, assumption I'm running with, status.
 - **Blob removal is out of scope.** No blob store exists yet (spec section 84's `blobs/<hash>`,
   already tracked as deferred future work alongside native IPFS hosting). Status: deferred, tracked
   in memory, not here.
-- **Actor `identity_uri` redaction** (could carry personal data, e.g. an email-shaped URI) was left
-  out for the same "don't scope-creep past the clearest, safest case" reasoning as whole-assertion
-  redaction. Status: open.
+- **Actor `identity_uri` redaction added** (`oag redact actor-identity-uri` / `POST
+  /api/v1/actors/{id}/redact-identity-uri` / `graph_redact_actor_identity_uri`). Confirmed safe by
+  direct code research before building it, unlike whole-assertion redaction (which really does have
+  an unsolved referential-integrity problem, still open below): `identity_uri` is a plain,
+  optional, free-text column, never cryptographic material (that's the separate `public_key`
+  column; `PeerId` derives purely from the Ed25519 verifying key, never from `identity_uri`), and
+  it's never re-verified against anything after `declare_actor` -- the one signature that ever
+  touches it (`ActorKeyProofMessage`) is itself never persisted. New tombstone table
+  (`actor_identity_uri_redactions`, keyed by `ActorId`, no FK -- `actors` is wiped and replayed by
+  `oag rebuild` just like `nodes` is, so this follows `search_suppressions`' no-FK pattern, not
+  `redactions`' FK-to-`events` one) and a new `RebuildSummary::actor_redactions_reapplied` field.
+  Status: resolved.
 
 ## Supersession surface (spec section 36)
 

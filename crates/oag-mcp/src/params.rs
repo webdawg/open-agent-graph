@@ -117,3 +117,9 @@ pub struct RedactEvidenceParams {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct RedactActorIdentityUriParams {
+    pub actor_id: String,
+    pub reason: Option<String>,
+}
+

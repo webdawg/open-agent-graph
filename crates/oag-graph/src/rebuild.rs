@@ -4,7 +4,10 @@
 //! for exactly which tables that means (and, just as importantly, which it
 //! doesn't).
 use oag_events::SignedEvent;
-use oag_storage::repo::{assertions as assertions_repo, events as events_repo, rebuild as rebuild_repo, redactions as redactions_repo};
+use oag_storage::repo::{
+    actor_redactions as actor_redactions_repo, actors as actors_repo, assertions as assertions_repo,
+    events as events_repo, rebuild as rebuild_repo, redactions as redactions_repo,
+};
 
 use crate::error::GraphError;
 use crate::service::GraphService;
@@ -18,6 +21,11 @@ pub struct RebuildSummary {
     /// would otherwise resurrect the original `title`/`excerpt` this many
     /// times over.
     pub redactions_reapplied: usize,
+    /// The actor-`identity_uri` equivalent of `redactions_reapplied` --
+    /// `actors` is also wiped and replayed, so without this, a redacted
+    /// `identity_uri` would come back from `ActorDeclarePayload` on every
+    /// rebuild too.
+    pub actor_redactions_reapplied: usize,
 }
 
 impl GraphService {
@@ -50,11 +58,17 @@ impl GraphService {
             assertions_repo::redact_evidence(&mut tx, redaction.event_id).await?;
         }
 
+        let outstanding_actor_redactions = actor_redactions_repo::list_all(&mut tx).await?;
+        for redaction in &outstanding_actor_redactions {
+            actors_repo::redact_identity_uri(&mut tx, redaction.actor_id).await?;
+        }
+
         tx.commit().await.map_err(oag_storage::StorageError::from)?;
 
         Ok(RebuildSummary {
             events_replayed: replayed,
             redactions_reapplied: outstanding_redactions.len(),
+            actor_redactions_reapplied: outstanding_actor_redactions.len(),
         })
     }
 }

@@ -290,6 +290,19 @@ enum RedactCommand {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
+    /// Permanently blank an actor's identity_uri in this peer's own local
+    /// database. public_key/name/actor_type are left intact. Cannot be
+    /// undone by any command in this tool, and cannot reach copies of this
+    /// actor already replicated to other peers -- refuses without --force.
+    ActorIdentityUri {
+        actor_id: String,
+        #[arg(long)]
+        reason: Option<String>,
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -598,6 +611,9 @@ async fn main() -> anyhow::Result<()> {
         Command::Redact { command: RedactCommand::UnsuppressNode { node_id, data_dir } } => {
             commands::redact_unsuppress_node(&data_dir, &node_id).await
         }
+        Command::Redact {
+            command: RedactCommand::ActorIdentityUri { actor_id, reason, force, data_dir },
+        } => commands::redact_actor_identity_uri(&data_dir, &actor_id, reason, force).await,
         Command::Migrate { command: MigrateCommand::Node { id, force, data_dir } } => {
             commands::migrate_node(&data_dir, &id, force).await
         }

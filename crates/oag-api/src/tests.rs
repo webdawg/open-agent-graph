@@ -1124,6 +1124,97 @@ async fn redaction_endpoints_require_admin_not_just_an_authenticated_key() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
+/// Closes the same "No REST/MCP surface" gap as the evidence/node-suppress
+/// tests above, for actor `identity_uri` redaction (`OPEN_QUESTIONS.md`'s
+/// "Deletion and redaction" section).
+#[tokio::test]
+async fn redact_actor_identity_uri_endpoint_blanks_it_and_rejects_a_repeat_call() {
+    let (app, key) = test_app_with_admin("redact-actor-identity-uri-endpoint").await;
+    let auth_header = format!("Bearer {key}");
+
+    let create_body = json!({
+        "subject": "https://example.com/redact-actor-endpoint-test",
+        "predicate": "instance_of",
+        "object": "concept:redact-actor-endpoint-test",
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(create_body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let assertion_id = body_json(response).await["assertion_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/assertions/{assertion_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let actor_id = body_json(response).await["assertion"]["actor_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/actors/{actor_id}/redact-identity-uri"))
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({ "reason": "gdpr request" }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/actors/{actor_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(body["actor"]["identity_uri"], Value::Null);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/redactions")
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    assert_eq!(body["actor_redactions"].as_array().unwrap().len(), 1);
+    assert_eq!(body["actor_redactions"][0]["reason"], "gdpr request");
+
+    let response = app
+        .oneshot(
+            Request::post(format!("/api/v1/actors/{actor_id}/redact-identity-uri"))
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(json!({}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
 /// `spec/31-service-receipts.md`: a real two-peer exchange over
 /// `POST /oag/transfer/v1/fetch` -- a real `EmbeddedIpfsProvider` backing
 /// the "server" peer's content, a real signed request from an independent
