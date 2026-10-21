@@ -192,6 +192,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 | `oag crawl <url>` | Fetch a URL, extract structured facts, assert them as evidence-backed claims (also available remotely as `POST /crawl` / `graph_crawl`, requiring `graph:crawl`) |
 | `oag ipfs cat <cid>` | Retrieve previously-pinned content by CID (`spec/29-ipfs-pinning.md`) |
 | `oag doctor [--config]` | Local health checks -- data dir, identity, database/migrations; validates `config.toml` (via the exact same resolver `oag serve` uses) if `--config` is given |
+| `oag gateway query --service ntp\|http [--url <url>]` | Manually run this peer's own `[gateway]`-configured quorum/cache/origin/relay resolution, without needing a real NTP/HTTP client (`spec/32-verified-internet-gateway.md`) |
 
 ## Configuration (`config.toml`, spec section 94)
 
@@ -204,6 +205,8 @@ signed cluster membership + its own gossip cadence, `spec/26-peer-clustering.md`
 pinning provider, disabled by default, `spec/29-ipfs-pinning.md`), `[addressing]` (long-word DNS
 addressing domain, unset by default, `spec/30-long-word-addressing.md`), `[transfer]` (multi-hop
 relay peers for `POST /oag/transfer/v1/fetch`, empty by default, `spec/31-service-receipts.md`
-Phase 2). Every section has a safe default; an empty or absent `config.toml` is a fully functional
+Phase 2), `[gateway]`/`[gateway.ntp]`/`[gateway.http]` (verified internet gateway -- quorum peers,
+real NTP/HTTP front-end listeners, all disabled by default, `spec/32-verified-internet-gateway.md`).
+Every section has a safe default; an empty or absent `config.toml` is a fully functional
 single-peer, no-external-service configuration. `OAG_<SECTION>_<KEY>` environment variables
 override file values.

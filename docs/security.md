@@ -101,6 +101,18 @@ to authenticate one peer to another. It carries its own per-`client_peer_id` rat
 "anonymous" bucket, since a real IPFS fetch plus a graph write per request is meaningfully more
 expensive than most other routes.
 
+A fourth route, `POST /oag/gateway/v1/query` (`spec/32-verified-internet-gateway.md`), is
+unauthenticated by the bearer-token layer for the identical reason as `/oag/transfer/v1/fetch`
+above — self-certifying Ed25519 signature instead, its own separate per-`requester_peer_id` rate
+limit (`AppState.gateway_rate_limiter`). This is the *peer-to-peer* side of the gateway feature
+only. Its two real front-end listeners — a UDP NTP server, an HTTP reverse proxy, each bound to
+their own `[gateway.ntp]`/`[gateway.http]` listen address, off by default — are deliberately fully
+unauthenticated at any layer: they're meant to answer real outside NTP/HTTP clients exactly like
+any public NTP server or web proxy would. An operator enabling the HTTP front-end is deliberately
+running an open HTTP proxy (SSRF-guarded on the upstream-fetch side, same posture as `[crawler]`,
+but with no caller-side gate at all) — understand that exposure before enabling
+`[gateway.http].listen_addr` on a reachable interface.
+
 Peer-to-peer replication (`oag-sync`) is a *separate* trust boundary from actor API keys — see
 [Federation trust](#federation-trust-vs-data-trust) below.
 

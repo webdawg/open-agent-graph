@@ -42,6 +42,8 @@ pub struct FileConfig {
     pub addressing: AddressingSection,
     #[serde(default)]
     pub transfer: TransferSection,
+    #[serde(default)]
+    pub gateway: GatewaySection,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -397,18 +399,164 @@ pub struct RelayPeerConfig {
 
 impl TransferSection {
     pub fn to_relay_peers(&self) -> anyhow::Result<Vec<oag_api::transfer::RelayPeer>> {
-        self.relay_peers
-            .iter()
-            .map(|p| {
-                Ok(oag_api::transfer::RelayPeer {
-                    address: p.address.clone(),
-                    peer_id: p
-                        .peer_id
-                        .parse()
-                        .map_err(|e| anyhow::anyhow!("invalid [[transfer.relay_peers]] peer_id {:?}: {e}", p.peer_id))?,
-                })
+        parse_relay_peers(&self.relay_peers, "transfer.relay_peers")
+    }
+}
+
+fn parse_relay_peers(peers: &[RelayPeerConfig], field_name: &str) -> anyhow::Result<Vec<oag_api::transfer::RelayPeer>> {
+    peers
+        .iter()
+        .map(|p| {
+            Ok(oag_api::transfer::RelayPeer {
+                address: p.address.clone(),
+                peer_id: p
+                    .peer_id
+                    .parse()
+                    .map_err(|e| anyhow::anyhow!("invalid [[{field_name}]] peer_id {:?}: {e}", p.peer_id))?,
             })
-            .collect()
+        })
+        .collect()
+}
+
+/// `[gateway]` (spec/32-verified-internet-gateway.md): a generalized
+/// verified internet proxy (NTP, HTTP, ...). `query_peers`/`relay_peers`
+/// reuse `RelayPeerConfig`'s exact shape (`[transfer]` already uses it) --
+/// same static, operator-chosen topology posture, not automatic discovery.
+/// Every real front-end listener defaults to disabled (`listen_addr`
+/// unset); a front-end also refuses to start unless `query_peers` has at
+/// least `quorum_min_agree` entries, enforced in `oag-api::gateway`.
+#[derive(Debug, Default, Deserialize)]
+pub struct GatewaySection {
+    #[serde(default)]
+    pub query_peers: Vec<RelayPeerConfig>,
+    #[serde(default)]
+    pub relay_peers: Vec<RelayPeerConfig>,
+    #[serde(default = "default_gateway_hops_remaining")]
+    pub hops_remaining: u8,
+    /// `0` means "fan out to every configured `query_peers` entry."
+    #[serde(default)]
+    pub fanout_count: usize,
+    #[serde(default = "default_gateway_quorum_min_agree")]
+    pub quorum_min_agree: usize,
+    #[serde(default)]
+    pub ntp: GatewayNtpSection,
+    #[serde(default)]
+    pub http: GatewayHttpSection,
+}
+
+fn default_gateway_hops_remaining() -> u8 {
+    8
+}
+
+fn default_gateway_quorum_min_agree() -> usize {
+    2
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GatewayNtpSection {
+    /// Unset (the default) disables the real NTP front-end listener --
+    /// same "`Option` as the on/off switch" convention as
+    /// `[ipfs].libp2p_ws_multiaddr`/`[cluster].name`.
+    pub listen_addr: Option<String>,
+    /// Real external NTP servers this peer may query directly when it's
+    /// chosen as an origin for an NTP query (e.g. `"pool.ntp.org:123"`).
+    /// Empty (the default) means this peer is never an NTP origin, only
+    /// ever a quorum-asker or a relay.
+    #[serde(default)]
+    pub upstream_servers: Vec<String>,
+    #[serde(default = "default_ntp_tolerance_ms")]
+    pub tolerance_ms: i64,
+    #[serde(default = "default_ntp_cache_ttl_ms")]
+    pub cache_ttl_ms: i64,
+}
+
+impl Default for GatewayNtpSection {
+    fn default() -> Self {
+        Self {
+            listen_addr: None,
+            upstream_servers: Vec::new(),
+            tolerance_ms: default_ntp_tolerance_ms(),
+            cache_ttl_ms: default_ntp_cache_ttl_ms(),
+        }
+    }
+}
+
+fn default_ntp_tolerance_ms() -> i64 {
+    1_000
+}
+
+fn default_ntp_cache_ttl_ms() -> i64 {
+    2_000
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GatewayHttpSection {
+    /// Unset (the default) disables the real HTTP front-end listener.
+    pub listen_addr: Option<String>,
+    /// Whether this peer may itself fetch real external HTTP URLs when
+    /// chosen as an origin for an HTTP query. `false` (the default) means
+    /// this peer is never an HTTP origin, only ever a quorum-asker or a
+    /// relay -- same opt-in posture as `[crawler]`'s own SSRF defaults.
+    #[serde(default)]
+    pub allow_upstream: bool,
+    #[serde(default)]
+    pub allow_private_networks: bool,
+    #[serde(default = "default_http_max_response_bytes")]
+    pub max_response_bytes: usize,
+    #[serde(default = "default_http_default_cache_ttl_ms")]
+    pub default_cache_ttl_ms: i64,
+    #[serde(default = "default_http_max_cache_ttl_ms")]
+    pub max_cache_ttl_ms: i64,
+}
+
+impl Default for GatewayHttpSection {
+    fn default() -> Self {
+        Self {
+            listen_addr: None,
+            allow_upstream: false,
+            allow_private_networks: false,
+            max_response_bytes: default_http_max_response_bytes(),
+            default_cache_ttl_ms: default_http_default_cache_ttl_ms(),
+            max_cache_ttl_ms: default_http_max_cache_ttl_ms(),
+        }
+    }
+}
+
+fn default_http_max_response_bytes() -> usize {
+    2 * 1024 * 1024
+}
+
+fn default_http_default_cache_ttl_ms() -> i64 {
+    5_000
+}
+
+fn default_http_max_cache_ttl_ms() -> i64 {
+    60_000
+}
+
+impl GatewaySection {
+    pub fn to_query_peers(&self) -> anyhow::Result<Vec<oag_api::transfer::RelayPeer>> {
+        parse_relay_peers(&self.query_peers, "gateway.query_peers")
+    }
+
+    pub fn to_relay_peers(&self) -> anyhow::Result<Vec<oag_api::transfer::RelayPeer>> {
+        parse_relay_peers(&self.relay_peers, "gateway.relay_peers")
+    }
+
+    pub fn to_gateway_config(&self) -> oag_api::gateway::GatewayConfig {
+        oag_api::gateway::GatewayConfig {
+            hops_remaining: self.hops_remaining,
+            fanout_count: self.fanout_count,
+            quorum_min_agree: self.quorum_min_agree,
+            ntp_tolerance_ms: self.ntp.tolerance_ms,
+            ntp_upstream_servers: self.ntp.upstream_servers.clone(),
+            ntp_cache_ttl_ms: self.ntp.cache_ttl_ms,
+            http_allow_upstream: self.http.allow_upstream,
+            http_allow_private_networks: self.http.allow_private_networks,
+            http_max_response_bytes: self.http.max_response_bytes,
+            http_default_cache_ttl_ms: self.http.default_cache_ttl_ms,
+            http_max_cache_ttl_ms: self.http.max_cache_ttl_ms,
+        }
     }
 }
 
@@ -591,6 +739,17 @@ pub struct ResolvedConfig {
     /// peers this peer may forward a transfer cache-miss to. Empty by
     /// default.
     pub relay_peers: Vec<oag_api::transfer::RelayPeer>,
+    /// Verified internet gateway (spec/32): peers this one fans a query
+    /// out to and requires a quorum of to agree.
+    pub gateway_query_peers: Vec<oag_api::transfer::RelayPeer>,
+    /// Peers this one relays a gateway query onward to.
+    pub gateway_relay_peers: Vec<oag_api::transfer::RelayPeer>,
+    pub gateway_config: oag_api::gateway::GatewayConfig,
+    /// Unset (the default) disables the real NTP UDP front-end listener.
+    pub gateway_ntp_listen_addr: Option<String>,
+    /// Unset (the default) disables the real HTTP reverse-proxy front-end
+    /// listener.
+    pub gateway_http_listen_addr: Option<String>,
 }
 
 pub async fn resolve(
@@ -647,6 +806,11 @@ pub async fn resolve(
         pinning_provider,
         ipfs_libp2p_ws_multiaddr: file.ipfs.libp2p_ws_multiaddr.clone(),
         relay_peers: file.transfer.to_relay_peers()?,
+        gateway_query_peers: file.gateway.to_query_peers()?,
+        gateway_relay_peers: file.gateway.to_relay_peers()?,
+        gateway_ntp_listen_addr: file.gateway.ntp.listen_addr.clone(),
+        gateway_http_listen_addr: file.gateway.http.listen_addr.clone(),
+        gateway_config: file.gateway.to_gateway_config(),
     })
 }
 

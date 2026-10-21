@@ -133,6 +133,61 @@ pub async fn peer_fetch(
     Ok(())
 }
 
+/// Manually exercise the verified-gateway engine (spec/32-verified-
+/// internet-gateway.md) against this peer's own configured `[gateway]`
+/// settings -- quorum fan-out, cache, origin, or relay, exactly the same
+/// resolution a real front-end listener would run, without needing a real
+/// NTP/HTTP client to trigger it.
+pub async fn gateway_query(
+    data_dir: &Path,
+    config_path: Option<std::path::PathBuf>,
+    service: &str,
+    url: Option<String>,
+) -> anyhow::Result<()> {
+    let service = match service {
+        "ntp" => oag_api::gateway::GatewayService::Ntp,
+        "http" => {
+            let url = url.ok_or_else(|| anyhow::anyhow!("--url is required when --service is 'http'"))?;
+            oag_api::gateway::GatewayService::Http { url }
+        }
+        other => anyhow::bail!("unknown --service '{other}', expected 'ntp' or 'http'"),
+    };
+
+    let graph = open_graph(data_dir).await?;
+    let config = crate::config::resolve(config_path, Some(data_dir.to_path_buf()), None).await?;
+
+    let state = oag_api::AppState::new(std::sync::Arc::new(graph))
+        .with_gateway_query_peers(config.gateway_query_peers)
+        .with_gateway_relay_peers(config.gateway_relay_peers)
+        .with_gateway_config(config.gateway_config);
+
+    match oag_api::gateway::resolve_for_front_end(&state, service).await {
+        Ok(oag_api::gateway::GatewayResult::Ntp { estimated_unix_time_ms }) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "service": "ntp",
+                    "estimated_unix_time_ms": estimated_unix_time_ms,
+                }))?
+            );
+        }
+        Ok(oag_api::gateway::GatewayResult::Http { status, content_hash, body, cache_control }) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "service": "http",
+                    "status": status,
+                    "content_hash": content_hash,
+                    "byte_size": body.len(),
+                    "cache_control": cache_control,
+                }))?
+            );
+        }
+        Err(e) => anyhow::bail!("gateway query failed: {e}"),
+    }
+    Ok(())
+}
+
 pub async fn peer_list(data_dir: &Path) -> anyhow::Result<()> {
     let sync = open_sync(data_dir).await?;
     let mut conn = sync.pool().acquire().await?;

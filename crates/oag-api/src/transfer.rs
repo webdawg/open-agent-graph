@@ -157,11 +157,11 @@ impl IntoResponse for TransferError {
     }
 }
 
-fn decode_32(s: &str) -> Option<[u8; 32]> {
+pub(crate) fn decode_32(s: &str) -> Option<[u8; 32]> {
     hex::decode(s).ok().and_then(|v| v.try_into().ok())
 }
 
-fn decode_64(s: &str) -> Option<[u8; 64]> {
+pub(crate) fn decode_64(s: &str) -> Option<[u8; 64]> {
     hex::decode(s).ok().and_then(|v| v.try_into().ok())
 }
 

@@ -320,23 +320,32 @@ remain not yet implemented and change nothing described elsewhere in this docume
   specified. Confirmed as the same mechanism behind the redundant-delivery corruption-attribution
   bullet above — one flood, two uses.
 - Service-rendered announcements, multi-hop relay, and witness-based supply-chain audit
-  (`USER_INPUT_RECORD.md` Entry 21). **Single-hop basic shape implemented** — see
-  `spec/31-service-receipts.md`: `oag peer fetch` records a `(peer:<server>, sent_to,
-  peer:<client>)` assertion on both sides, backed by a mutual nonce-bound receipt
-  (`oag_crypto::mutual_receipt_hash`) neither side could fabricate alone, live-verified end-to-end
-  with two real `oag` processes. One step toward a larger, explicitly deferred goal — a
+  (`USER_INPUT_RECORD.md` Entry 21). **Single-hop basic shape and static multi-hop relay
+  implemented** — see `spec/31-service-receipts.md`: `oag peer fetch` records a
+  `(peer:<server>, sent_to, peer:<client>)` assertion on both sides, backed by a mutual
+  nonce-bound receipt (`oag_crypto::mutual_receipt_hash`) neither side could fabricate alone,
+  live-verified end-to-end with two real `oag` processes; Phase 2 lets a server relay a cache miss
+  to its own statically configured `[transfer].relay_peers`, live-verified with a real
+  three-peer client→relay→origin chain. One step toward a larger, explicitly deferred goal — a
   residential-CDN-style economy where peers get paid for what they serve — narrowed down to just
   the record-keeping layer: a serving peer announcing what it served, to whom. The basic
   announcement needed no new mechanism (an ordinary event with an open-string predicate, carried by
-  either existing transport); three things named go beyond what's built so far: a modeled, signed multi-hop
-  chain of custody (today's only "relay" notion is `oag-sync`'s transitive gossip propagation, not
-  a per-transfer chain); a witness node independently verifying — not just disputing — a serving
-  claim (closest existing primitive is the bare two-party `DisputeAssertionPayload`); and
-  attributing corruption to a specific hop without a boot or a stationed witness — resolved, not
-  left open, by content-hash self-verification at the receiving end (no trust needed to detect a
-  mismatch) plus redundant multi-path delivery to localize *which* hop diverged, by comparing which
-  paths agree on the final hash. That redundant-delivery path is the same push-flood mechanism as
-  the "fire like neuron mode" bullet below, confirmed, not a second mechanism — one flood serving
-  both anonymity and corruption attribution. Trust degrades (never a hard boot, consistent with
+  either existing transport); still not built: a witness node independently verifying — not just
+  disputing — a serving claim (closest existing primitive is the bare two-party
+  `DisputeAssertionPayload`), and attributing corruption to a specific hop without a boot or a
+  stationed witness — resolved in design, not yet in code, by content-hash self-verification at
+  the receiving end (no trust needed to detect a mismatch) plus redundant multi-path delivery to
+  localize *which* hop diverged, by comparing which paths agree on the final hash. That
+  redundant-delivery path is the same push-flood mechanism as the "fire like neuron mode" bullet
+  below, confirmed, not a second mechanism — one flood serving both anonymity and corruption
+  attribution. Trust degrades (never a hard boot, consistent with
   `spec/24-ephemeral-peer-trust.md`'s "degrade, don't drop") only for a node *verified* this way as
   the corruption source. See `spec/22-future-work.md`'s matching section.
+- **Verified internet gateway, implemented** — a related but distinct mechanism, see
+  `spec/32-verified-internet-gateway.md`: a peer proxying a real public-internet protocol (NTP,
+  HTTP so far) never answers from its own local state, only from a quorum of independently-asked
+  peers agreeing (or a cache of a prior such quorum result). This is the "ask several independent
+  parties, require agreement" idea from the witness-audit bullet above, applied one level earlier
+  (verifying an *external* answer before serving it at all, rather than auditing an OAG peer's own
+  past claim after the fact) — structurally related, not the same mechanism, and doesn't feed the
+  still-unbuilt witness/trust-consequence layer above.

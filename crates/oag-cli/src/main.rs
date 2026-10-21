@@ -175,6 +175,30 @@ enum Command {
         #[command(subcommand)]
         command: IpfsCommand,
     },
+    /// Verified internet gateway commands (spec/32-verified-internet-gateway.md).
+    Gateway {
+        #[command(subcommand)]
+        command: GatewayCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum GatewayCommand {
+    /// Manually resolve one query through this peer's own configured
+    /// `[gateway]` settings -- the same quorum/cache/origin/relay engine a
+    /// real NTP/HTTP front-end client would trigger, without needing one.
+    Query {
+        /// "ntp" or "http".
+        #[arg(long)]
+        service: String,
+        /// Required when --service is "http".
+        #[arg(long)]
+        url: Option<String>,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+        #[arg(long)]
+        config: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -679,6 +703,9 @@ async fn main() -> anyhow::Result<()> {
             commands::crawl(&data_dir, &url, config, allow_private_networks).await
         }
         Command::Doctor { data_dir, config } => commands::doctor(&data_dir, config).await,
+        Command::Gateway { command: GatewayCommand::Query { service, url, data_dir, config } } => {
+            commands::gateway_query(&data_dir, config, &service, url).await
+        }
         Command::Ipfs { command: IpfsCommand::Cat { cid, config, data_dir } } => {
             commands::ipfs_cat(&cid, config, &data_dir).await
         }

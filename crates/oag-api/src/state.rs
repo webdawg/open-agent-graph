@@ -63,6 +63,28 @@ pub struct AppState {
     /// another peer when relaying -- distinct from any client the CLI uses,
     /// since relaying happens from inside a running `oag serve` process.
     pub http_client: Arc<reqwest::Client>,
+    /// Verified internet gateway (spec/32-verified-internet-gateway.md):
+    /// peers this one fans a query out to and requires a majority of to
+    /// agree before serving anything. Empty by default -- a real front-end
+    /// listener (NTP/HTTP) refuses to even start unless enough are
+    /// configured to meet `gateway_config.quorum_min_agree`.
+    pub gateway_query_peers: Arc<Vec<crate::transfer::RelayPeer>>,
+    /// Gateway peers this one relays a query onward to if it's neither
+    /// running its own quorum fan-out nor configured as a real upstream
+    /// origin for the requested service -- same static-topology posture as
+    /// `relay_peers` above.
+    pub gateway_relay_peers: Arc<Vec<crate::transfer::RelayPeer>>,
+    pub gateway_config: Arc<crate::gateway::GatewayConfig>,
+    /// The only place a *quorum-verified* gateway answer is ever stored --
+    /// see `crate::gateway`'s module doc comment for why this is also the
+    /// feature's horizontal-scaling mechanism, not just a latency
+    /// optimization.
+    pub gateway_cache: Arc<crate::gateway::GatewayCache>,
+    /// Keyed by the signed gateway request's own `requester_peer_id`, same
+    /// posture as `transfer_rate_limiter` -- a separate budget from the
+    /// REST API's bearer-token-keyed limiter, since this endpoint has no
+    /// bearer token to key on.
+    pub gateway_rate_limiter: Arc<RateLimiter>,
 }
 
 impl AppState {
@@ -91,6 +113,11 @@ impl AppState {
             transfer_rate_limiter: Arc::new(RateLimiter::default()),
             relay_peers: Arc::new(Vec::new()),
             http_client: Arc::new(reqwest::Client::new()),
+            gateway_query_peers: Arc::new(Vec::new()),
+            gateway_relay_peers: Arc::new(Vec::new()),
+            gateway_config: Arc::new(crate::gateway::GatewayConfig::default()),
+            gateway_cache: Arc::new(crate::gateway::GatewayCache::new()),
+            gateway_rate_limiter: Arc::new(RateLimiter::default()),
         }
     }
 
@@ -144,6 +171,24 @@ impl AppState {
     /// live sync activity instead of an unrelated handle's zero.
     pub fn with_sync_errors(mut self, sync_errors: Arc<AtomicU64>) -> Self {
         self.sync_errors = sync_errors;
+        self
+    }
+
+    /// `new`'s default has no gateway query peers -- a front-end listener
+    /// will refuse to start without enough of these configured (see
+    /// `crate::gateway::require_quorum_capable`).
+    pub fn with_gateway_query_peers(mut self, peers: Vec<crate::transfer::RelayPeer>) -> Self {
+        self.gateway_query_peers = Arc::new(peers);
+        self
+    }
+
+    pub fn with_gateway_relay_peers(mut self, peers: Vec<crate::transfer::RelayPeer>) -> Self {
+        self.gateway_relay_peers = Arc::new(peers);
+        self
+    }
+
+    pub fn with_gateway_config(mut self, config: crate::gateway::GatewayConfig) -> Self {
+        self.gateway_config = Arc::new(config);
         self
     }
 }

@@ -437,3 +437,56 @@ Format: question, assumption I'm running with, status.
   test fails (10-13/20 errors), then restored and confirmed it passes; the 50-peer chaos
   convergence test (a different scenario -- remote ingest contention across peers, already
   tolerated by its own retry sweeps) still passes unaffected. Status: resolved.
+
+## Verified internet gateway (spec/32-verified-internet-gateway.md)
+
+- **No automatic peer/content discovery, same deliberate cut as `spec/31`'s relay.**
+  `[gateway].query_peers`/`relay_peers` are a hand-written, operator-configured list -- a real
+  peer could never otherwise know *which* upstream peers can answer a given query without being
+  told. Status: open (revisit if/when a real discovery mechanism exists elsewhere in the project
+  to hook into -- same status as the identical question already open under `spec/31`).
+- **No graph/evidence recording for gateway queries.** Unlike `spec/31`'s transfers (which write a
+  `sent_to` assertion + evidence on both sides), a gateway query writes nothing to the graph at
+  all -- no record of "I asked, and got a verified answer." Assumption: keeps this feature's first
+  version scoped to the verification engine and the two real front-ends, not also a new
+  graph-recording shape. Status: open (revisit if a real audit/provenance need shows up).
+- **No trust consequence or audit record for a peer that disagrees with the quorum.** A peer that
+  answers a fan-out with a wrong/stale/lying value is simply outvoted -- nothing records *who*
+  disagreed, and nothing adjusts `trust_score` or any other signal. This is the same still-unbuilt
+  "witness-based audit" mechanism named in `spec/22-future-work.md` and this project's
+  `future_flood_propagation_and_anonymity.md`/`future_service_announcements_and_audit.md` memory
+  entries -- this feature's quorum fan-out (many independent paths, compare answers) is
+  structurally similar to that mechanism's own "~50 independent node-chains" idea, but
+  deliberately doesn't feed it. Status: open, tracked alongside those other entries.
+- **A latent bug in `oag_crawler::fetch::build_pinned_client`, found via this feature, not fixed
+  there.** Calling `reqwest::ClientBuilder::resolve()` once per DNS-resolved address (as both
+  `oag-crawler`'s own `safe_fetch` and this feature's `fetch_upstream_http` originally did) only
+  keeps the *last* call's pinned address for a given host -- it overwrites, not accumulates a
+  fallback list. Confirmed live: a real sandbox resolved a real dual-stack site to both IPv4 and
+  IPv6 addresses but had no outbound IPv6 route; the connection failed outright with zero fallback
+  to the (working) IPv4 address, because the IPv6 entry happened to be resolved last. Fixed *only*
+  inside this feature's own `fetch_upstream_http` (pin to the first IPv4 address when one exists,
+  via a new `prefer_ipv4` helper) -- `oag_crawler::fetch::safe_fetch` itself still has this
+  characteristic and was deliberately left unchanged, since it's shared, already-shipped code with
+  its own existing callers. Status: open (revisit `oag-crawler`'s own crawl path too -- the same
+  dual-stack failure mode likely affects it against any similarly-unlucky-DNS-ordered target).
+- **NTP time carried over OAG-to-OAG hops uses a simplified RTT/2 correction, not the real
+  four-timestamp algorithm.** Only the real exchange against a configured real upstream NTP server
+  (`ntp_wire::query_upstream`) uses the actual RFC 5905 offset formula; every signed-JSON hop
+  between OAG peers (fan-out, relay) instead adjusts by half that hop's own measured round-trip
+  time. Assumption: adequate for "verify roughly-correct time across the OAG network," not
+  attempting production stratum-service precision -- bounded, documented error, not an
+  oversight. Status: resolved (working as designed; revisit only if a real need for tighter
+  precision across hops shows up).
+- **HTTP front-end convention: target URL as the literal, unencoded request path.** `GET
+  /<target-url>` reattaches the incoming request's own query string onto the end, which handles
+  the common case (a target URL's own `?query` naturally ends up in the right place) but breaks if
+  the target URL has its own un-encoded `?`/`&` earlier in its path. Assumption: good enough for v1
+  without requiring every caller to percent-encode the whole target URL as a single opaque path
+  segment (the alternative, safer-but-less-ergonomic convention some real proxies use). Status:
+  open (revisit if this rough edge turns out to matter in practice).
+- **Gateway query endpoint has its own rate limiter (`gateway_rate_limiter`), separate from
+  `transfer_rate_limiter`.** Same reasoning as `spec/31`'s own separate limiter: keyed by the
+  signed request's own `requester_peer_id`, not the bearer-token-or-"anonymous" keying the REST
+  rate-limit middleware uses, and a real upstream fetch is expensive enough to deserve its own
+  budget distinct from every other unauthenticated route. Status: resolved.

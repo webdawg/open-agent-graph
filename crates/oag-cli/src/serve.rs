@@ -105,9 +105,12 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         .with_ipfs_libp2p_ws_multiaddr(ipfs_dial_multiaddr.clone().map(Into::into))
         .with_pinning_provider(Some(pinning_provider))
         .with_relay_peers(config.relay_peers.clone())
-        .with_sync_errors(sync_errors_counter);
+        .with_sync_errors(sync_errors_counter)
+        .with_gateway_query_peers(config.gateway_query_peers.clone())
+        .with_gateway_relay_peers(config.gateway_relay_peers.clone())
+        .with_gateway_config(config.gateway_config.clone());
     let rate_limit_state = state.clone();
-    let rest_router = oag_api::build_router(state).merge(sync_router);
+    let rest_router = oag_api::build_router(state.clone()).merge(sync_router);
     let mcp_service =
         config.mcp_enabled.then(|| oag_mcp::streamable_http_service(graph.clone(), embedding_provider, crawler));
     let app = build_app(rest_router, mcp_service, rate_limit_state);
@@ -135,6 +138,29 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
             "oag: transfer relay: {} upstream peer(s) configured for cache-miss forwarding",
             config.relay_peers.len()
         );
+    }
+    if let Some(ntp_listen_addr) = config.gateway_ntp_listen_addr.clone() {
+        oag_api::gateway::require_quorum_capable(&state)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        println!("oag: gateway NTP front-end listening on {ntp_listen_addr} (udp)");
+        let state = state.clone();
+        tokio::spawn(async move {
+            if let Err(e) = oag_api::gateway::run_ntp_front_end(state, &ntp_listen_addr).await {
+                tracing::error!(error = %e, "gateway NTP front-end exited");
+            }
+        });
+    }
+    if let Some(http_listen_addr) = config.gateway_http_listen_addr.clone() {
+        oag_api::gateway::require_quorum_capable(&state)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+        println!("oag: gateway HTTP front-end listening on http://{http_listen_addr}");
+        let http_listener = tokio::net::TcpListener::bind(&http_listen_addr).await?;
+        let http_router = oag_api::gateway::http_front_end_router(state.clone());
+        tokio::spawn(async move {
+            if let Err(e) = axum::serve(http_listener, http_router).await {
+                tracing::error!(error = %e, "gateway HTTP front-end exited");
+            }
+        });
     }
     if config.bootstrap_peers.is_empty() {
         println!("oag: no bootstrap_peers configured — replication is passive until a peer syncs with us, or `oag peer add` is used");

@@ -53,7 +53,16 @@ pub struct FetchedPage {
 /// fetch, each redirect hop, and robots.txt/llms.txt/ARD/A2A's own
 /// same-origin fetches — every network access this crate makes goes
 /// through this.
-async fn resolve_and_validate(
+/// `pub` (not just crate-internal) so other crates needing the exact same
+/// DNS-rebinding-safe SSRF guard -- resolve once, validate every returned
+/// address, let the caller pin its connection to exactly those -- can reuse
+/// it instead of re-implementing it at a weaker standard. `oag-api`'s
+/// gateway feature is the first other caller: it needs the identical guard
+/// for arbitrary-content-type HTTP fetches, which this crate's own
+/// `safe_fetch` can't be reused for directly (it enforces a narrow
+/// crawler-specific `ALLOWED_CONTENT_TYPES` allowlist that a general-purpose
+/// proxy must not).
+pub async fn resolve_and_validate(
     host: &str,
     port: u16,
     allow_private_networks: bool,
@@ -75,7 +84,8 @@ async fn resolve_and_validate(
     Ok(addrs)
 }
 
-fn build_pinned_client(
+/// `pub` for the same reason as `resolve_and_validate` above.
+pub fn build_pinned_client(
     host: &str,
     addrs: &[SocketAddr],
     config: &CrawlerConfig,

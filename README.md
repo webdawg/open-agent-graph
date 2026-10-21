@@ -65,6 +65,17 @@ Also built:
   `[transfer].relay_peers`, chaining independent single-hop transfers (live-verified with a real
   three-peer client→relay→origin chain) without any automatic peer/content discovery. See
   [`spec/31-service-receipts.md`](spec/31-service-receipts.md).
+- **Verified internet gateway** (`[gateway]`, default disabled) — a peer never answers a real NTP
+  or HTTP request from its own local state: it fans the query out to its configured
+  `[gateway].query_peers` and only serves an answer once a quorum agree (NTP: within tolerance;
+  HTTP: byte-identical by content hash), or relays onward. A real UDP NTP server and a real HTTP
+  reverse proxy front this for actual outside clients, and refuse to even start unless enough
+  query peers are configured to meet quorum — structurally, not just by convention. Only a
+  quorum-verified result is ever cached, which is also the feature's horizontal-scaling mechanism:
+  once any peer verifies an answer, every peer that asks it gets it back cheaply and just as
+  honestly, propagating through the network like a cache wave. Live-verified with a real raw NTP
+  client and `curl` against a real four-peer quorum. See
+  [`spec/32-verified-internet-gateway.md`](spec/32-verified-internet-gateway.md).
 
 Captured, not yet built — see `docs/architecture.md`'s "What's deliberately not built yet" and
 [`spec/22-future-work.md`](spec/22-future-work.md): a real multi-peer trust-consensus mechanism,

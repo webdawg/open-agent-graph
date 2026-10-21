@@ -28,6 +28,7 @@ chrono.workspace = true
 askama.workspace = true
 hex.workspace = true
 reqwest.workspace = true
+futures.workspace = true
 
 [dev-dependencies]
 http-body-util = "0.1"

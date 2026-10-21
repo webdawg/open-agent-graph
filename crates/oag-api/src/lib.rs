@@ -2,11 +2,13 @@ pub mod auth;
 pub mod crawl;
 pub mod dto;
 pub mod error;
+pub mod gateway;
 pub mod handlers;
 pub mod human;
 pub mod ipfs_site;
 pub mod logging;
 pub mod metrics;
+pub mod ntp_wire;
 pub mod rate_limit;
 pub mod redaction;
 pub mod state;
@@ -111,6 +113,10 @@ pub fn build_router(state: AppState) -> Router {
         // peer-to-peer (`spec/31-service-receipts.md`), which the bearer-token
         // auth layer has no way to express.
         .route("/oag/transfer/v1/fetch", post(transfer::fetch_with_receipt))
+        // Also unauthenticated at the bearer-token layer, same reasoning as
+        // `/oag/transfer/v1/fetch` above -- this request is itself
+        // signature-authenticated peer-to-peer.
+        .route("/oag/gateway/v1/query", post(gateway::query))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             rate_limit::rate_limit_middleware,

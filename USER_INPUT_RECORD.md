@@ -1125,3 +1125,75 @@ with the receipt hashes correctly paired leg-by-leg (client↔relay share one `r
 relay↔origin share a different one); the origin's own record names the relay, never the original
 client, as its counterparty, since it was never contacted directly. All existing tests still
 pass; `cargo clippy --workspace --all-targets` clean.
+
+## Entry 24 — 2026-10-21
+
+> okay, now we just need to add some stuff - we want to serve every public internet service though
+> this thing, but the answer must be obtained from the other side of a group - when we ask a
+> question on a port of any member running this software, it asks for the answer from somewhere
+> else, and is directed to the end of another side until it gets a 100% verifible answer, and then
+> serves it - it never serves its own data etc - ntp, http, ftp, lets do a crazy amount of services
+> here
+
+Elicited through three direct clarifying questions before any code was written (the design hinges
+entirely on them — wrong answers here would mean rebuilding the core verification engine later),
+each included verbatim below its answer:
+
+> [Given "a crazy amount of services" is the end goal, which protocol should the first working
+> implementation target?]
+>
+> Both NTP and HTTP from day one
+
+> [What makes a relayed answer "100% verifiable" before a peer is allowed to serve it?]
+>
+> Quorum: majority of N independent paths agree
+
+> ["Never serves its own data" -- can a peer cache and reuse a verified result, or must every
+> request re-verify from scratch?]
+>
+> No caching -- always re-verify from the network (first answer, before Entry 24's own follow-up
+> below changed it)
+
+The caching question was then explicitly re-asked ("wait - ask me the cache question again") and
+answered differently the second time:
+
+> Cache for a short, protocol-appropriate TTL
+
+— followed immediately, unprompted, by the real reason, which reshaped the caching design from "a
+latency optimization" into the feature's actual scaling mechanism:
+
+> the reason we like caching is we want to build systems of cache - if there is a high demand for
+> a resource we can scale up a couple of million nodes to serve the data, etc - like absorbing a
+> ddos attack, and at the same time everything is geographically appropriate because we are
+> building organic organizations of everything (data, communication, etc)
+
+### Response — built the same day
+
+A generalized "verified internet gateway": a peer never answers a real NTP/HTTP request from its
+own local state. It either serves a cached answer -- but *only* ever one that was itself produced
+by a quorum check, never a raw single-source fetch, which is what keeps the DDoS-absorption
+property above honest (a bad cache-serving peer is just outvoted, the same Byzantine-tolerance
+property every quorum has) -- or fans the query out to its own configured `[gateway].query_peers`
+and requires a majority to agree (NTP: within tolerance; HTTP: byte-identical by content hash), or
+relays onward (the exact same signed, re-sign-per-hop shape `spec/31-service-receipts.md` Phase
+2's relay already uses, generalized from "fetch a CID" to "resolve this query"). A real front-end
+listener (a hand-rolled NTPv4 UDP server; an HTTP reverse proxy) refuses to even start unless
+enough `query_peers` are configured to meet quorum -- a structural guarantee, not a convention.
+
+Live-verified with four real `oag` processes end to end: a real raw-socket NTP client against the
+real UDP front-end (mode 4, stratum 2, a marker refid, served time within ~60ms of true
+wall-clock through a real 3-peer quorum each independently querying the real `pool.ntp.org`), and
+`curl` against the real HTTP front-end fetching `http://example.com/` through the same quorum. Also
+verified the safety-under-degradation paths explicitly: killing peers down to below quorum made
+the HTTP front-end answer a clean `502`/`no quorum` and made the NTP front-end send nothing at all
+(a real client just times out) -- confirmed it never silently falls back to this peer's own
+unverified system clock or a single-source fetch. A real, previously-latent bug was found and
+fixed along the way (not contrived): this sandbox resolves a real dual-stack site to both an IPv4
+and an unroutable IPv6 address, and the HTTP fetch path's address-pinning helper (reused from
+`oag-crawler`) only ever kept the *last* resolved address, silently dropping fallback to the
+working IPv4 one. Fixed locally in this feature (prefer IPv4 when available) without touching the
+shared `oag-crawler` code, and flagged there too as worth a closer look (`OPEN_QUESTIONS.md`).
+
+Full design, the config reference, and everything explicitly deferred (automatic discovery, more
+protocols, graph/evidence recording, a witness/trust-consequence layer for disagreeing peers) are
+in `spec/32-verified-internet-gateway.md`.
