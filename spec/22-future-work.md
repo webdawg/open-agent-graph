@@ -198,6 +198,13 @@ discovery or routing (relay topology is entirely operator-configured, hop by hop
 witness/flood-based audit mechanism below. The "Refinement" paragraph further down (resolving the
 "degrade, don't drop" vs. "boot" tension) is unaffected by either implementation.
 
+**The witness/flood-based audit piece, and connecting multiple peer clusters together, now have a
+real home**: [`oag-mesh`](https://github.com/webdawg/oag-mesh), a separate repository one layer
+above this one (`USER_INPUT_RECORD.md` Entry 25) — see its own `spec/01-overview.md`. Deliberately
+not built in *this* repository: it coordinates across clusters of `oag` peers rather than changing
+how one peer or one cluster works, and it needs its own independent spec numbering/lifecycle. It
+reuses `oag-core`/`oag-crypto` from here via a git dependency rather than forking them.
+
 Originally captured from `USER_INPUT_RECORD.md` Entry 21. Named as one step toward a larger,
 explicitly *deferred* goal ("distributed healing services globally... where people get paid for
 what they serve" — a residential-CDN-style incentive economy); the user drew a firm line against
@@ -302,6 +309,11 @@ Also named, not specified: a "never ending morphing encryption" where the encryp
 keeps changing hop to hop as a message propagates — same family as onion routing's layered
 re-encryption, but open what state morphs, what triggers a change, and what a receiver needs to
 undo it.
+
+The corroboration half of this mechanism (redundant independent paths, compare agreement) now has
+a real home one layer up: [`oag-mesh`](https://github.com/webdawg/oag-mesh) — see its
+`spec/01-overview.md`. The anonymity/traffic-analysis-resistance half above remains unbuilt and
+undesigned anywhere, including there.
 
 **Second use confirmed (`USER_INPUT_RECORD.md` Entry 23): this same flood mechanism is also the
 delivery path for "Service-rendered announcements, multi-hop relay, and witness-based supply-chain

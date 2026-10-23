@@ -79,9 +79,15 @@ Also built:
 
 Captured, not yet built — see `docs/architecture.md`'s "What's deliberately not built yet" and
 [`spec/22-future-work.md`](spec/22-future-work.md): a real multi-peer trust-consensus mechanism,
-ephemeral (sub-second) micro-networks with sensor input as a graph "packet," flood/broadcast
-propagation for traffic-analysis resistance, and — still part of the pay-for-serving direction
-above — automatic peer/content discovery/routing and a witness/flood-based supply-chain audit mode.
+ephemeral (sub-second) micro-networks with sensor input as a graph "packet," and flood/broadcast
+propagation for traffic-analysis resistance.
+
+**One layer up, in a separate repository**: [`oag-mesh`](https://github.com/webdawg/oag-mesh)
+bridges multiple peer clusters together and corroborates claims/content across independent
+nodes/organizations — the witness/flood-based audit mechanism named above, generalized across
+cluster boundaries. Kept separate deliberately (own spec numbering, own lifecycle — see its
+`README.md`), reusing `oag-core`/`oag-crypto` from here via git dependency rather than forking
+them.
 
 See `docs/` for the full picture — start with [`docs/architecture.md`](docs/architecture.md).
 

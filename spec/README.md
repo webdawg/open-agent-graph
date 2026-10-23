@@ -42,39 +42,78 @@ instead.
 
 ## Index
 
+Grouped by layer (see `docs/architecture.md`'s "Crate map" for the matching code-level grouping),
+not just file number — read a group's heading to find the right file instead of scanning all 30+
+rows. Numbering itself stays chronological/flat (renumbering would break every "spec/NN" reference
+in the code and in other docs); the grouping here is a second, orthogonal index over the same
+files.
+
+**Core & data model**
+
 | File | Feature |
 |---|---|
 | [01-identity.md](01-identity.md) | Peer identity, keys, backup/restore |
 | [02-event-protocol.md](02-event-protocol.md) | Signed event envelope, canonicalization, hash chain, commit/ingest, fork detection |
-| [03-rebuild-and-backup.md](03-rebuild-and-backup.md) | `oag rebuild`, `oag backup` |
 | [04-data-model.md](04-data-model.md) | Node/Edge/Assertion/Evidence/Actor/Predicate, identifier canonicalization |
 | [05-assertions-lifecycle.md](05-assertions-lifecycle.md) | assert / evidence / dispute / retract / supersede / verify |
 | [06-corroboration-and-authority.md](06-corroboration-and-authority.md) | Ranking signals, PageRank-style authority |
-| [07-search.md](07-search.md) | Keyword (FTS5) and semantic (embeddings) search |
-| [08-subgraph-and-history.md](08-subgraph-and-history.md) | Subgraph traversal, provenance/history, explainability |
 | [09-authentication-and-authorization.md](09-authentication-and-authorization.md) | API keys, actors, permissions |
+| [03-rebuild-and-backup.md](03-rebuild-and-backup.md) | `oag rebuild`, `oag backup` |
+| [27-artifact-versioning.md](27-artifact-versioning.md) | Per-artifact `schema_version`, the migrate-or-shim access modes, and `oag migrate` |
+| [17-redaction-and-suppression.md](17-redaction-and-suppression.md) | Evidence redaction, search suppression, fork evidence |
+
+**Peer-to-peer & networking**
+
+| File | Feature |
+|---|---|
+| [14-replication-sync.md](14-replication-sync.md) | Peer-to-peer sync protocol, gossip, federation policy, durability |
+| [26-peer-clustering.md](26-peer-clustering.md) | Self-declared, signed cluster membership as a federation override |
+| [24-ephemeral-peer-trust.md](24-ephemeral-peer-trust.md) | Opt-in per-restart identity, signed presence heartbeats, trust-weighted federation |
+| [15-reticulum-transport.md](15-reticulum-transport.md) | Optional mesh-radio transport |
+| [30-long-word-addressing.md](30-long-word-addressing.md) | Deterministic word-based DNS addressing for a peer (`oag identity show`, `oag peer resolve`), `[addressing].domain` |
+| [21-petname.md](21-petname.md) | Deterministic human-readable peer display names |
+
+**Services between peers (service receipts → gateway, the "pay/verify for what you serve" line)**
+
+| File | Feature |
+|---|---|
+| [31-service-receipts.md](31-service-receipts.md) | `sent_to` assertions backed by a mutual nonce-bound receipt for a direct peer-to-peer content transfer (`oag peer fetch`), plus static multi-hop relay |
+| [32-verified-internet-gateway.md](32-verified-internet-gateway.md) | NTP/HTTP proxy that only ever serves a quorum-verified answer, never this peer's own state |
+
+**Search, crawling & capability providers**
+
+| File | Feature |
+|---|---|
+| [07-search.md](07-search.md) | Keyword (FTS5) and semantic (embeddings) search |
+| [16-crawler.md](16-crawler.md) | Safe fetch, SSRF defenses, structured + LLM extraction |
+| [29-ipfs-pinning.md](29-ipfs-pinning.md) | Opt-in IPFS pinning for crawled evidence content, `oag ipfs cat`, and the `pinned_cid` retrieval pointer |
+| [08-subgraph-and-history.md](08-subgraph-and-history.md) | Subgraph traversal, provenance/history, explainability |
+| [28-roadmap-governance.md](28-roadmap-governance.md) | Roadmap proposals as ordinary assertions, ranked by existing corroboration signals, with no new consensus mechanism |
+| [23-tensor-pad-and-evolution-layer.md](23-tensor-pad-and-evolution-layer.md) | Per-peer tensor pad memory, and the TensorFlow-backed attention layer that programs it |
+| [25-gravity.md](25-gravity.md) | Per-node random "gravity level" that very slightly throttles that node's own processing speed |
+
+**Surfaces (REST / MCP / CLI / human UI)**
+
+| File | Feature |
+|---|---|
 | [10-rest-api.md](10-rest-api.md) | REST surface |
 | [11-mcp-server.md](11-mcp-server.md) | MCP surface |
 | [12-cli.md](12-cli.md) | `oag` CLI surface |
 | [13-human-interface.md](13-human-interface.md) | Human-browsable HTML views |
-| [14-replication-sync.md](14-replication-sync.md) | Peer-to-peer sync protocol, gossip, federation policy, durability |
-| [15-reticulum-transport.md](15-reticulum-transport.md) | Optional mesh-radio transport |
-| [16-crawler.md](16-crawler.md) | Safe fetch, SSRF defenses, structured + LLM extraction |
-| [17-redaction-and-suppression.md](17-redaction-and-suppression.md) | Evidence redaction, search suppression, fork evidence |
+
+**Operations & limits**
+
+| File | Feature |
+|---|---|
 | [18-rate-limiting-and-resource-limits.md](18-rate-limiting-and-resource-limits.md) | Every request/response/memory/disk cap in the system |
 | [19-observability.md](19-observability.md) | Metrics, structured logging |
 | [20-configuration.md](20-configuration.md) | `config.toml` |
-| [21-petname.md](21-petname.md) | Deterministic human-readable peer display names |
+
+**Future work**
+
+| File | Feature |
+|---|---|
 | [22-future-work.md](22-future-work.md) | Deliberately not built yet, and why |
-| [23-tensor-pad-and-evolution-layer.md](23-tensor-pad-and-evolution-layer.md) | Per-peer tensor pad memory, and the TensorFlow-backed attention layer that programs it |
-| [24-ephemeral-peer-trust.md](24-ephemeral-peer-trust.md) | Opt-in per-restart identity, signed presence heartbeats, trust-weighted federation |
-| [25-gravity.md](25-gravity.md) | Per-node random "gravity level" that very slightly throttles that node's own processing speed |
-| [26-peer-clustering.md](26-peer-clustering.md) | Self-declared, signed cluster membership as a federation override |
-| [27-artifact-versioning.md](27-artifact-versioning.md) | Per-artifact `schema_version`, the migrate-or-shim access modes, and `oag migrate` |
-| [28-roadmap-governance.md](28-roadmap-governance.md) | Roadmap proposals as ordinary assertions, ranked by existing corroboration signals, with no new consensus mechanism |
-| [29-ipfs-pinning.md](29-ipfs-pinning.md) | Opt-in IPFS pinning for crawled evidence content, `oag ipfs cat`, and the `pinned_cid` retrieval pointer |
-| [30-long-word-addressing.md](30-long-word-addressing.md) | Deterministic word-based DNS addressing for a peer (`oag identity show`, `oag peer resolve`), `[addressing].domain` |
-| [31-service-receipts.md](31-service-receipts.md) | `sent_to` assertions backed by a mutual nonce-bound receipt for a direct peer-to-peer content transfer (`oag peer fetch`) |
 
 ## Founding context
 

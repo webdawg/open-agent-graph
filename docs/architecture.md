@@ -82,6 +82,17 @@ SQLite connection pool against one data directory.
 
 ## Crate map
 
+Every crate lives at `crates/oag-<name>` in this one workspace/one repo (no sub-repos, no
+sub-workspaces) and is grouped below by **layer**, not alphabetically — read top to bottom and
+you're reading the system bottom-up, from raw data types to the surfaces a human or agent actually
+touches. This grouping is the answer to "where does a new feature go": find the layer it's really
+extending (not just the layer it happens to need), give it its own `crates/oag-<name>`, and add a
+thin wrapper in `oag-api`/`oag-cli` only if it needs a REST route or a CLI command — the same shape
+every crate below already has.
+
+**Layer 1 — Core & data model** (no I/O except `oag-storage`'s SQLite; the foundation everything
+else is built on):
+
 ```
 oag-core        Pure data types: Node, Edge, Assertion, Evidence, Actor, Predicate, Permission,
                 domain-separated identifiers (NodeId/EdgeId/EventId/ActorId), canonical JSON.
@@ -96,15 +107,33 @@ oag-storage     SQLite schema (migrations/), connection pooling, and one `repo::
 oag-events      The signed event envelope, canonical serialization, per-peer hash-chain
                 validation, commit (local) / ingest (remote) paths, and the projector that turns
                 a validated event into the storage-layer writes that represent it.
+```
 
-oag-graph       The service layer: GraphService, one method per capability (assert, resolve,
-                search, semantic_search, get_edge_corroboration, recompute_authority,
+**Layer 2 — Graph service** (the one service layer everything above the data model calls through):
+
+```
+oag-graph       GraphService, one method per capability (assert, resolve, search,
+                semantic_search, get_edge_corroboration, recompute_authority,
                 rebuild_projection, redact_evidence, ...). This is what oag-api, oag-mcp, and
                 oag-cli all call — none of them talk to oag-storage or oag-events directly.
+```
 
+**Layer 3 — Peer-to-peer & transport** (how one running `oag` process talks to another):
+
+```
 oag-sync        Peer-to-peer replication: hello/heads/events/peers HTTP endpoints, the gossip
-                (anti-entropy) loop, federation policy, replication-factor/durability tracking.
+                (anti-entropy) loop, federation policy, replication-factor/durability tracking,
+                and peer clustering (spec/26 — self-declared, signed cluster membership as a
+                federation override, plus a second, faster, cluster-only gossip loop).
 
+oag-reticulum   Optional additional peer transport over the Reticulum mesh-networking protocol,
+                alongside (not replacing) oag-sync's HTTP path.
+```
+
+**Layer 4 — Capability crates** (each adds one specific, independently-optional capability;
+called by `oag-graph`, `oag-api`, or `oag-cli`, never the other way around):
+
+```
 oag-embeddings  EmbeddingProvider abstraction (disabled by default) + brute-force cosine
                 similarity ranking, backing semantic search.
 
@@ -129,12 +158,15 @@ oag-crawler     Safe HTTP fetch (SSRF-guarded), structured extraction (JSON-LD, 
 oag-petname     Deterministic 128-word human-readable names derived from a peer's identity, for
                 display purposes only (never used as an identifier) -- plus a separate, much
                 shorter 4-word `address_label` for DNS addressing (spec/30), which is used.
+```
 
-oag-reticulum   Optional additional peer transport over the Reticulum mesh-networking protocol,
-                alongside (not replacing) oag-sync's HTTP path.
+**Layer 5 — Surfaces** (what a human or agent actually talks to):
 
+```
 oag-api         Axum REST router + MCP mount point, a minimal human-browsable HTML view (spec
-                section 80), request logging, rate limiting.
+                section 80), request logging, rate limiting. Also hosts the service-receipt
+                transfer protocol (spec/31) and the verified internet gateway (spec/32) — both
+                peer-to-peer protocols tightly coupled to AppState, unlike Layer 4's crates.
 
 oag-mcp         MCP tool definitions, one per GraphService capability exposed to agents.
 
@@ -142,12 +174,12 @@ oag-cli         Argument parsing and the `oag` binary's `main()` — thin wrappe
                 GraphService/CrawlerService/SyncService.
 ```
 
-Every arrow in this system points one direction: `oag-cli`/`oag-api`/`oag-mcp` → `oag-graph` →
-(`oag-events` + `oag-storage`) → SQLite. There is no path that writes to storage without going
-through `oag-events`' commit/ingest functions, and no path that reads graph state without going
-through `oag-graph`. This is what makes `oag rebuild` (see below) trustworthy: every table
-`oag-graph` reads is provably reconstructible from the event log, because nothing else ever wrote to
-it.
+Every arrow in this system points one direction: Layer 5 → Layer 2 (`oag-graph`) →
+(`oag-events` + `oag-storage`, Layer 1) → SQLite. There is no path that writes to storage without
+going through `oag-events`' commit/ingest functions, and no path that reads graph state without
+going through `oag-graph`. This is what makes `oag rebuild` (see below) trustworthy: every table
+`oag-graph` reads is provably reconstructible from the event log, because nothing else ever wrote
+to it.
 
 ## Request flow
 
