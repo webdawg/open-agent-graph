@@ -53,6 +53,41 @@ Depends on `oag-tensor`/`oag-storage`/`oag-crypto` via path dependencies — rea
 node/edge/assertion storage or the event/replication path. A minimal standalone HTTP surface
 (`POST /brain/exchange`) plus a one-shot `oag-brain --peer <url>` CLI mode for manual testing.
 
+## Traffic strengthens the pad
+
+The pad is a node's unique representation of the picture of all the nodes around it -- not just
+sync outcomes. When more combined traffic flows through a tensor path, the pad along that path
+gets stronger: the more traffic, the stronger the pad. A path that carries many requests becomes
+a preferred path, so repeated requests for the same thing tend to reuse it. This is what lets a
+request find its endpoint: each node routes to the next place it thinks the thing can be, and the
+pad records which paths have actually carried traffic before.
+
+This is deliberately not designed in detail. The pad is not a routing table or a metric to tune;
+it is a representation that the traffic itself shapes. The mechanisms built around it -- request
+routing, data serving, the imagination layer (`oag-imagination-random-data-compute`) -- change
+the pad by using it, and the random chaos of traffic eventually solidifies into something real,
+but only because the pad serves the purpose at the time. A pad that stops serving its purpose
+stops being reinforced.
+
+Pads can also be combined to serve data: two or more pads can be merged (added, concatenated, or
+otherwise combined) to represent a larger neighborhood or to serve a request that spans more than
+one node's view. The combination is a mechanism built around the pad, not a change to the pad
+itself.
+
+## Pads as data pads
+
+A pad is not only a routing weight. A pad is also a unit of data: a node's pad can hold a
+shard of a larger object, and a file can be constructed from many pads. Where a routing decision
+needs a path, a data request needs a *set* of pads -- a thousand pads, each holding a piece,
+combined to reconstruct a single file.
+
+This is the same "pads can be combined to serve data" idea, extended from serving a request to
+serving a file: the combination is a mechanism built around the pad, not a change to the pad
+itself. A pad that holds a shard and a pad that holds a weight are the same kind of object; what
+differs is what the mechanism around it does with the value. The data-pad mechanism is not built
+yet -- it is the future shape the pad is designed to allow, and the imagination layer
+(`oag-imagination-random-data-compute`) is the first mechanism built around the pad.
+
 ## Why the split
 
 Two different maturity levels living side by side: the memory itself needed nothing but the
