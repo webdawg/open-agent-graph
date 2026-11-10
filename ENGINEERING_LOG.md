@@ -6,6 +6,39 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — bound the imagination dream log
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/engine.rs`, `spec/02-tensor-pad-routing.md`.
+
+**Defect fixed.** `DreamLog` was an unbounded `Vec<Request>`, and `Engine::handle` records every
+answered request as a clone. Any caller who can make this node answer a request -- any peer that can
+route one here -- could grow its memory without limit, amplified per request by the caller-controlled
+JSON in `target`/`payload` and the contribution chain gathered along the route.
+
+**Fix.** Both a count cap (1,000) and a serialized-byte cap (8 MiB), evicting the oldest until both
+hold. A count cap alone would not have been enough: one request may be up to the carrier's
+`MAX_MESSAGE_BYTES` (16 MiB over TCP), so "keep the last 1,000" still permits tens of gigabytes. An
+entry larger than the whole byte budget is not retained at all -- otherwise a single request would
+defeat the bound.
+
+**Tests executed.** `cargo test --workspace` — 43 passed (oag-imagination) + 3 passed (adapter).
+
+**Test results.** oag-imagination 40 → 43. New: `the_dream_log_evicts_the_oldest_entry_past_its_
+count_cap`, `the_dream_log_evicts_past_its_byte_cap`, `a_single_entry_larger_than_the_budget_is_not_
+retained`. The log previously had no tests at all, which is part of why this went unnoticed.
+
+**Performance measurements.** None. The bound adds one serialization per answered request (cached
+at record time) and a `pop_front` on eviction. No benchmark was run.
+
+**Commit:** `9d77e3a` — pushed.
+**Remaining defects.** The log is still in-memory only: "recording generated scenarios" holds for the
+running process, not across restarts, and that is a scope statement rather than an oversight.
+`MAX_MESSAGE_BYTES` itself is 16 MiB over TCP, which is generous for an imagination request; it is
+bounded but not small, and a per-request cap would be the next tightening if memory mattered more.
+
+---
+
 ## 2026-11-09 — replication_bytes_in/out
 
 **Repository:** `open-agent-graph` (`rust-ai`)

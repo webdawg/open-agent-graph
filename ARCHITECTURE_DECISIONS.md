@@ -181,6 +181,34 @@ trust-on-first-use.
 
 ---
 
+## ADR-020 — The imagination dream log is bounded by count *and* bytes
+
+**Decision.** `DreamLog` keeps at most 1,000 entries totalling at most 8 MiB serialized, evicting
+the oldest until both hold. An entry larger than the whole byte budget is not retained.
+
+**Context.** The log was an unbounded `Vec<Request>`, and `Engine::handle` records every answered
+request as a clone. That is a memory-exhaustion vector reachable by any caller who can make the node
+answer a request — which is any peer that can route one here — and it is amplified per request,
+because a request carries caller-controlled JSON plus the contribution chain gathered along the
+route.
+
+**Consequences.**
+- A **count** cap alone is insufficient, and this is the load-bearing observation: one request may be
+  up to the carrier's `MAX_MESSAGE_BYTES` (16 MiB over TCP), so "keep the last 1,000" still permits
+  tens of gigabytes. Both caps are needed.
+- An entry larger than the byte budget is dropped entirely; otherwise a single request defeats the
+  bound.
+- `DreamLog::with_bounds` lets a deployment retune, and lets a test exercise eviction cheaply.
+- **In-memory only.** "Recording generated scenarios" holds for the running process, not across
+  restarts. Persisting it would need its own decisions — where, how long, who may read it — none of
+  which are made here. The base project's tensor pad is the same shape.
+- The log had **no tests at all**, which is part of why the unbounded growth went unnoticed. It now
+  has three: count eviction, byte eviction, and the single-oversized-entry case.
+
+**Status.** Accepted (`9d77e3a`).
+
+---
+
 ## ADR-019 — The onion endpoint is volume-bounded, not authenticated
 
 **Decision.** `POST /oag-mesh/v1/onion` gets a node-wide token bucket (16 capacity, 0.5/s refill),
