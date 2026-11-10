@@ -69,6 +69,37 @@ exactly as untrusted as a peer syncing with it, so a malicious or compromised pe
 previously buffered without limit before any of this project's own item-count caps got a chance to
 run. **Fix**: streamed with the same 4 MiB cap, matching the crawler's existing pattern.
 
+## Timeouts
+
+Body-size caps bound how much a peer can make this node *buffer*; they do not bound how long a
+peer can make this node *wait*. That was the one uncovered boundary here, and it is the same
+`reqwest::Client::new()` shape: no timeout at all, so a peer that is unreachable **and silently
+dropping packets** -- rather than refusing the connection -- holds the request open until the
+operating system gives up, which can be minutes.
+
+| Boundary | Connect | Total | Why |
+|---|---|---|---|
+| `oag-sync` client (`/hello`/`/heads`/`/events`/`/peers`) | 10s | 120s | an `/events` response is a real batch of signed events, not a small snapshot, so a legitimate peer on a slow link needs more room than a store head does |
+| `oag-mesh` HTTP client | 5s | 30s | the mesh moves small snapshots and declarations; see that repo's own `spec/04` |
+
+Both are named constants (`SYNC_CONNECT_TIMEOUT`/`SYNC_REQUEST_TIMEOUT`,
+`HTTP_CONNECT_TIMEOUT`/`HTTP_REQUEST_TIMEOUT`), and both clients are built through a constructor
+that takes the values as parameters so a test can prove the bound holds without waiting the
+production value out. `SyncClient::new()` uses the bounded defaults; `SyncClient::with_http` lets
+an embedder supply its own transport.
+
+A timeout is an ordinary failed interaction, not a special case: the caller's existing error path
+handles it, and in the mesh a timed-out pull is recorded as a failed delivery for `link_quality`.
+
+### Still unbounded, deliberately
+
+The operator-configured external integrations (the LLM extractor, the embeddings provider, the IPFS
+provider) also build their own clients without timeouts. They are a lower trust tier for the same
+reason `spec/18`'s size-cap section gives: each requires an operator to explicitly choose and
+enable the integration, unlike the peer-to-peer paths above, which are reachable by an
+already-admitted but otherwise unprivileged peer. Recorded here rather than fixed silently, because
+a hang in an optional integration is a different trade-off from a hang in replication.
+
 ## Item-count caps
 
 | Cap | Value | Guards against |
@@ -108,6 +139,8 @@ unprivileged peer or caller. A different, lower trust tier — checked, not assu
 `crates/oag-sync/src/tests.rs` (`discover_peers_does_not_grow_the_table_past_the_global_cap`,
 `push_event_count_over_limit_is_rejected`, `rate_limiter_rejects_after_threshold`);
 `crates/oag-reticulum/src/listener.rs` (`requests_beyond_the_window_get_a_rate_limit_error_instead_of_being_handled`);
+`crates/oag-sync/src/client.rs` (`a_peer_that_accepts_but_never_responds_is_abandoned_at_the_timeout`,
+`the_default_client_is_bounded_and_reaches_a_real_peer`);
 `crates/oag-graph/src/tests.rs` (`search_with_a_negative_limit_returns_nothing_not_everything`,
 `too_many_evidence_items_is_rejected`); `crates/oag-reticulum/src/framing.rs`
 (`oversized_declared_length_is_rejected`).
