@@ -32,6 +32,8 @@ subcommand accepts `--data-dir` (default `./data`); network-facing ones also acc
 | `oag migrate node/edge/assertion/evidence/actor <id> [--force]` | Permanently rewrite one artifact's row to its current schema shape (spec/27) |
 | `oag crawl <url>` | One-shot crawl |
 | `oag ipfs cat <cid>` | Retrieve previously-pinned content by CID (spec/29) |
+| `oag ipfs pin <file>` | Pin one local file and print its CID -- the operator-triggered counterpart to the evidence-add path's automatic pinning (spec/29) |
+| `oag ipfs host-page <dir>` | Pin a whole local directory as one UnixFS tree, for `/ipfs-site/{cid}` (spec/29 Phase 3) |
 | `oag doctor [--config]` | Local health checks |
 
 ## Design principle: thin wrapper

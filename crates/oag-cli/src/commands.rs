@@ -878,6 +878,44 @@ pub async fn ipfs_cat(cid: &str, config_path: Option<std::path::PathBuf>, data_d
 const MAX_HOST_PAGE_TOTAL_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_HOST_PAGE_FILE_COUNT: usize = 200;
 
+/// The same per-file cap `oag ipfs pin` applies, for the same reason: a pin
+/// is operator-triggered and unbounded input is a resource question, not a
+/// feature.
+const MAX_PIN_FILE_BYTES: u64 = MAX_HOST_PAGE_TOTAL_BYTES;
+
+/// Pin one local file to IPFS and print its CID (spec/29-ipfs-pinning.md).
+///
+/// The evidence-add path pins crawled content automatically; this is the
+/// operator-triggered equivalent for a file they choose, same posture as
+/// `oag redact`/`oag peer forks` for operator-triggered read tooling. Fails
+/// loudly on a pin error, like `oag backup --pin`, rather than
+/// best-effort-and-continue -- a pin command that silently did nothing would
+/// be worse than an error.
+pub async fn ipfs_pin(
+    path: &Path,
+    config_path: Option<std::path::PathBuf>,
+    data_dir: &Path,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(path.is_file(), "{} is not a file", path.display());
+    let content = std::fs::read(path)?;
+    anyhow::ensure!(
+        content.len() as u64 <= MAX_PIN_FILE_BYTES,
+        "{} is {} bytes, over this command's {}-byte cap",
+        path.display(),
+        content.len(),
+        MAX_PIN_FILE_BYTES
+    );
+    let (_, _, pinning_provider) =
+        crate::config::resolve_crawler_config(config_path, false, data_dir).await?;
+    let cid = pinning_provider
+        .pin(&content)
+        .await
+        .map_err(|e| anyhow::anyhow!("{e} (is [ipfs].pinning_provider set in config.toml?)"))?;
+    println!("pinned {} to IPFS: {cid}", path.display());
+    println!("retrieve it with: oag ipfs cat {cid}");
+    Ok(())
+}
+
 /// Recursively collect `(relative_path, content)` pairs for every regular
 /// file under `dir`, using `/`-separated relative paths regardless of host
 /// OS (kubo's UnixFS path semantics, and every browser URL, expect `/`).
@@ -1032,6 +1070,37 @@ mod tests {
 
         let err = backup(&data_dir, &out_path, true, None).await.unwrap_err();
         assert!(err.to_string().contains("disabled"), "got {err}");
+    }
+
+    /// `oag ipfs pin` with no `[ipfs]` configured (the default) must surface a
+    /// clear disabled-provider error, not panic -- same posture as `oag backup --pin`.
+    #[tokio::test]
+    async fn ipfs_pin_with_no_ipfs_configured_is_a_clear_error() {
+        let data_dir = temp_dir("ipfs-pin-disabled");
+        open_graph(&data_dir).await.unwrap();
+        let file = temp_dir("ipfs-pin-disabled-file").join("payload.bin");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, b"pin me").unwrap();
+
+        let err = ipfs_pin(&file, None, &data_dir).await.unwrap_err();
+        assert!(err.to_string().contains("disabled"), "got {err}");
+    }
+
+    /// The two input guards run before any provider is resolved, so neither needs
+    /// `[ipfs]` configured to be exercised: a directory is not a file, and a file over
+    /// the cap is rejected rather than pinned.
+    #[tokio::test]
+    async fn ipfs_pin_rejects_a_directory_and_an_oversized_file() {
+        let dir = temp_dir("ipfs-pin-reject");
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let err = ipfs_pin(&dir, None, &dir).await.unwrap_err();
+        assert!(err.to_string().contains("is not a file"), "got {err}");
+
+        let big = dir.join("big.bin");
+        std::fs::write(&big, vec![0u8; MAX_PIN_FILE_BYTES as usize + 1]).unwrap();
+        let err = ipfs_pin(&big, None, &dir).await.unwrap_err();
+        assert!(err.to_string().contains("over this command's"), "got {err}");
     }
 
     async fn seed_evidence(data_dir: &Path) -> String {

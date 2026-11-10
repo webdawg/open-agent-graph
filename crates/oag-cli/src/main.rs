@@ -217,6 +217,16 @@ enum IpfsCommand {
         #[arg(long, default_value = "./data")]
         data_dir: PathBuf,
     },
+    /// Pin one local file to IPFS and print its CID. Operator-triggered
+    /// counterpart to the evidence-add path's automatic pinning; fails loudly
+    /// on a pin error, like `oag backup --pin`.
+    Pin {
+        path: PathBuf,
+        #[arg(long)]
+        config: Option<PathBuf>,
+        #[arg(long, default_value = "./data")]
+        data_dir: PathBuf,
+    },
     /// Pin a local directory as one static site (a single UnixFS tree) and
     /// print the root CID plus the `oag serve` URL to open it at.
     HostPage {
@@ -711,6 +721,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Ipfs { command: IpfsCommand::HostPage { dir, config, data_dir } } => {
             commands::ipfs_host_page(&dir, config, &data_dir).await
+        }
+        Command::Ipfs { command: IpfsCommand::Pin { path, config, data_dir } } => {
+            commands::ipfs_pin(&path, config, &data_dir).await
         }
     }
 }
