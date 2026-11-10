@@ -55,3 +55,9 @@ out to a shared transport node, `announce_interval`).
 `crates/oag-reticulum/src/listener.rs`'s `requests_beyond_the_window_get_a_rate_limit_error_instead_of_being_handled`;
 `crates/oag-reticulum/tests/two_peer_sync.rs`'s `event_created_on_peer_a_syncs_to_peer_b_over_reticulum`
 (a real event, over a real TCP-backed Reticulum `Link`, no public Reticulum network needed).
+`crates/oag-reticulum/src/client.rs`'s `live_tests` adds the layer *between* those two: a loopback
+`TcpServer`/`TcpClient` pair with no graph involved, so a failure there isolates the transport from
+the sync handler above it. It covers a small single-chunk message and a payload of
+`CHUNK_SIZE * 8` that must span many `data_packet` calls -- the chunked packet path a sync of any
+sizeable event batch takes, and the one path neither the in-memory framing tests nor the end-to-end
+sync test (which moves a single small assertion) actually exercises.

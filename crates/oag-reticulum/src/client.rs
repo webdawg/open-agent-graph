@@ -294,3 +294,211 @@ async fn send_request(
     .ok_or(ReticulumError::ResponseTimeout)
     .and_then(|bytes| decode_message(&bytes).map_err(ReticulumError::from))
 }
+
+#[cfg(test)]
+mod live_tests {
+    //! Live loopback coverage for the transport's *packet path*.
+    //!
+    //! `tests/two_peer_sync.rs` already proves the whole stack end to end -- a real event over a
+    //! real Reticulum `Link` -- and the `framing` tests prove chunking in memory. Neither covers
+    //! the middle: a payload large enough to span many `data_packet` calls over an actual link,
+    //! where each chunk becomes a separately encrypted packet and reassembly depends on real
+    //! arrival order and timing. That is the path a sync of any sizeable batch of events takes,
+    //! and it is exactly where an off-by-one in chunking would show up.
+    //!
+    //! These tests also isolate the transport from the sync handler: if `two_peer_sync` fails,
+    //! this says whether the link itself or the logic above it is at fault.
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use reticulum::destination::link::LinkEvent;
+    use reticulum::destination::DestinationName;
+    use reticulum::identity::PrivateIdentity;
+    use reticulum::iface::tcp_client::TcpClient;
+    use reticulum::iface::tcp_server::TcpServer;
+    use reticulum::transport::{Transport, TransportConfig};
+
+    use crate::framing::{decode_message, encode_message, Reassembler, CHUNK_SIZE};
+
+    use super::{wait_for_activation, wait_for_announce};
+
+    /// A free localhost port. The listener is dropped immediately, so there is a small race,
+    /// but nothing else on a test machine contends for an ephemeral port.
+    fn free_port() -> u16 {
+        std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port()
+    }
+
+    fn test_identity(seed: &str) -> PrivateIdentity {
+        PrivateIdentity::new_from_name(&format!("oag-live-test-{seed}"))
+    }
+
+    #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+    struct Blob {
+        /// Bytes as a string so the payload size is easy to choose; the framing layer does not
+        /// care what the JSON body contains.
+        text: String,
+        /// Set by the server, so the client can tell a reply from an echo of its own request.
+        reply_to: Option<String>,
+    }
+
+    impl Blob {
+        fn request(bytes: usize) -> Self {
+            Blob { text: "x".repeat(bytes), reply_to: None }
+        }
+    }
+
+    /// Runs one loopback link round-trip for a payload of `payload_bytes`, returning the reply.
+    /// Sets up a fresh pair of transports each call: the transports own background tasks that
+    /// cannot be cleanly shut down, so sharing one pair across assertions would leak tasks and
+    /// couple the cases to each other's timing.
+    async fn round_trip_over_loopback(payload_bytes: usize) -> (String, usize) {
+        let addr = format!("127.0.0.1:{}", free_port());
+
+        // Server: announce one destination and answer every request with a reply that quotes back
+        // the request's own length, mirroring `run_listener`'s loop shape.
+        let mut server_transport =
+            Transport::new(TransportConfig::new("oag-live-server", &test_identity("server"), false));
+        server_transport.iface_manager().lock().await.spawn(
+            TcpServer::new(addr.clone(), server_transport.iface_manager()),
+            TcpServer::spawn,
+        );
+        let server_dest = server_transport
+            .add_destination(test_identity("server"), DestinationName::new("oag", "live-test"))
+            .await;
+        let server_address = server_dest.lock().await.desc.address_hash;
+        let server_transport = Arc::new(server_transport);
+
+        {
+            let server_transport = server_transport.clone();
+            tokio::spawn(async move {
+                let mut buffers: std::collections::HashMap<reticulum::hash::AddressHash, Reassembler> =
+                    std::collections::HashMap::new();
+                let mut events = server_transport.in_link_events();
+                loop {
+                    let event = match events.recv().await {
+                        Ok(event) => event,
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    };
+                    match event.event {
+                        LinkEvent::Activated => {
+                            buffers.insert(event.id, Reassembler::new());
+                        }
+                        LinkEvent::Closed => {
+                            buffers.remove(&event.id);
+                        }
+                        LinkEvent::Data(payload) => {
+                            let reassembler = buffers.entry(event.id).or_default();
+                            let Ok(Some(bytes)) = reassembler.push(payload.as_slice()) else {
+                                continue;
+                            };
+                            let request: Blob = match decode_message(&bytes) {
+                                Ok(request) => request,
+                                Err(_) => continue,
+                            };
+                            let request_len = request.text.len();
+                            let reply = Blob {
+                                text: request.text,
+                                reply_to: Some(format!("got {request_len} bytes")),
+                            };
+                            let framed = match encode_message(&reply) {
+                                Ok(framed) => framed,
+                                Err(_) => continue,
+                            };
+                            let Some(link) = server_transport.find_in_link(&event.id).await else {
+                                continue;
+                            };
+                            for chunk in framed.chunks(CHUNK_SIZE) {
+                                if let Ok(packet) = link.lock().await.data_packet(chunk) {
+                                    server_transport.send_packet(packet).await;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        let client_transport =
+            Transport::new(TransportConfig::new("oag-live-client", &test_identity("client"), false));
+        client_transport
+            .iface_manager()
+            .lock()
+            .await
+            .spawn(TcpClient::new(addr), TcpClient::spawn);
+        let client_transport = Arc::new(client_transport);
+        let mut announces = client_transport.recv_announces().await;
+
+        // Give the TCP interface time to connect before the first announce, then keep announcing
+        // until the client observes one: an announce sent before the client subscribed, or before
+        // the interface was up, would be missed.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let target = tokio::time::timeout(Duration::from_secs(30), async {
+            loop {
+                server_transport.send_announce(&server_dest, None).await;
+                if let Ok(desc) = wait_for_announce(&mut announces, server_address).await {
+                    return desc;
+                }
+            }
+        })
+        .await
+        .expect("the server's announce should be observed over loopback TCP");
+
+        let link = client_transport.link(target).await;
+        let link_id = *link.lock().await.id();
+        let mut link_events = client_transport.out_link_events();
+        wait_for_activation(&mut link_events, link_id).await.expect("link should activate");
+
+        let request = Blob::request(payload_bytes);
+        let framed = encode_message(&request).unwrap();
+        let chunks = framed.chunks(CHUNK_SIZE).count();
+        for chunk in framed.chunks(CHUNK_SIZE) {
+            let packet = link.lock().await.data_packet(chunk).unwrap();
+            client_transport.send_packet(packet).await;
+        }
+
+        let reply = tokio::time::timeout(Duration::from_secs(20), async {
+            let mut reassembler = Reassembler::new();
+            loop {
+                match link_events.recv().await {
+                    Ok(event) if event.id == link_id => {
+                        if let LinkEvent::Data(payload) = event.event {
+                            if let Ok(Some(bytes)) = reassembler.push(payload.as_slice()) {
+                                return decode_message::<Blob>(&bytes).unwrap();
+                            }
+                        }
+                    }
+                    Ok(_) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => panic!("link events closed"),
+                }
+            }
+        })
+        .await
+        .expect("reply should arrive within the timeout");
+
+        (reply.reply_to.expect("the server always sets reply_to"), chunks)
+    }
+
+    #[tokio::test]
+    async fn a_real_link_round_trips_a_small_framed_message() {
+        let (reply, chunks) = round_trip_over_loopback(16).await;
+        assert_eq!(reply, "got 16 bytes");
+        assert_eq!(chunks, 1, "a 16-byte payload should fit in one chunk");
+    }
+
+    #[tokio::test]
+    async fn a_real_link_round_trips_a_message_spanning_many_chunks() {
+        // Comfortably past one `CHUNK_SIZE` (1400) chunk and past any single Reticulum packet's
+        // plaintext capacity, so this exercises real multi-packet chunking over a real link --
+        // the path a sync of a sizeable event batch takes.
+        let payload = CHUNK_SIZE * 8;
+        let (reply, chunks) = round_trip_over_loopback(payload).await;
+        assert_eq!(reply, format!("got {payload} bytes"));
+        assert!(chunks > 8, "expected real multi-chunk framing, got {chunks} chunk(s)");
+    }
+}
