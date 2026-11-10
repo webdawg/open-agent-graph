@@ -192,6 +192,27 @@ mechanism, not the production numbers.
 
 ---
 
+## EXP-016 — Does ordering the pull loop get live data out sooner?
+
+**Repository:** `oag-mesh`
+**Hypothesis.** Because `sync_with_all_peers` is sequential, ordering its peers by observed
+deliverability means a live peer's data lands before a black-holed peer's timeout is paid.
+**Procedure.** A control experiment with two arms and one difference. Same hanging peer (accepts
+the TCP connection, never responds), same live peer holding one declaration, same client with a 5s
+request timeout. Arm one has no ledger history, so configuration order applies and the hanging peer
+is pulled first; arm two has the ledger primed with a failure for the hanging peer and a success for
+the live one. In each arm, poll the pulling node's tree for the live declaration while the pull loop
+is still running.
+**Result (RUN, `740576b`).** Without history, the live data did **not** arrive within the 1s
+observation window while the hanging peer was blocking. With history, it arrived within that window.
+**Conclusion.** The ordering changes observable behaviour, and the control arm shows it is the
+ordering -- not the data or the timings -- that makes the difference.
+**Scope.** The ledger was primed directly rather than by a real preceding tick; how records arise is
+covered by the ledger's unit tests and the route-search tests. Loopback only. The total tick time is
+unchanged -- ordering changes *when* the useful data arrives, not how long the tick takes.
+
+---
+
 ## EXP-008 (PLANNED) — Does traffic strengthen pads measurably?
 
 **Hypothesis.** After N routed requests, a pad that carried traffic is selected more often than an

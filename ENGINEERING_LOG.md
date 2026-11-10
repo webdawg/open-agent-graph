@@ -6,6 +6,41 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — order the mesh's anti-entropy pull loop
+
+**Repository:** `oag-mesh`
+**Files modified:** `crates/oag-mesh/src/transport.rs` (`sync_with_all_peers` orders its peers by
+the `link_quality` ledger), `spec/10-anti-entropy.md`.
+
+**Feature implemented.** The sequential pull loop now pulls best-quality peers first, so a periodic
+tick gets the useful data before spending its time on peers that are probably down.
+
+**Why.** `sync_with_all_peers` is sequential, so pulling in configuration order means every
+black-holed peer is waited out -- a full connect/request timeout each, since the timeout fix landed
+-- before a single live peer is reached. With a tick interval shorter than the accumulated
+timeouts, the loop is permanently behind.
+
+**Tests executed.** `cargo test -p oag-mesh` — 187 passed, 0 failed.
+
+**Test results.** oag-mesh 186 → 187. New: `an_ordered_pull_loop_gets_live_data_before_paying_a_
+dead_peers_timeout`, a two-arm control experiment. Same hanging peer, same live peer, same client;
+the only difference is whether the ledger has an opinion. Without history the live data does not
+arrive within the 1s window while the hanging peer blocks; with history it does.
+
+**Performance measurements.** None. The total tick time is unchanged by ordering; what changes is
+when the useful data arrives. No benchmark was run and none is claimed.
+
+**Note on suite wall-clock.** The mesh's PoW tests are CPU-bound and the full suite's duration
+varies substantially with machine load — the `corroboration::` tests alone measured 18s, 34s and
+60s across three consecutive runs. That variance is environmental, not from this change.
+
+**Commit:** `740576b` — pushed.
+**Remaining defects.** Ordering does not reduce the total time a tick spends on dead peers; a
+per-tick time budget would, and is not built. The ledger is still forgotten on restart, so the first
+tick after a restart always pulls in configuration order.
+
+---
+
 ## 2026-11-09 — sync client timeouts (base project)
 
 **Repository:** `open-agent-graph` (`rust-ai`)

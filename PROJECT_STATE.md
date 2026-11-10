@@ -23,7 +23,7 @@ mission as a whole.
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
 | `open-agent-graph` | 412 | 116 | 01–32 |
-| `oag-mesh` | 186 | 41 | 01–15 |
+| `oag-mesh` | 187 | 42 | 01–15 |
 | `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
 All three working trees are clean and pushed as of the last update.
@@ -64,11 +64,12 @@ All three working trees are clean and pushed as of the last update.
 - Transport: HTTP push + pull-based anti-entropy, optional periodic sync with jitter, disk
   persistence of all seven stores where each save writes a commit marker last and a load refuses
   a torn set.
-- Adaptive fan-out ordering: a per-peer link-quality ledger (an exponential moving average of
+- Adaptive ordering from a per-peer link-quality ledger (an exponential moving average of
   whether each interaction actually delivered, fed by route-search replies and `pull_and_merge`
-  outcomes) orders which peers a route search asks first, so a scarce fan-out budget is not spent
-  on peers that have been dead for hours. It orders and never excludes; in-memory only; a
-  liveness signal, not a trust signal.
+  outcomes). It orders which peers a route search asks first, so a scarce fan-out budget is not
+  spent on peers that have been dead for hours -- and it orders the sequential anti-entropy pull
+  loop, so live peers' data arrives before dead peers' timeouts are paid. It orders and never
+  excludes; in-memory only; a liveness signal, not a trust signal.
 
 ### oag-imagination-random-data-compute (layer 1, parallel)
 - Pad-guided routing engine: a request enters a node, the tensor pad picks the next hop, each hop

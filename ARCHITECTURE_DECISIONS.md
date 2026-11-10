@@ -239,8 +239,13 @@ answer it without a routing-table redesign.
   wasted fan-out, and persisting it would add an eighth store and change the commit-marker set
   (`spec/08`) for a value that is by nature ephemeral.
 
-**Status.** Accepted (`67ad91e`), and measured on a real loopback network rather than only unit
-tested.
+**Consequence applied to the pull loop.** `sync_with_all_peers` is sequential, so it now orders
+its peers by the same ledger before pulling any of them. Without that, every black-holed peer is
+waited out -- a full connect/request timeout each, since the timeout fix -- before a single live peer
+is reached. Ordering only: every configured peer is still pulled.
+
+**Status.** Accepted (`67ad91e`, `740576b`), and measured on a real loopback network rather than
+only unit tested.
 
 ---
 
