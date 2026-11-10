@@ -1735,3 +1735,124 @@ mod transfer_tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
+
+/// Search pagination (spec section 61 / `spec/07-search.md`): without an
+/// offset a caller can only ever reach the first page of a result set. Seeds
+/// more matches than one page, then checks both surfaces page through them
+/// without overlap and without a way to make the page arbitrarily large.
+/// Search pagination (spec section 61 / `spec/07-search.md`): without an
+/// offset a caller can only ever reach the first page of a result set. Seeds
+/// more matches than one page, then checks both surfaces page through them
+/// without overlap, in order, and with no way to make a page arbitrarily
+/// large.
+#[tokio::test]
+async fn search_pages_through_results_over_rest_and_the_human_interface() {
+    let (app, key) = test_app("search-pagination-http").await;
+    let auth_header = format!("Bearer {key}");
+
+    // One more than the Human Interface's fixed page size of 50, so the
+    // "next" link must appear on page one and the second page must be short.
+    // Each assertion yields a subject node and an object node, both of which
+    // match, so the real match count is read back rather than assumed.
+    let seeds = 26;
+    for i in 0..seeds {
+        let body = json!({
+            "subject": format!("https://example.com/paged-item-{i:02}"),
+            "predicate": "instance_of",
+            "object": format!("concept:paged-item-{i:02}"),
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/assertions")
+                    .header("authorization", &auth_header)
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "seed {i} failed");
+    }
+
+    let search = |app: axum::Router, offset: i64, limit: i64| {
+        let auth_header = auth_header.clone();
+        async move {
+            let response = app
+                .oneshot(
+                    Request::get(format!(
+                        "/api/v1/search?q=paged-item&limit={limit}&offset={offset}"
+                    ))
+                    .header("authorization", &auth_header)
+                    .body(Body::empty())
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let text = body_text(response).await;
+            let json: Value = serde_json::from_str(&text).unwrap();
+            json["results"]
+                .as_array()
+                .expect("results array")
+                .iter()
+                .map(|item| item["canonical_identifier"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        }
+    };
+
+    // The full match set, fetched with the service layer's own cap. This is
+    // the ground truth the pages must partition.
+    let all = search(app.clone(), 0, 1000).await;
+    let total = all.len() as i64;
+    assert!(total > 50, "expected more than one human page, got {total}");
+
+    // REST: walk pages of 20. Every page except the last must be exactly full,
+    // pages must be disjoint, and the union must equal the full set.
+    let mut seen = std::collections::HashSet::new();
+    let mut offset = 0;
+    while offset < total {
+        let page = search(app.clone(), offset, 20).await;
+        let remaining = total - offset;
+        let expected = remaining.min(20);
+        assert_eq!(page.len() as i64, expected, "page at offset {offset}");
+        for id in &page {
+            assert!(seen.insert(id.clone()), "{id} appeared on more than one page");
+        }
+        offset += 20;
+    }
+    assert_eq!(seen.len() as i64, total, "paging must cover every match exactly once");
+
+    // Human Interface: page size is fixed at 50 and only the offset is
+    // caller-controlled. Page one is full and offers a next link; page two is
+    // short and offers only a previous link.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/ui/search?key={key}&q=paged-item"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let html = body_text(response).await;
+    assert!(html.contains("offset=50"), "a full page must link forward:\n{html}");
+    assert!(!html.contains("Previous"), "the first page has nothing before it:\n{html}");
+
+    let response = app
+        .oneshot(
+            Request::get(format!("/ui/search?key={key}&q=paged-item&offset=50"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let html = body_text(response).await;
+    assert!(html.contains("Previous"), "a later page must link back:\n{html}");
+    assert!(
+        !html.contains("offset=100"),
+        "a short page must not offer a next page:\n{html}"
+    );
+}

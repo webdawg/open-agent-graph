@@ -34,17 +34,23 @@ impl GraphService {
     /// 65 — the other ranking signals need corroboration data this
     /// milestone doesn't produce; see plan's "search for this milestone"
     /// note).
-    pub async fn search(&self, query: &str, limit: i64) -> Result<Vec<Node>, GraphError> {
+    pub async fn search(&self, query: &str, limit: i64, offset: i64) -> Result<Vec<Node>, GraphError> {
         let sanitized = sanitize_fts_query(query);
         if sanitized.is_empty() {
             return Ok(Vec::new());
         }
         let limit = limit.clamp(0, MAX_SEARCH_LIMIT);
+        // Negative offset is clamped rather than rejected: the pagination
+        // surfaces treat "unset" as 0, and a caller passing a negative value
+        // almost certainly meant the start, not an error mid-response. Kept
+        // at this one service layer so REST, MCP, CLI, and the Human
+        // Interface all behave identically.
+        let offset = offset.max(0);
         let mut conn = self
             .pool()
             .acquire()
             .await
             .map_err(oag_storage::StorageError::from)?;
-        Ok(nodes::search(&mut conn, &sanitized, limit).await?)
+        Ok(nodes::search(&mut conn, &sanitized, limit, offset).await?)
     }
 }

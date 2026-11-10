@@ -369,12 +369,12 @@ mod tests {
             panic!("expected the asserted object to resolve");
         };
 
-        assert!(!service.search("redaction-test", 10).await.unwrap().is_empty());
+        assert!(!service.search("redaction-test", 10, 0).await.unwrap().is_empty());
 
         assert!(service.list_suppressed_nodes(&auth).await.unwrap().is_empty());
 
         service.suppress_node_from_search(&auth, node.id).await.unwrap();
-        assert!(service.search("redaction-test", 10).await.unwrap().is_empty());
+        assert!(service.search("redaction-test", 10, 0).await.unwrap().is_empty());
         // Direct lookup and edges are completely untouched.
         assert!(service.get_node(node.id).await.unwrap().is_some());
 
@@ -383,7 +383,7 @@ mod tests {
         assert_eq!(suppressed[0].node_id, node.id);
 
         service.unsuppress_node_from_search(&auth, node.id).await.unwrap();
-        assert!(!service.search("redaction-test", 10).await.unwrap().is_empty());
+        assert!(!service.search("redaction-test", 10, 0).await.unwrap().is_empty());
         assert!(service.list_suppressed_nodes(&auth).await.unwrap().is_empty());
     }
 
@@ -400,7 +400,7 @@ mod tests {
         service.suppress_node_from_search(&auth, node.id).await.unwrap();
         service.rebuild_projection().await.unwrap();
 
-        assert!(service.search("redaction-test", 10).await.unwrap().is_empty());
+        assert!(service.search("redaction-test", 10, 0).await.unwrap().is_empty());
     }
 
     #[tokio::test]

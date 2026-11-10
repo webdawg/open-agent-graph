@@ -39,6 +39,11 @@ enum Command {
         data_dir: PathBuf,
         #[arg(long, default_value_t = 20)]
         limit: i64,
+        /// Skip this many results before returning any. Lets a caller page
+        /// through a result set that does not fit in one response; without
+        /// it only the first page is reachable.
+        #[arg(long, default_value_t = 0)]
+        offset: i64,
         /// Rank by embedding cosine similarity (spec section 64) instead of
         /// keyword FTS. Requires `[search]` in config.toml to have a real
         /// embedding provider configured -- errors clearly rather than
@@ -608,8 +613,8 @@ async fn main() -> anyhow::Result<()> {
             serve::run(resolved).await
         }
         Command::Status { data_dir } => commands::status(&data_dir).await,
-        Command::Search { query, data_dir, limit, semantic, config } => {
-            commands::search(&data_dir, &query, limit, semantic, config).await
+        Command::Search { query, data_dir, limit, offset, semantic, config } => {
+            commands::search(&data_dir, &query, limit, offset, semantic, config).await
         }
         Command::Node { command: NodeCommand::Get { id, data_dir } } => {
             commands::node_get(&data_dir, &id).await

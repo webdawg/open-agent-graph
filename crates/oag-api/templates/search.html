@@ -14,6 +14,7 @@
 
 {% if has_searched %}
 <h2>Results for &#8220;{{ query }}&#8221;</h2>
+<p>Showing results from {{ offset }}.</p>
 {% if results.is_empty() %}
 <p>No matches.</p>
 {% else %}
@@ -22,6 +23,12 @@
   <li><a href="{{ r.link }}">{{ r.canonical_identifier }}</a>{% if let Some(name) = r.name %} — {{ name }}{% endif %}</li>
 {% endfor %}
 </ul>
+<p>
+{% if has_prev %}<a href="/ui/search?key={{ key }}&q={{ query }}&offset={{ prev_offset }}">&#8592; Previous</a>{% endif %}
+{% if has_prev && has_next %}|{% endif %}
+{% if has_next %}<a href="/ui/search?key={{ key }}&q={{ query }}&offset={{ next_offset }}">Next &#8594;</a>{% endif %}
+{% if !has_prev && !has_next %}<span>No more pages.</span>{% endif %}
+</p>
 {% endif %}
 {% endif %}
 </body>

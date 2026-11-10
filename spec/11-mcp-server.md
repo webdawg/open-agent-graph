@@ -10,7 +10,7 @@ over a real HTTP transport, not an in-memory duplex transport).
 
 | Tool | REST equivalent |
 |---|---|
-| `graph_search` | `GET /search` |
+| `graph_search` | `GET /search` (`limit` + `offset`) |
 | `graph_resolve` | `POST /resolve` |
 | `graph_get_node` | `GET /nodes/{id}` |
 | `graph_get_actor` | `GET /actors/{id}` |

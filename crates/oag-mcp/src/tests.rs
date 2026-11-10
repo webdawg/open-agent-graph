@@ -873,3 +873,90 @@ async fn graph_redact_actor_identity_uri_without_admin_is_rejected() {
         .await;
     assert!(result.is_err(), "expected graph_redact_actor_identity_uri without admin permission to fail");
 }
+
+#[tokio::test]
+async fn graph_search_pages_with_an_offset_over_real_http() {
+    let (url, raw_key) = spawn_mcp_server("search-offset").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    // Five matches, paged two at a time.
+    for i in 0..5 {
+        client
+            .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+                json!({
+                    "subject": format!("https://example.com/mcp-paged-{i}"),
+                    "subject_type": "web_page",
+                    "predicate": "instance_of",
+                    "object": format!("concept:mcp-paged-{i}"),
+                    "confidence": 1.0
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            ))
+            .await
+            .unwrap();
+    }
+
+    let search = |offset: i64| {
+        let client = &client;
+        async move {
+            let result = client
+                .call_tool(CallToolRequestParams::new("graph_search").with_arguments(
+                    json!({ "query": "mcp-paged", "limit": 2, "offset": offset })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ))
+                .await
+                .unwrap();
+            let structured = result.structured_content.unwrap();
+            structured["results"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|n| n["canonical_identifier"].as_str().unwrap().to_string())
+                .collect::<Vec<_>>()
+        }
+    };
+
+    // Each assertion yields a subject node and an object node, both of which
+    // match, so the real match count is read back rather than assumed.
+    // `limit` is 2 in `search`; re-read the full set with the service
+    // layer's own cap to get the ground-truth match count.
+    let result = client
+        .call_tool(CallToolRequestParams::new("graph_search").with_arguments(
+            json!({ "query": "mcp-paged", "limit": 1000, "offset": 0 })
+                .as_object()
+                .unwrap()
+                .clone(),
+        ))
+        .await
+        .unwrap();
+    let structured = result.structured_content.unwrap();
+    let total = structured["results"].as_array().unwrap().len() as i64;
+    assert!(total > 2, "expected more than one page, got {total}");
+
+    let mut seen = std::collections::HashSet::new();
+    let mut offset = 0;
+    while offset < total {
+        let page = search(offset).await;
+        let expected = (total - offset).min(2);
+        assert_eq!(page.len() as i64, expected, "page at offset {offset}");
+        for id in &page {
+            assert!(seen.insert(id.clone()), "{id} appeared on more than one page");
+        }
+        offset += 2;
+    }
+    assert_eq!(seen.len() as i64, total, "paging must cover every match exactly once");
+
+    // A negative offset is clamped to 0 and must return the first page.
+    let clamped = search(-5).await;
+    let first = search(0).await;
+    assert_eq!(clamped, first, "a negative offset must behave like 0");
+}

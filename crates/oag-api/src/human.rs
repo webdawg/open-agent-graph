@@ -170,13 +170,30 @@ struct SearchTemplate {
     query: String,
     has_searched: bool,
     results: Vec<SearchResultView>,
+    /// Current page offset, and the offsets to link to. `has_next` is true
+    /// when the page came back full, which is the cheapest available signal
+    /// short of fetching limit+1 rows.
+    offset: i64,
+    has_prev: bool,
+    has_next: bool,
+    prev_offset: i64,
+    next_offset: i64,
 }
 
 #[derive(Deserialize)]
 pub struct SearchQuery {
     key: Option<String>,
     q: Option<String>,
+    /// Page through results. The page size is fixed at 50 (see
+    /// `SEARCH_PAGE_SIZE`); only the offset is caller-controlled, so a page
+    /// cannot be made arbitrarily large.
+    offset: Option<i64>,
 }
+
+/// Page size for the Human Interface's search page. Fixed rather than
+/// caller-controlled: the page is a browsing surface, and an unbounded page
+/// would let one request serialize a whole matching node set into HTML.
+const SEARCH_PAGE_SIZE: i64 = 50;
 
 /// A landing/browse page (deferred at first alongside the Node/Assertion
 /// pages, per `OPEN_QUESTIONS.md`'s "Human Interface" section -- direct-link
@@ -188,11 +205,12 @@ pub async fn search_page(State(state): State<AppState>, Query(q): Query<SearchQu
     let key = q.key.unwrap_or_default();
     let query = q.q.unwrap_or_default();
     let has_searched = !query.trim().is_empty();
+    let offset = q.offset.unwrap_or(0).max(0);
 
     let results = if has_searched {
         state
             .graph
-            .search(&query, 50)
+            .search(&query, SEARCH_PAGE_SIZE, offset)
             .await?
             .into_iter()
             .map(|n| SearchResultView { canonical_identifier: n.canonical_identifier, name: n.name, link: node_link(n.id, &key) })
@@ -201,7 +219,15 @@ pub async fn search_page(State(state): State<AppState>, Query(q): Query<SearchQu
         Vec::new()
     };
 
-    let template = SearchTemplate { key, query, has_searched, results };
+    // A full page implies at least one more result exists; a short page
+    // implies the end. This is the standard cursor-free pagination signal and
+    // avoids a second query just to decide whether to draw a "next" link.
+    let has_prev = offset > 0;
+    let has_next = results.len() as i64 == SEARCH_PAGE_SIZE;
+    let prev_offset = (offset - SEARCH_PAGE_SIZE).max(0);
+    let next_offset = offset + SEARCH_PAGE_SIZE;
+
+    let template = SearchTemplate { key, query, has_searched, results, offset, has_prev, has_next, prev_offset, next_offset };
     Ok(Html(template.render().map_err(|e| HumanError(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?).into_response())
 }
 

@@ -163,16 +163,24 @@ pub async fn search(
     conn: &mut SqliteConnection,
     query: &str,
     limit: i64,
+    offset: i64,
 ) -> Result<Vec<oag_core::Node>, StorageError> {
+    // `OFFSET` without `LIMIT` is a syntax error in SQLite, so callers must
+    // always pair them -- the service layer clamps both, which guarantees
+    // that. A negative offset is clamped to 0 for the same reason `limit` is
+    // clamped: SQLite's negative-LIMIT quirk does not apply to OFFSET, but
+    // accepting one would silently mean "from the start" instead of the
+    // error the caller probably expected.
     let rows: Vec<NodeRow> = sqlx::query_as(
         "SELECT nodes.* FROM nodes_fts \
          JOIN nodes ON nodes.rowid = nodes_fts.rowid \
          WHERE nodes_fts MATCH ? \
          AND nodes.node_id NOT IN (SELECT node_id FROM search_suppressions) \
-         ORDER BY rank LIMIT ?",
+         ORDER BY rank LIMIT ? OFFSET ?",
     )
     .bind(query)
     .bind(limit)
+    .bind(offset)
     .fetch_all(&mut *conn)
     .await?;
     rows.into_iter().map(row_to_node).collect()

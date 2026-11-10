@@ -9,7 +9,7 @@ inspectable.
 
 | Route | Shows |
 |---|---|
-| `GET /ui/search?key=&q=` | A plain GET form over `GraphService::search`, results linking to node pages |
+| `GET /ui/search?key=&q=&offset=` | A plain GET form over `GraphService::search`, results linking to node pages; fixed 50-per-page with Previous/Next links |
 | `GET /ui/nodes/{id}?key=` | Name, type, canonical identifier, aliases, relationships, assertions (with evidence/disputes/retraction/last observation), history |
 | `GET /ui/assertions/{id}?key=` | Subject/predicate/object, actor, origin peer, event id, signature status, evidence, verification, disputes, retraction, supersession |
 

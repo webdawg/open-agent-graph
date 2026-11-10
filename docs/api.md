@@ -11,7 +11,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| GET | `/search?q=&limit=&semantic=` | `graph:read` | Keyword (or `semantic=true` embedding-ranked) node search |
+| GET | `/search?q=&limit=&offset=&semantic=` | `graph:read` | Keyword (or `semantic=true` embedding-ranked) node search; `offset` pages through the result set |
 | POST | `/resolve` | `graph:read` | Resolve an identifier string to its node, if one exists |
 | GET | `/nodes/{id}` | `graph:read` | Get a node by id |
 | GET | `/actors/{id}` | `graph:read` | Get an actor by id |
@@ -115,7 +115,7 @@ header (see `docs/security.md`).
 
 | Path | Purpose |
 |---|---|
-| `GET /ui/search?key=&q=` | Landing page: a search box over `GraphService::search`, results linking into node pages |
+| `GET /ui/search?key=&q=&offset=` | Landing page: a search box over `GraphService::search`, results linking into node pages, fixed 50-per-page with Previous/Next links |
 | `GET /ui/nodes/{id}?key=` | Name, type, canonical identifier, aliases, relationships, assertions (with their evidence/disputes/retraction/last observation), history |
 | `GET /ui/assertions/{id}?key=` | Subject/predicate/object, actor, origin peer, event id, signature status, evidence, verification, disputes, retraction, supersession |
 
@@ -131,7 +131,7 @@ tool per `GraphService` capability:
 
 | Tool | Equivalent to |
 |---|---|
-| `graph_search` | `GET /search` |
+| `graph_search` | `GET /search` (`limit` + `offset`) |
 | `graph_resolve` | `POST /resolve` |
 | `graph_get_node` | `GET /nodes/{id}` |
 | `graph_get_actor` | `GET /actors/{id}` |
@@ -166,7 +166,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 |---|---|
 | `oag serve` | Start this peer's REST + MCP + sync server |
 | `oag status` | This peer's identity and basic status |
-| `oag search` | Search the local graph (`--semantic` to rank by embedding similarity) |
+| `oag search` | Search the local graph (`--semantic` to rank by embedding similarity, `--offset` to page) |
 | `oag node get <id>` | Get a node |
 | `oag actor get <id>` | Get an actor |
 | `oag assertion get <id>` | Get an assertion with its evidence |

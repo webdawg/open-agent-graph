@@ -25,7 +25,7 @@ pub async fn search(
             .await?;
         json!(ranked)
     } else {
-        json!(state.graph.search(&q.q, q.limit.unwrap_or(20)).await?)
+        json!(state.graph.search(&q.q, q.limit.unwrap_or(20), q.offset.unwrap_or(0)).await?)
     };
     Ok(Json(json!({ "results": results })))
 }

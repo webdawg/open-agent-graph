@@ -32,7 +32,7 @@ impl GraphService {
         if sanitized.is_empty() {
             return Ok(ResolveOutcome::NotFound);
         }
-        let candidates = nodes::search(&mut conn, &sanitized, 10).await?;
+        let candidates = nodes::search(&mut conn, &sanitized, 10, 0).await?;
         if candidates.is_empty() {
             Ok(ResolveOutcome::NotFound)
         } else {

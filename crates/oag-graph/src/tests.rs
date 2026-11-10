@@ -1051,11 +1051,51 @@ async fn search_with_a_negative_limit_returns_nothing_not_everything() {
         service.assert(&auth, sample_input(&format!("Negative Limit Target {i}"))).await.unwrap();
     }
 
-    let normal = service.search("Negative Limit Target", 20).await.unwrap();
+    let normal = service.search("Negative Limit Target", 20, 0).await.unwrap();
     assert_eq!(normal.len(), 5, "sanity check: all 5 should be findable with a normal limit");
 
-    let negative = service.search("Negative Limit Target", -1).await.unwrap();
+    let negative = service.search("Negative Limit Target", -1, 0).await.unwrap();
     assert!(negative.is_empty(), "a negative limit must not bypass the cap and return everything, got {negative:?}");
+}
+
+#[tokio::test]
+async fn search_pages_through_results_with_an_offset() {
+    // Without an offset a caller can only ever see the first page of a result
+    // set, which is why the Human Interface's search page capped at 50 with no
+    // way forward. Seeds more matches than one page, then walks the pages and
+    // asserts they are disjoint, in order, and cover everything.
+    let (service, auth) = service_with_admin("search-pagination").await;
+    let total = 12;
+    for i in 0..total {
+        service.assert(&auth, sample_input(&format!("Pagination Target {i:02}"))).await.unwrap();
+    }
+
+    let page_size = 5;
+    let first = service.search("Pagination Target", page_size, 0).await.unwrap();
+    assert_eq!(first.len(), page_size as usize, "first page should be full");
+
+    let second = service.search("Pagination Target", page_size, page_size).await.unwrap();
+    assert_eq!(second.len(), page_size as usize, "second page should be full");
+
+    let third = service.search("Pagination Target", page_size, page_size * 2).await.unwrap();
+    assert_eq!(third.len(), 2, "final partial page should hold the remainder");
+
+    // Disjointness: no node may appear on two pages.
+    let mut seen = std::collections::HashSet::new();
+    for node in first.iter().chain(&second).chain(&third) {
+        assert!(seen.insert(node.id), "node {} appeared on more than one page", node.id);
+    }
+    assert_eq!(seen.len(), total, "paging must cover every match exactly once, got {seen:?}");
+
+    // A negative offset is clamped to 0, not an error -- it must return the
+    // first page, not nothing and not the last page.
+    let clamped = service.search("Pagination Target", page_size, -100).await.unwrap();
+    let first_ids: Vec<_> = first.iter().map(|n| n.id.clone()).collect();
+    let clamped_ids: Vec<_> = clamped.iter().map(|n| n.id.clone()).collect();
+    assert_eq!(clamped_ids, first_ids, "a negative offset must behave like 0");
+
+    // An offset past the end returns nothing rather than wrapping or erroring.
+    assert!(service.search("Pagination Target", page_size, 10_000).await.unwrap().is_empty());
 }
 
 #[tokio::test]

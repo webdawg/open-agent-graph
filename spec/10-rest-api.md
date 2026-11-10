@@ -13,7 +13,7 @@ cross-surface audit during this session that found and closed every unintentiona
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| GET | `/search?q=&limit=&semantic=` | `graph:read` | Keyword (or `semantic=true`) node search |
+| GET | `/search?q=&limit=&offset=&semantic=` | `graph:read` | Keyword (or `semantic=true`) node search; `offset` pages through results |
 | POST | `/resolve` | `graph:read` | Resolve an identifier string to its node |
 | GET | `/nodes/{id}` | `graph:read` | Get a node by id |
 | GET | `/actors/{id}` | `graph:read` | Get an actor by id |

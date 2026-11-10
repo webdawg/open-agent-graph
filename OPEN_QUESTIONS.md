@@ -312,7 +312,23 @@ Format: question, assumption I'm running with, status.
   minimal unstyled HTML only. Status: resolved (working as intended for v1).
 - **No pagination** on relationship/history/assertion lists on either page -- same "correct at
   today's scale, revisit if it becomes a real problem" reasoning already applied elsewhere
-  (`oag rebuild`, corroboration). Status: open.
+  (`oag rebuild`, corroboration). Status: open. *Search* pagination was built separately -- see
+  the next bullet -- because search was the one list whose cap was silently unreachable rather
+  than merely unnavigable.
+- **Search pagination: done.** `offset` on all four surfaces (REST `offset=`, MCP `offset`, CLI
+  `--offset`, Human Interface `offset=`), clamped at 0 in `GraphService::search` so a negative
+  value behaves like "from the start" on every surface rather than erroring on some. The Human
+  Interface's page size is fixed at 50 and deliberately not caller-controlled -- it is a browsing
+  surface, and a caller-chosen page size would let one request serialize a whole matching node set
+  into HTML. "Next" is drawn whenever the page came back full, which is the cheapest available
+  signal short of fetching `limit+1` rows.
+
+  **Not solved, and worth stating plainly:** ordering is FTS5 `rank`, which is deterministic for a
+  given index but is not a stable keyset. A node inserted between two page fetches can shift later
+  pages, so a caller doing a strict full scan can see a duplicate or a skip. A keyset cursor on
+  `(rank, node_id)` would fix it. Not built, because no current caller needs strict consistency
+  and the fix costs an extra column in the `ORDER BY` that every other caller pays for. Recorded
+  rather than hidden.
 - **`askama` is now a dependency** (compile-time HTML templates, autoescaped by default) -- the
   first HTML anywhere in this codebase, and the reason: several rendered fields (crawled page
   titles, evidence excerpts, actor names) are attacker/crawler-controlled text, and hand-rolled

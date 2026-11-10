@@ -148,7 +148,11 @@ impl OagMcpServer {
                     .map_err(map_err)?;
                 json!(ranked)
             } else {
-                let results = self.graph.search(&p.query, p.limit.unwrap_or(20)).await.map_err(map_err)?;
+                let results = self
+                    .graph
+                    .search(&p.query, p.limit.unwrap_or(20), p.offset.unwrap_or(0))
+                    .await
+                    .map_err(map_err)?;
                 json!(results)
             };
             Ok(Json(json!({ "results": results })))

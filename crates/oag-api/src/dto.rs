@@ -138,6 +138,11 @@ pub struct ResolveRequest {
 pub struct SearchQuery {
     pub q: String,
     pub limit: Option<i64>,
+    /// Skip this many results before returning any. Clamped at 0 by the
+    /// service layer. Without it a caller cannot get past the first page of
+    /// a large result set, which is why the Human Interface's search page
+    /// capped at 50 with no way forward.
+    pub offset: Option<i64>,
     /// Rank by embedding cosine similarity (spec section 64) instead of
     /// keyword FTS. Requires this peer to have a real embedding provider
     /// configured -- errors clearly rather than silently falling back if

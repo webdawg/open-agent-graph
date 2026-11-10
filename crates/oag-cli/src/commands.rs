@@ -315,6 +315,7 @@ pub async fn search(
     data_dir: &Path,
     query: &str,
     limit: i64,
+    offset: i64,
     semantic: bool,
     config_path: Option<std::path::PathBuf>,
 ) -> anyhow::Result<()> {
@@ -327,7 +328,7 @@ pub async fn search(
         let results = graph.semantic_search(provider.as_ref(), query, limit).await?;
         println!("{}", serde_json::to_string_pretty(&results)?);
     } else {
-        let results = graph.search(query, limit).await?;
+        let results = graph.search(query, limit, offset).await?;
         println!("{}", serde_json::to_string_pretty(&results)?);
     }
     Ok(())
@@ -1001,6 +1002,57 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[tokio::test]
+    async fn search_offset_pages_through_results() {
+        // `oag search` without `--offset` can only ever return the first page,
+        // so a result set larger than `--limit` was unreachable from the CLI.
+        let dir = temp_dir("search-offset");
+        let graph = open_graph(&dir).await.unwrap();
+        // The actor has to exist: the event log has a foreign key on it, so a
+        // derived-but-undeclared actor id is rejected before the assert runs.
+        let actor_id = graph
+            .declare_actor(ActorType::Agent, Some("search-offset".into()), None, None)
+            .await
+            .unwrap();
+        let auth = AuthContext { actor_id, permissions: vec![Permission::GraphAssert] };
+        for i in 0..5 {
+            graph
+                .assert(
+                    &auth,
+                    oag_graph::AssertInput {
+                        subject: format!("https://example.com/cli-paged-{i}"),
+                        subject_type: Some("web_page".into()),
+                        predicate: "instance_of".into(),
+                        object: format!("concept:cli-paged-{i}"),
+                        object_type: None,
+                        evidence: vec![],
+                        actor_confidence: None,
+                        observed_at: None,
+                        extraction_method: None,
+                    },
+                )
+                .await
+                .unwrap();
+        }
+
+        let first = graph.search("cli-paged", 2, 0).await.unwrap();
+        assert_eq!(first.len(), 2, "first page should be full");
+        let second = graph.search("cli-paged", 2, 2).await.unwrap();
+        assert_eq!(second.len(), 2, "second page should be full");
+        let third = graph.search("cli-paged", 2, 4).await.unwrap();
+        assert!(!third.is_empty(), "a third page should exist");
+
+        let mut seen = std::collections::HashSet::new();
+        for node in first.iter().chain(&second).chain(&third) {
+            assert!(seen.insert(node.id.clone()), "node appeared on more than one page");
+        }
+        // A negative offset is clamped to 0 rather than erroring.
+        let clamped = graph.search("cli-paged", 2, -1).await.unwrap();
+        let first_ids: Vec<_> = first.iter().map(|n| n.id.clone()).collect();
+        let clamped_ids: Vec<_> = clamped.iter().map(|n| n.id.clone()).collect();
+        assert_eq!(clamped_ids, first_ids, "a negative offset must behave like 0");
     }
 
     #[tokio::test]

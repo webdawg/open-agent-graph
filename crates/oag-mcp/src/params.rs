@@ -5,6 +5,10 @@ use serde::Deserialize;
 pub struct SearchParams {
     pub query: String,
     pub limit: Option<i64>,
+    /// Skip this many results before returning any. Clamped at 0 by the
+    /// service layer, so omitting it and passing a negative value both mean
+    /// "from the start".
+    pub offset: Option<i64>,
     /// Rank by embedding cosine similarity (spec section 64) instead of
     /// keyword FTS. Requires the peer to have a real embedding provider
     /// configured -- errors clearly rather than silently falling back if
