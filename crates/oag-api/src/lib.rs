@@ -49,6 +49,10 @@ pub fn build_router(state: AppState) -> Router {
             get(handlers::get_node_assertions),
         )
         .route("/api/v1/nodes/{id}/sources", get(handlers::get_node_sources))
+        .route(
+            "/api/v1/nodes/{id}/aliases",
+            post(handlers::declare_alias),
+        )
         .route("/api/v1/assertions/{id}", get(handlers::get_assertion))
         .route("/api/v1/assertions", post(handlers::create_assertion))
         .route(

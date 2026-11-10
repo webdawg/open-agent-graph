@@ -77,6 +77,14 @@ pub struct AddEvidenceParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+pub struct DeclareAliasParams {
+    pub node_id: String,
+    pub alias: String,
+    #[serde(rename = "type")]
+    pub alias_type: String,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct VerifyParams {
     pub assertion_id: String,
     pub result: String,

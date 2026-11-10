@@ -11,10 +11,10 @@ use serde_json::json;
 use tracing::Instrument;
 
 use crate::params::{
-    ActorIdParams, AddEvidenceParams, AssertParams, AssertionIdParams, CrawlParams, DisputeParams,
-    EdgeIdParams, EvidenceParam, HistoryParams, NodeIdParams, RedactActorIdentityUriParams,
-    RedactEvidenceParams, ResolveParams, RetractParams, SearchParams, SubgraphParams,
-    SupersedeParams, VerifyParams,
+    ActorIdParams, AddEvidenceParams, AssertParams, AssertionIdParams, CrawlParams,
+    DeclareAliasParams, DisputeParams, EdgeIdParams, EvidenceParam, HistoryParams, NodeIdParams,
+    RedactActorIdentityUriParams, RedactEvidenceParams, ResolveParams, RetractParams, SearchParams,
+    SubgraphParams, SupersedeParams, VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -397,6 +397,30 @@ impl OagMcpServer {
                 .map_err(|_| ErrorData::invalid_params("invalid assertion_id", None))?;
             self.graph
                 .add_evidence(&auth, assertion_id, evidence_input(p.evidence))
+                .await
+                .map_err(map_err)?;
+            Ok(Json(json!({ "status": "accepted" })))
+        })
+        .await
+    }
+
+    #[tool(description = "Record an alias (name, URL, URN, etc.) for an existing node.")]
+    async fn graph_declare_alias(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<DeclareAliasParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_declare_alias", async {
+            let auth = self.authenticate(&parts).await?;
+            let node_id = p
+                .node_id
+                .parse()
+                .map_err(|_| ErrorData::invalid_params("invalid node_id", None))?;
+            let alias_type = oag_core::AliasType::parse(&p.alias_type).ok_or_else(|| {
+                ErrorData::invalid_params("invalid alias type", None)
+            })?;
+            self.graph
+                .declare_alias(&auth, node_id, p.alias, alias_type)
                 .await
                 .map_err(map_err)?;
             Ok(Json(json!({ "status": "accepted" })))

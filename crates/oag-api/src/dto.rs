@@ -45,6 +45,26 @@ impl EvidenceRequest {
     }
 }
 
+/// `POST /api/v1/nodes/{id}/aliases` -- record an alias for an existing node.
+#[derive(Debug, Deserialize)]
+pub struct DeclareAliasRequest {
+    pub alias: String,
+    #[serde(rename = "type")]
+    pub alias_type: String,
+}
+
+impl DeclareAliasRequest {
+    pub(crate) fn into_input(self) -> Result<(String, oag_core::AliasType), ApiError> {
+        let alias_type = oag_core::AliasType::parse(&self.alias_type).ok_or_else(|| {
+            ApiError(GraphError::InvalidInput(format!(
+                "invalid alias type '{}'",
+                self.alias_type
+            )))
+        })?;
+        Ok((self.alias, alias_type))
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct AssertRequest {
     pub subject: String,

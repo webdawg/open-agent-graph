@@ -266,11 +266,16 @@ Format: question, assumption I'm running with, status.
   assertion back, or list which assertions touch a node (`graph_find_sources` returns *evidence*,
   a genuinely different shape, not assertions themselves). Both added, mirroring the REST handlers'
   exact response shape. Status: resolved.
-- **`declare_alias` still has zero exposure anywhere** (not CLI, REST, or MCP) -- only the crawler
-  calls it internally. A caller wanting to directly say "this URL is also known as this name"
-  without crawling has no way to. Lower priority than the assertion-lookup gap above: aliases are
-  already populated automatically wherever the crawler runs, and no concrete need for standalone
-  alias declaration has come up yet. Status: open (revisit if a real use case shows up).
+- **`declare_alias` had zero exposure anywhere** (not CLI, REST, or MCP) -- only the crawler
+  called it internally. A caller wanting to directly say "this URL is also known as this name"
+  without crawling had no way to. Added `POST /api/v1/nodes/{id}/aliases` and MCP's
+  `graph_declare_alias`, both requiring `graph:assert` (the same permission the service method
+  already checked -- enriching the graph sits in the same bucket as adding evidence). The node must
+  already exist, exactly as the method's own doc comment always required; an unknown `type` is a
+  typed 400 (`invalid alias type '...'`) at both surfaces, never a panic. Deliberately not added to
+  the CLI: `dispute`/`retract`/`supersede` are REST/MCP-only by the same established convention, and
+  `oag alias`-style verb would be a new CLI surface for a capability the crawler already covers.
+  Status: resolved.
 - **`graph_find_sources` had no REST equivalent** -- `docs/api.md` had explicitly flagged this gap
   ("No REST equivalent") rather than it being an undocumented oversight, but a REST-only caller
   doing explainability work (spec section 81 -- "why is this relationship here") genuinely couldn't

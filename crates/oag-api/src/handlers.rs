@@ -5,8 +5,8 @@ use oag_core::{ActorId, AssertionId, EdgeId, NodeId};
 use serde_json::json;
 
 use crate::dto::{
-    now_or, AssertRequest, DisputeRequest, EvidenceRequest, ResolveRequest, RetractRequest,
-    SearchQuery, SubgraphQuery, VerifyRequest,
+    now_or, AssertRequest, DeclareAliasRequest, DisputeRequest, EvidenceRequest, ResolveRequest,
+    RetractRequest, SearchQuery, SubgraphQuery, VerifyRequest,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
@@ -187,6 +187,22 @@ pub async fn add_evidence(
     let auth = authenticate(&headers, &state.graph).await?;
     let assertion_id = parse_assertion_id(&id)?;
     state.graph.add_evidence(&auth, assertion_id, body.into_input()?).await?;
+    Ok(Json(json!({ "status": "accepted" })))
+}
+
+/// Record an alias for an existing node. The node must already exist (the
+/// crawler creates it as a side effect of asserting something about it); this
+/// is the same `graph:assert` capability `declare_alias` has always checked.
+pub async fn declare_alias(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<DeclareAliasRequest>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let auth = authenticate(&headers, &state.graph).await?;
+    let node_id = parse_node_id(&id)?;
+    let (alias, alias_type) = body.into_input()?;
+    state.graph.declare_alias(&auth, node_id, alias, alias_type).await?;
     Ok(Json(json!({ "status": "accepted" })))
 }
 

@@ -305,6 +305,99 @@ async fn full_rest_vertical_slice() {
 }
 
 #[tokio::test]
+async fn declare_alias_endpoint_records_and_lists_an_alias() {
+    let (app, key) = test_app("declare-alias").await;
+    let auth_header = format!("Bearer {key}");
+
+    // A node must exist first -- assert something about it.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "subject": "https://example.com/page",
+                        "predicate": "mentions",
+                        "object": "something"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    let assertion_id = body["assertion_id"].as_str().unwrap().to_string();
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/resolve")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "value": "https://example.com/page" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    let node_id = body["node_id"].as_str().unwrap().to_string();
+
+    // An unknown alias type is a typed 400, not a panic.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/nodes/{node_id}/aliases"))
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "alias": "Example", "type": "nonsense" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // A valid alias is accepted and then shows up on the node.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/v1/nodes/{node_id}/aliases"))
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({ "alias": "Example Page", "type": "name" }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/nodes/{node_id}"))
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let body = body_json(response).await;
+    let aliases = body["aliases"].as_array().unwrap();
+    assert_eq!(aliases.len(), 1);
+    assert_eq!(aliases[0]["alias"], "Example Page");
+    assert_eq!(aliases[0]["alias_type"], "name");
+    let _ = assertion_id;
+}
+
+#[tokio::test]
 async fn missing_auth_header_is_rejected() {
     let (app, _key) = test_app("no-auth").await;
     let response = app

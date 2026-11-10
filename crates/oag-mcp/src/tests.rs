@@ -507,6 +507,80 @@ async fn graph_get_node_assertions_lists_assertions_touching_a_node() {
 }
 
 #[tokio::test]
+async fn graph_declare_alias_records_and_lists_an_alias() {
+    let (url, raw_key) = spawn_mcp_server("declare-alias").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    client
+        .call_tool(CallToolRequestParams::new("graph_assert").with_arguments(
+            json!({
+                "subject": "https://example.com/mcp-alias-test",
+                "predicate": "instance_of",
+                "object": "concept:mcp-alias-test",
+            })
+            .as_object()
+            .unwrap()
+            .clone(),
+        ))
+        .await
+        .unwrap();
+
+    let resolve_result = client
+        .call_tool(CallToolRequestParams::new("graph_resolve").with_arguments(
+            json!({ "value": "https://example.com/mcp-alias-test" }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+    let node_id = resolve_result.structured_content.unwrap()["node_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // An unknown alias type is a typed error, not a panic.
+    let bad = client
+        .call_tool(
+            CallToolRequestParams::new("graph_declare_alias").with_arguments(
+                json!({ "node_id": node_id, "alias": "X", "type": "nonsense" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await;
+    assert!(bad.is_err(), "an unknown alias type must be rejected");
+
+    client
+        .call_tool(
+            CallToolRequestParams::new("graph_declare_alias").with_arguments(
+                json!({ "node_id": node_id, "alias": "Example MCP Page", "type": "name" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("graph_get_node").with_arguments(
+                json!({ "node_id": node_id }).as_object().unwrap().clone(),
+            ),
+        )
+        .await
+        .unwrap();
+    let body = result.structured_content.expect("graph_get_node returns structured content");
+    let aliases = body["aliases"].as_array().unwrap();
+    assert_eq!(aliases.len(), 1);
+    assert_eq!(aliases[0]["alias"], "Example MCP Page");
+}
+
+#[tokio::test]
 async fn graph_crawl_without_permission_is_rejected() {
     let pool = open_pool(&temp_db_path("crawl-no-permission")).await.unwrap();
     let identity = PeerIdentity::generate();
