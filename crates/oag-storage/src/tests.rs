@@ -279,7 +279,7 @@ async fn fts_search_finds_node_after_update() {
     node.description = Some("a rust implementation of a graph".into());
     repo::nodes::insert_if_missing(&mut conn, &node).await.unwrap();
 
-    let found = repo::nodes::search(&mut conn, "graph", 10).await.unwrap();
+    let found = repo::nodes::search(&mut conn, "graph", 10, 0).await.unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].id, node.id);
 
@@ -293,10 +293,10 @@ async fn fts_search_finds_node_after_update() {
         .await
         .unwrap();
 
-    let stale = repo::nodes::search(&mut conn, "graph", 10).await.unwrap();
+    let stale = repo::nodes::search(&mut conn, "graph", 10, 0).await.unwrap();
     assert!(stale.is_empty(), "FTS index should no longer match old text");
 
-    let fresh = repo::nodes::search(&mut conn, "unrelated", 10).await.unwrap();
+    let fresh = repo::nodes::search(&mut conn, "unrelated", 10, 0).await.unwrap();
     assert_eq!(fresh.len(), 1);
 }
 

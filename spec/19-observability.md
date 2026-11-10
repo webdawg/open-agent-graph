@@ -10,7 +10,9 @@ count, database size, replication gauges (omitted when replication status is una
 than reported as a misleading zero), `crawls_total`/`crawl_failures`, the process-lifetime
 verification counters `verification_jobs`/`verification_failures` (counted per `verify_assertion`
 call, including rejected inputs -- a `COUNT(*)` cannot produce them, since rejected attempts never
-become events), and two duration histograms: `api_latency` (milliseconds per REST request, recorded
+become events), `events_pending_chain` (events whose predecessor is not present locally -- the one
+metric here that distinguishes a complete chain from a pile of fragments, which `events_total`
+cannot see), and two duration histograms: `api_latency` (milliseconds per REST request, recorded
 by an HTTP-layer middleware that sees routing, auth, handler, and response as a whole) and
 `search_latency` (milliseconds per search, recorded inside `GraphService` so REST, MCP, CLI, and
 the Human Interface all measure the same thing, semantic search included). No external metrics platform
@@ -70,6 +72,10 @@ and a key without `graph:verify` each count once;
 `search_latency_records_every_search_this_process_serves`, which checks an empty result is still
 measured); `crates/oag-graph/src/latency.rs` (bucket boundaries, cumulative bucket counts, clamping
 a negative duration, quantiles read off the buckets, shared `Arc` handles);
+`crates/oag-storage/src/repo/stats.rs`
+(`pending_chain_counts_events_whose_predecessor_is_missing`, which inserts a genesis event, a child
+with its predecessor present, and a child whose predecessor never arrives -- the state normal ingest
+never produces, so it is built by hand);
 `crates/oag-api/src/tests.rs` (`api_latency_counts_rest_requests_end_to_end`, which serves a real
 request and confirms the histogram counted it -- a unit test of the histogram would not prove the
 middleware is wired to it); `crates/oag-api/src/logging.rs`

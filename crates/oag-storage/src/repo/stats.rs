@@ -43,6 +43,25 @@ pub async fn peer_count(conn: &mut SqliteConnection) -> Result<i64, StorageError
 /// the separate `-wal` file, and a raw file size would undercount it) and
 /// needs no db file path threaded through `GraphService`/`AppState`, since
 /// both PRAGMAs are ordinary queries against the existing pool.
+/// Events whose `previous_event_id` is set but whose predecessor is not present locally.
+///
+/// A non-zero value means this peer holds a fragment of some peer's chain without the event that
+/// precedes it -- the normal state while replication is still catching up, and a *persistent*
+/// non-zero value means a predecessor is missing for good (the origin never sent it, or it was
+/// pruned somewhere upstream). That distinction is not visible in `events_total`, which counts
+/// rows and cannot tell a complete chain from a pile of fragments.
+///
+/// The self-join is on the primary key, so it is `O(n log n)` rather than a scan-compare-scan.
+pub async fn events_pending_chain(conn: &mut SqliteConnection) -> Result<i64, StorageError> {
+    count(
+        conn,
+        "SELECT COUNT(*) FROM events e \
+         LEFT JOIN events p ON p.event_id = e.previous_event_id \
+         WHERE e.previous_event_id IS NOT NULL AND p.event_id IS NULL",
+    )
+    .await
+}
+
 pub async fn sqlite_size_bytes(conn: &mut SqliteConnection) -> Result<i64, StorageError> {
     let page_count = count(conn, "PRAGMA page_count").await?;
     let page_size = count(conn, "PRAGMA page_size").await?;
@@ -81,6 +100,53 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(peer_count(&mut conn).await.unwrap(), 1);
+    }
+
+    /// The metric's whole purpose is the difference between "a complete chain" and "a pile of
+    /// fragments", which `events_total` cannot see. Inserted directly rather than through the event
+    /// log, because a fragment is exactly the state the normal ingest path never produces.
+    #[tokio::test]
+    async fn pending_chain_counts_events_whose_predecessor_is_missing() {
+        let pool = open_pool(&temp_db_path("pending-chain")).await.unwrap();
+        let mut conn = pool.acquire().await.unwrap();
+
+        // `events` has a UNIQUE(origin_peer_id, sequence), so each row needs its own origin to
+        // stand in for a different peer's chain.
+        let insert = |event_tag: &[u8], origin: u8, prev: Option<Vec<u8>>| {
+            sqlx::query(
+                "INSERT INTO events (event_id, origin_peer_id, sequence, previous_event_id, event_type, canonical_payload, created_at, signature, received_at) \
+                 VALUES (?, ?, 1, ?, 'ADD_EVIDENCE', X'00', 1, X'00', 1)",
+            )
+            .bind(oag_core::EventId::derive(event_tag).as_hash().as_bytes().to_vec())
+            .bind(vec![origin; 32])
+            .bind(prev)
+        };
+
+        // A genesis event has no predecessor by definition, so it is never pending.
+        insert(b"stats-pending-genesis", 1, None).execute(&mut *conn).await.unwrap();
+        assert_eq!(events_pending_chain(&mut conn).await.unwrap(), 0);
+
+        // A child whose predecessor IS present is a complete chain, not a fragment.
+        insert(
+            b"stats-pending-child",
+            2,
+            Some(oag_core::EventId::derive(b"stats-pending-genesis").as_hash().as_bytes().to_vec()),
+        )
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(events_pending_chain(&mut conn).await.unwrap(), 0);
+
+        // A child whose predecessor will never arrive is a dangling fragment.
+        insert(
+            b"stats-pending-dangling",
+            3,
+            Some(oag_core::EventId::derive(b"never-arrives").as_hash().as_bytes().to_vec()),
+        )
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        assert_eq!(events_pending_chain(&mut conn).await.unwrap(), 1);
     }
 
     #[tokio::test]

@@ -177,6 +177,13 @@ pub fn render(
     // The two duration histograms. Values are milliseconds, matching the `duration_ms` field on
     // every REST/MCP span, and each `# HELP` line says so -- a reader comparing `/metrics` against
     // the logs should not have to convert units in their head.
+    push_metric(
+        &mut out,
+        "events_pending_chain",
+        "Events whose predecessor event is not present locally: a fragment of a chain this peer has not finished pulling. Zero means every held chain is internally complete.",
+        "gauge",
+        snapshot.events_pending_chain,
+    );
     push_histogram(
         &mut out,
         "api_latency",
@@ -241,6 +248,7 @@ mod tests {
             verification_jobs: 5,
             verification_failures: 2,
             search_latency: oag_graph::latency::LatencyHistogram::new().snapshot(),
+            events_pending_chain: 3,
         }
     }
 
@@ -310,6 +318,9 @@ replication_lagging_peers 1
 # HELP replication_meets_target 1 if replication_peers_caught_up >= replication_target, else 0.
 # TYPE replication_meets_target gauge
 replication_meets_target 1
+# HELP events_pending_chain Events whose predecessor event is not present locally: a fragment of a chain this peer has not finished pulling. Zero means every held chain is internally complete.
+# TYPE events_pending_chain gauge
+events_pending_chain 3
 # HELP api_latency Milliseconds taken to serve each REST request, including routing, auth, handler, and response. Milliseconds, not seconds.
 # TYPE api_latency histogram
 api_latency_bucket{le=\"1\"} 0
@@ -378,6 +389,6 @@ search_latency_count 0
             );
             value_lines += 1;
         }
-        assert_eq!(value_lines, 46, "expected exactly 46 in-scope metric lines");
+        assert_eq!(value_lines, 47, "expected exactly 47 in-scope metric lines");
     }
 }

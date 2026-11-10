@@ -52,7 +52,7 @@ mod tests {
         // confirm it actually has the data, not just that a file exists.
         let restored_pool = open_pool(&backup_path).await.unwrap();
         let mut conn = restored_pool.acquire().await.unwrap();
-        let found = repo::nodes::search(&mut conn, "backuptest", 10).await.unwrap();
+        let found = repo::nodes::search(&mut conn, "backuptest", 10, 0).await.unwrap();
         assert_eq!(found.len(), 1, "snapshot should contain the same data as the live database");
     }
 }

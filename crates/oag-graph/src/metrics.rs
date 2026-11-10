@@ -40,6 +40,9 @@ pub struct MetricsSnapshot {
     /// section 86's `search_latency`). A histogram rather than a count: a count cannot answer
     /// "is this peer getting slower?".
     pub search_latency: crate::latency::LatencySnapshot,
+    /// Events whose predecessor is not present locally (spec section 86's
+    /// `events_pending_chain`). Zero means every chain this peer holds is internally complete.
+    pub events_pending_chain: i64,
 }
 
 impl GraphService {
@@ -59,6 +62,7 @@ impl GraphService {
             verification_jobs: self.verification_jobs.load(std::sync::atomic::Ordering::Relaxed) as i64,
             verification_failures: self.verification_failures.load(std::sync::atomic::Ordering::Relaxed) as i64,
             search_latency: self.search_latency.snapshot(),
+            events_pending_chain: stats_repo::events_pending_chain(&mut conn).await?,
         })
     }
 }
