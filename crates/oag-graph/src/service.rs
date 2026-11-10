@@ -5,6 +5,7 @@ use oag_events::{commit_local_event, EventPayload, ProjectionOutcome};
 use oag_storage::repo::actors;
 use oag_storage::SqlitePool;
 use serde::Serialize;
+use std::sync::Arc;
 
 use crate::assert::check_opt_len;
 use crate::error::GraphError;
@@ -85,15 +86,46 @@ pub struct GraphService {
     /// all, so this makes that true in-process rather than hoping the
     /// database's own locking happens to cover it.
     commit_lock: tokio::sync::Mutex<()>,
+    /// Process-lifetime verification counters (spec section 86's
+    /// `verification_jobs`/`verification_failures`). Separate `Arc`s, same
+    /// sharing pattern as `SyncService`'s, so a caller that needs the exact
+    /// same counter (a second handle, a metrics layer) can hold it. Counted
+    /// per `verify_assertion` call -- a failure is any `Err`, which in
+    /// practice means a rejected input (bad assertion id, bad result string,
+    /// missing permission), not an I/O error: local verification has no
+    /// external-I/O failure mode the way a crawl does.
+    pub(crate) verification_jobs: Arc<std::sync::atomic::AtomicU64>,
+    pub(crate) verification_failures: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl GraphService {
     pub fn new(pool: SqlitePool, identity: PeerIdentity) -> Self {
-        Self { pool, identity, commit_lock: tokio::sync::Mutex::new(()) }
+        Self {
+            pool,
+            identity,
+            commit_lock: tokio::sync::Mutex::new(()),
+            verification_jobs: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            verification_failures: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        }
     }
 
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
+    }
+
+    /// The process-lifetime verification counters, for a caller that needs the exact same
+    /// `Arc`s (a metrics layer, a second handle). See the field's own doc comment.
+    pub fn verification_counters(&self) -> (Arc<std::sync::atomic::AtomicU64>, Arc<std::sync::atomic::AtomicU64>) {
+        (self.verification_jobs.clone(), self.verification_failures.clone())
+    }
+
+    /// Records one `verify_assertion` call. `ok` is whether it returned `Ok` -- see the fields'
+    /// own doc comment for why a failure here is a rejected input, not an I/O error.
+    pub(crate) fn record_verification(&self, ok: bool) {
+        self.verification_jobs.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if !ok {
+            self.verification_failures.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
     }
 
     pub fn identity(&self) -> &PeerIdentity {

@@ -1167,3 +1167,66 @@ async fn committed_data_survives_a_full_pool_close_and_reopen() {
     let resolved = service.resolve("https://example.com/crash-recovery-test").await.unwrap();
     assert!(matches!(resolved, ResolveOutcome::Found { confidence, .. } if confidence == 1.0));
 }
+
+/// spec section 86's `verification_jobs`/`verification_failures`: a successful verification
+/// counts one job and no failure; a rejected one (unknown assertion id, or a key without
+/// `graph:verify`) counts one job and one failure. Process-lifetime, so a fresh service starts
+/// at zero -- and the rejected attempts never become events, which is exactly why a `COUNT(*)`
+/// over the event log cannot produce these numbers.
+#[tokio::test]
+async fn verification_counters_count_jobs_and_failures() {
+    let (service, auth) = service_with_admin("verification-counters").await;
+
+    let assertion_id = service
+        .assert(
+            &auth,
+            AssertInput {
+                subject: "https://example.com/verification-counter".into(),
+                predicate: "instance_of".into(),
+                object: "concept:verification-counter".into(),
+                evidence: vec![],
+                actor_confidence: Some(1.0),
+                observed_at: None,
+                extraction_method: None,
+                subject_type: None,
+                object_type: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let snapshot = service.metrics_snapshot().await.unwrap();
+    assert_eq!(snapshot.verification_jobs, 0);
+    assert_eq!(snapshot.verification_failures, 0);
+
+    service
+        .verify_assertion(&auth, assertion_id, oag_core::VerifyResult::Confirmed, 1_700_000_000)
+        .await
+        .unwrap();
+    let snapshot = service.metrics_snapshot().await.unwrap();
+    assert_eq!(snapshot.verification_jobs, 1);
+    assert_eq!(snapshot.verification_failures, 0);
+
+    // An unknown assertion id is a failed attempt.
+    let bogus: oag_core::AssertionId = "0".repeat(64).parse().unwrap();
+    assert!(
+        service
+            .verify_assertion(&auth, bogus, oag_core::VerifyResult::Confirmed, 1_700_000_000)
+            .await
+            .is_err()
+    );
+
+    // A key without graph:verify is also a failed attempt -- the permission check is inside
+    // the counted outcome, not before it.
+    let read_only_auth = AuthContext { actor_id: auth.actor_id, permissions: vec![Permission::GraphRead] };
+    assert!(
+        service
+            .verify_assertion(&read_only_auth, assertion_id, oag_core::VerifyResult::Confirmed, 1_700_000_000)
+            .await
+            .is_err()
+    );
+
+    let snapshot = service.metrics_snapshot().await.unwrap();
+    assert_eq!(snapshot.verification_jobs, 3);
+    assert_eq!(snapshot.verification_failures, 2);
+}

@@ -125,6 +125,20 @@ pub fn render(
         "counter",
         sync_errors as i64,
     );
+    push_metric(
+        &mut out,
+        "verification_jobs",
+        "Total verify_assertion attempts this process has made, since process start. Counts rejected inputs too -- they never become events, so a COUNT(*) would miss them.",
+        "counter",
+        snapshot.verification_jobs,
+    );
+    push_metric(
+        &mut out,
+        "verification_failures",
+        "Of verification_jobs, how many returned an error (bad assertion id, bad result, or missing graph:verify permission). Local verification has no external-I/O failure mode.",
+        "counter",
+        snapshot.verification_failures,
+    );
     // Spec section 86's `peer_sync_lag`, in aggregate rather than per-peer
     // (a labeled metric here would be an unbounded-cardinality vector as
     // the network grows -- see OPEN_QUESTIONS.md's "Metrics" section).
@@ -180,6 +194,8 @@ mod tests {
             evidence_total: 3,
             peer_count: 2,
             sqlite_size_bytes: 45056,
+            verification_jobs: 5,
+            verification_failures: 2,
         }
     }
 
@@ -231,6 +247,12 @@ crawl_failures 1
 # HELP peer_sync_errors Total whole-attempt sync failures against a peer (SyncService::sync_with_peer returning Err), since process start. Does not count a partial per-event failure inside an otherwise-successful sync round.
 # TYPE peer_sync_errors counter
 peer_sync_errors 2
+# HELP verification_jobs Total verify_assertion attempts this process has made, since process start. Counts rejected inputs too -- they never become events, so a COUNT(*) would miss them.
+# TYPE verification_jobs counter
+verification_jobs 5
+# HELP verification_failures Of verification_jobs, how many returned an error (bad assertion id, bad result, or missing graph:verify permission). Local verification has no external-I/O failure mode.
+# TYPE verification_failures counter
+verification_failures 2
 # HELP replication_target This peer's current target replication factor (spec section 42), scaled by known_peer_count.
 # TYPE replication_target gauge
 replication_target 3
@@ -269,6 +291,6 @@ replication_meets_target 1
             value.parse::<i64>().unwrap_or_else(|e| panic!("value '{value}' for {name} did not parse as a number: {e}"));
             value_lines += 1;
         }
-        assert_eq!(value_lines, 14, "expected exactly 14 in-scope metrics");
+        assert_eq!(value_lines, 16, "expected exactly 16 in-scope metrics");
     }
 }

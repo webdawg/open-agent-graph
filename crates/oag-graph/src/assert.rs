@@ -247,18 +247,27 @@ impl GraphService {
         result: VerifyResult,
         observed_at: i64,
     ) -> Result<(), GraphError> {
-        auth.require(Permission::GraphVerify)?;
-        self.commit_event(
-            EventPayload::VerifyAssertion(VerifyAssertionPayload {
-                assertion_id: assertion_id.to_hex(),
-                observer_actor_id: auth.actor_id.to_hex(),
-                result: result.as_str().to_string(),
-                observed_at,
-            }),
-            self.now(),
-        )
-        .await?;
-        Ok(())
+        // The whole call is one outcome: a missing `graph:verify` permission is a failed
+        // verification attempt too, so it must go through the same counter as a bad assertion
+        // id -- see `record_verification`.
+        let outcome: Result<(), GraphError> = async {
+            auth.require(Permission::GraphVerify)?;
+            self.commit_event(
+                EventPayload::VerifyAssertion(VerifyAssertionPayload {
+                    assertion_id: assertion_id.to_hex(),
+                    observer_actor_id: auth.actor_id.to_hex(),
+                    result: result.as_str().to_string(),
+                    observed_at,
+                }),
+                self.now(),
+            )
+            .await
+            .map(|_| ())
+            .map_err(GraphError::from)
+        }
+        .await;
+        self.record_verification(outcome.is_ok());
+        outcome
     }
 
     /// Requires `graph:assert` (disputing is itself a claim about a claim).

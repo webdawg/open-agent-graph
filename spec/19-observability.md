@@ -7,7 +7,10 @@
 `GET /metrics` (top-level, not under `/api/v1` — matching Prometheus's own convention) exposes a
 small, hand-rolled Prometheus text-format endpoint: event/node/edge/assertion/evidence counts, peer
 count, database size, replication gauges (omitted when replication status is unavailable rather
-than reported as a misleading zero), `crawls_total`/`crawls_failed`. No external metrics platform
+than reported as a misleading zero), `crawls_total`/`crawls_failed`, and the process-lifetime
+verification counters `verification_jobs`/`verification_failures` (counted per `verify_assertion`
+call, including rejected inputs -- a `COUNT(*)` cannot produce them, since rejected attempts never
+become events). No external metrics platform
 required — needs no auth, matching `/status`, since it's a conventional scrape-target posture.
 
 ## Structured logging
@@ -41,5 +44,7 @@ REST span.
 
 `crates/oag-api/src/metrics.rs` (`renders_exact_expected_text`,
 `replication_gauges_are_omitted_when_status_is_unavailable`,
-`every_metric_line_parses_as_prometheus_syntax`); `crates/oag-api/src/logging.rs`
+`every_metric_line_parses_as_prometheus_syntax`); `crates/oag-graph/src/tests.rs`
+(`verification_counters_count_jobs_and_failures`, which checks a success, an unknown assertion id,
+and a key without `graph:verify` each count once); `crates/oag-api/src/logging.rs`
 (`request_ids_are_unique_and_stable_shape`).

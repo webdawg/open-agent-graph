@@ -89,16 +89,24 @@ Format: question, assumption I'm running with, status.
   metric -- needs a GROUP BY and a decision on label cardinality), `events_pending_chain`,
   `replication_bytes_in`/`out`, `search_latency`, `api_latency` (all need request-duration
   instrumentation -- a middleware/histogram layer, not a snapshot query), `verification_jobs`/
-  `verification_failures` (no counter wired through `verify_assertion` yet -- lower priority than
-  crawl's were, since local verification has no real external-I/O failure mode the way a crawl
-  does), and `blob_store_size` (no blob store exists yet -- spec section 84's `blobs/<hash>` is
-  itself unimplemented). `peer_sync_lag` is covered, in aggregate: `replication_target`/
+  `verification_failures` (now implemented -- see the next bullet), and `blob_store_size` (no blob
+  store exists yet -- spec section 84's `blobs/<hash>` is itself unimplemented). `peer_sync_lag` is covered, in aggregate: `replication_target`/
   `replication_peers_caught_up`/`replication_lagging_peers`/`replication_meets_target`, derived
   from `SyncService::replication_status()` (the same computation `oag replication status` already
   used) via a second, read-only `SyncService` handle on `AppState` constructed straight from the
   same pool/identity `GraphService` already has -- no threading through `oag serve`'s startup
   needed, since federation policy doesn't affect this read-only query. Status: open (revisit
   alongside whichever of request-latency histograms or the blob store lands first).
+- **`verification_jobs`/`verification_failures` added.** Wired through `verify_assertion` as a
+  process-lifetime `Arc<AtomicU64>` pair on `GraphService` (same sharing pattern as
+  `SyncService`'s), exposed on `MetricsSnapshot` and rendered by `GET /metrics`. Counted per call,
+  *after* the outcome is known, so a missing `graph:verify` permission counts as a failure too --
+  not just a bad assertion id. This is deliberately not a `COUNT(*)` over the event log: rejected
+  attempts never become events, so a snapshot query structurally cannot produce these numbers,
+  which is the whole reason they needed real instrumentation. A "failure" here is a rejected
+  input, not an I/O error -- local verification has no external-I/O failure mode the way a crawl
+  does, so `verification_failures` will be near-zero in a healthy deployment and is a signal about
+  caller mistakes, not about this peer's health.
 - **`peer_sync_errors` added, counting whole-attempt failures only.** Unlike the gauges above,
   this needed a real, live counter -- `AppState.sync`'s own independently-constructed `SyncService`
   handle would always read zero, since it never runs the gossip loop itself. Solved by making
