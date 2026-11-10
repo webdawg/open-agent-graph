@@ -12,7 +12,9 @@ verification counters `verification_jobs`/`verification_failures` (counted per `
 call, including rejected inputs -- a `COUNT(*)` cannot produce them, since rejected attempts never
 become events), `events_pending_chain` (events whose predecessor is not present locally -- the one
 metric here that distinguishes a complete chain from a pile of fragments, which `events_total`
-cannot see), and two duration histograms: `api_latency` (milliseconds per REST request, recorded
+cannot see), `replication_bytes_in`/`replication_bytes_out` (bytes this peer moved from/to peers
+during replication, counted on the real gossip loop's client), and two duration histograms:
+`api_latency` (milliseconds per REST request, recorded
 by an HTTP-layer middleware that sees routing, auth, handler, and response as a whole) and
 `search_latency` (milliseconds per search, recorded inside `GraphService` so REST, MCP, CLI, and
 the Human Interface all measure the same thing, semantic search included). No external metrics platform
@@ -34,6 +36,23 @@ across scrapes, which defeats the point.
 of view that *is* the search latency, and excluding it would report semantic search as faster than
 it is. `api_latency` deliberately overlaps it for a search request: one measures the request, the
 other the search part.
+
+### `replication_bytes_in`/`out`
+
+`SyncClient` counts the streamed bodies of every replication read (`hello`/`heads`/`events`/
+`peers`) into `bytes_in`, and each serialized POST body (`presence`, `cluster`) into `bytes_out`.
+Both are process-lifetime counters on the client, shared by `Arc` so a metrics layer can hold the
+exact ones the gossip loop increments.
+
+**Why the sharing is needed.** `AppState` holds a *separately constructed* `SyncService` that never
+runs the sync loop, so its own client's counters would always read zero -- the same trap
+`peer_sync_errors` already documents. `oag serve` therefore hands `AppState` the real service's
+counters at startup, exactly as it does for `sync_errors`.
+
+**What is not counted, deliberately.** `bytes_in` covers streamed *read* bodies. The tiny unread
+responses to `presence`/`cluster` POSTs are not counted, because reading them would mean buffering
+a body on a fire-and-forget path for the sake of a few bytes. The `# HELP` line says so rather than
+leaving the boundary to be discovered.
 
 ## Structured logging
 
@@ -76,6 +95,9 @@ a negative duration, quantiles read off the buckets, shared `Arc` handles);
 (`pending_chain_counts_events_whose_predecessor_is_missing`, which inserts a genesis event, a child
 with its predecessor present, and a child whose predecessor never arrives -- the state normal ingest
 never produces, so it is built by hand);
+`crates/oag-sync/src/client.rs` (`replication_bytes_counters_move_with_real_traffic`, which
+fetches a real response and sends a real heartbeat against a fixture server and asserts both
+counters moved);
 `crates/oag-api/src/tests.rs` (`api_latency_counts_rest_requests_end_to_end`, which serves a real
 request and confirms the histogram counted it -- a unit test of the histogram would not prove the
 middleware is wired to it); `crates/oag-api/src/logging.rs`
