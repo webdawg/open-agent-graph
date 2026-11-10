@@ -118,6 +118,27 @@ address and which the experiment does not test.
 
 ---
 
+## EXP-012 — Does the imagination carrier actually carry a request over a real link?
+
+**Repository:** `oag-imagination-random-data-compute`
+**Hypothesis.** A request sent by `ReticulumTransport` reaches a real `serve` instance over a real
+Reticulum `Link`, is answered by the engine's resolver, and the reply carries the server node's
+contribution.
+**Procedure.** Start `serve` on a loopback `TcpServer` interface with an engine whose resolver holds
+one known target. Connect a `ReticulumTransport` over a `TcpClient` to the same port, dial the
+server's address, send one request, read the reply.
+**Result (RUN, `9f63af7`).** The reply came back with the resolver's answer and one contribution
+attributed to the server node.
+**Also run:** a send to an address nobody announces returns `None` at its own timeout rather than
+hanging; a malformed address fails softly.
+**Conclusion.** The carrier works end to end over a real socket. The test uses loopback TCP as the
+Reticulum interface, not radio -- it proves the link, framing, and engine wiring, not radio
+behaviour.
+**Scope.** Three tests, ~10s total. The failure case's timeout was shortened to 2s via
+`with_announce_wait` so the suite stays quick.
+
+---
+
 ## EXP-008 (PLANNED) — Does traffic strengthen pads measurably?
 
 **Hypothesis.** After N routed requests, a pad that carried traffic is selected more often than an

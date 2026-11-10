@@ -181,6 +181,39 @@ trust-on-first-use.
 
 ---
 
+## ADR-015 — The imagination Reticulum adapter is a separate crate, and takes a seed string
+
+**Decision.** `oag-imagination-reticulum` is its own crate in the imagination repository, not a
+module of `oag-imagination`. It takes an identity *seed string* rather than an `oag` peer identity.
+
+**Context.** Two constraints pulled in opposite directions. The spec says the imagination layer
+does not depend on the `reticulum` crate; but `oag-reticulum` (which does) cannot host the adapter
+either, because `oag-imagination` depends on `oag-core`/`oag-crypto`/`oag-storage` from the base
+project, so `oag-reticulum` depending on `oag-imagination` would make the two *repositories*
+mutually dependent. A separate crate satisfies both.
+
+The identity question is sharper. The base project derives its Reticulum identity from the peer's
+Ed25519 signing key, which is exactly right there: the key already exists, is private, and is
+stable. The adapter crate has no `oag-crypto` dependency and no peer identity of its own. Deriving
+from the peer's *public* id instead would be a security regression -- anyone who has ever seen the
+peer's `PeerId` could reconstruct its Reticulum private identity and impersonate it on the mesh.
+
+**Consequences.**
+- The layer stays free of any `reticulum` dependency; a node running over TCP, HTTP, or IPFS never
+  pays for this crate.
+- The adapter takes a seed string and derives deterministically via
+  `PrivateIdentity::new_from_name`. The natural seed is the owning `oag` peer's id, passed in by
+  the caller, which preserves the base project's security property without a dependency.
+- **The seed must be stable across restarts.** A changed seed means a changed address, and peers
+  that knew the old address can no longer reach this node. This is a real operational footgun and is
+  documented in the crate and the spec rather than left implicit.
+- The adapter implements both `ReticulumCarrier` (Option-returning) and `Transport`
+  (`io::Result`-returning), mapping `None` to a timeout `io::Error`, so `send_with` works unchanged.
+
+**Status.** Accepted (`9f63af7`).
+
+---
+
 ## ADR-014 — A commit marker makes a saved store set atomic to the reader
 
 **Decision.** `MeshState::save_to_dir` writes all seven store files, hashes each one's exact bytes,

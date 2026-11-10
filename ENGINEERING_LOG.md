@@ -6,6 +6,42 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — imagination Reticulum carrier
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files created:**
+- `crates/oag-imagination-reticulum/Cargo.toml`, `src/lib.rs`, `tests/loopback.rs`
+- workspace `Cargo.toml` (new member + `oag-imagination` path dep)
+**Files modified:** `spec/03-transports.md`, `README.md`, workspace `Cargo.toml`.
+
+**Feature implemented.** The last carrier left as a seam. `ReticulumTransport` (client, implements
+both `ReticulumCarrier` and `Transport`) and `serve`/`serve_on` (server), framing over a real
+Reticulum `Link` with the same 4-byte length-prefix + 1400-byte chunk format the base project's own
+Reticulum transport uses.
+
+**Design decisions.** A separate crate so `oag-imagination` keeps no `reticulum` dependency; and
+`oag-reticulum` could not host the adapter either, because `oag-imagination` depends on the base
+project's crates, making that a circular *repository* dependency. Identity comes from a seed string
+(the caller passes the owning `oag` peer's id) rather than a peer identity, preserving the base
+project's "never derive from the public `PeerId`" property without an `oag-crypto` dependency.
+
+**Tests executed.** `cargo test --workspace` — 40 passed (oag-imagination) + 3 passed (new
+adapter), 0 failed.
+
+**Test results.** New: `a_request_travels_over_a_real_reticulum_link` (real `TcpServer`/`TcpClient`
+loopback, real engine answer, reply carries the server node's contribution);
+`a_send_to_an_unknown_destination_fails_softly`; `a_bad_destination_address_is_a_clean_error`.
+
+**Performance measurements.** None. No benchmark was run. The suite runs in ~10s, dominated by the
+failure-path timeout, which was shortened to 2s via a new `with_announce_wait` builder.
+
+**Commits:** `3dfc759` (transport chunked-path coverage, rust-ai), `9f63af7` (adapter) — pushed.
+**Remaining defects.** The adapter has not been exercised over real radio, only loopback TCP as the
+Reticulum interface. The identity seed is a caller responsibility: a changed seed silently changes
+the node's address, which is documented but not enforced. `serve` hardcodes a 5s announce interval.
+
+---
+
 ## 2026-11-09 — mesh commit marker (crash-consistent store set)
 
 **Repository:** `oag-mesh`

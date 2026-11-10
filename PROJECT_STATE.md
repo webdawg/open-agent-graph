@@ -24,7 +24,7 @@ mission as a whole.
 |---|---|---|---|
 | `open-agent-graph` | 410 | 115 | 01–32 |
 | `oag-mesh` | 175 | 39 | 01–15 |
-| `oag-imagination-random-data-compute` | 40 | 28 | 01–03 |
+| `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
 All three working trees are clean and pushed as of the last update.
 
@@ -72,8 +72,8 @@ All three working trees are clean and pushed as of the last update.
   coded; a missing shard is an error).
 - Randomness sources: software, mixed (sometimes real data), hardware seam, and a byte-device
   source (`/dev/hwrng` or any device a driver exposes).
-- Carriers: TCP, UDP, HTTP, HTTP `CONNECT` tunnel, IPFS read-by-CID and publish. Reticulum is a
-  seam.
+- Carriers: TCP, UDP, HTTP, HTTP `CONNECT` tunnel, IPFS read-by-CID and publish, and Reticulum
+  (in a separate `oag-imagination-reticulum` crate, so the layer keeps no `reticulum` dependency).
 - Target resolvers: local/store, URL, CID-over-gateway, peer transfer with receipt verification.
 - The node adapter reads its pad and peers from `oag`'s own storage; nothing is configured.
 
@@ -109,7 +109,6 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   (bandwidth tension with pull-based replication; "never-ending morphing encryption" open).
 - **Sub-second ephemeral micro-networks** (<30ms) and "network formation as an identity claim" are
   genuinely open; they need new spec work.
-- **Reticulum carrier in the imagination layer is a seam only** — the adapter is unwritten.
 - **Mesh: no responder dispatch push, no `AllClear` semantics decision, poll-only acknowledgments,
   unauthenticated GETs, untuned PoW, no fsync (a power loss can still lose a rename), and no
   atomic multi-store *write* during a pull.** The read-side torn-set gap is closed: a saved set
@@ -123,7 +122,6 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    which is not a stable keyset: a node inserted between page fetches can shift later pages. A
    `(rank, node_id)` cursor would fix it. No current caller needs strict consistency, so it is
    recorded rather than built.
-2. **Imagination Reticulum carrier** — the one carrier left as a seam.
 3. **rust-ai static page hosting follow-ups** — crawler side-fetch pinning, scheduled backup
    pinning, evidence-body inlining (see `spec/29` "Explicitly deferred").
 4. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
