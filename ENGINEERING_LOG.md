@@ -6,6 +6,47 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — crawler dual-stack DNS pinning
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-crawler/src/fetch.rs`, `crates/oag-api/src/gateway.rs`,
+`OPEN_QUESTIONS.md`.
+
+**Defect fixed.** `build_pinned_client` looped over the resolved address set calling reqwest's
+`resolve()`, which maps a host to exactly one SocketAddr and **overwrites** on every call — so only
+the last entry survived. A dual-stack host resolved to `[IPv4, IPv6]` with no outbound IPv6 route
+failed outright, with zero fallback to the working IPv4 address, purely because IPv6 happened to be
+resolved last.
+
+This was already recorded in `OPEN_QUESTIONS.md` as a latent bug found via the gateway feature and
+deliberately left unfixed in the crawler. It is now fixed there too.
+
+**Fix.** `build_pinned_client` pins exactly one address and documents why the loop form was wrong.
+`safe_fetch` reduces its resolved set through a new `oag_crawler::fetch::prefer_ipv4` before pinning,
+so the choice is deliberate rather than resolver-order-dependent; an IPv6-only host has no A record,
+so it is unaffected. `oag-api`'s gateway now calls that shared helper instead of keeping its own
+copy — the same logic in two places is how they drift.
+
+**Tests executed.** `cargo test -p oag-crawler` — 75 passed. `cargo test -p oag-api` — 61 passed.
+
+**Test results.** oag-crawler 69 → 75. New: `prefer_ipv4` picks the IPv4 address in both
+resolver orders, leaves an IPv6-only set untouched, passes an empty set through;
+`build_pinned_client_pins_the_first_address_in_the_set` (a set with a dead IPv6 second entry still
+fetches — this is the regression); `pinning_an_unusable_first_address_fails_without_fallback`
+(characterises the rule, and is why `safe_fetch` filters first); and
+`the_safe_fetch_path_reduces_a_dual_stack_set_before_pinning`.
+
+**Performance measurements.** None. No benchmark was run. The change alters *which* address is
+pinned, not how many connections are attempted.
+
+**Commit:** `33563d4` — pushed.
+**Remaining defects.** The same overwrite behaviour would affect any other caller that loops
+`resolve` over an address set; `build_pinned_client` is the only one in this codebase. IPv4-first is
+a deliberate bias for dual-stack-broken networks, not a correctness property — an IPv6-only host is
+handled, but a host whose IPv4 is firewalled and whose IPv6 works would now prefer the broken IPv4.
+
+---
+
 ## 2026-11-09 — events_pending_chain
 
 **Repository:** `open-agent-graph` (`rust-ai`)

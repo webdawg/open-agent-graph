@@ -22,7 +22,7 @@ mission as a whole.
 
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
-| `open-agent-graph` | 421 | 118 | 01–32 |
+| `open-agent-graph` | 427 | 119 | 01–32 |
 | `oag-mesh` | 187 | 42 | 01–15 |
 | `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
