@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
 
@@ -56,20 +58,36 @@ pub fn sync_client_with_timeouts(
             .timeout(request_timeout)
             .build()
             .expect("building a reqwest client with static timeout configuration cannot fail"),
+        bytes_in: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        bytes_out: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
     }
 }
 
-async fn capped_json<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, SyncClientError> {
-    let mut body = Vec::new();
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        body.extend_from_slice(&chunk);
-        if body.len() > MAX_RESPONSE_BYTES {
-            return Err(SyncClientError::ResponseTooLarge(MAX_RESPONSE_BYTES));
+impl SyncClient {
+    /// Streams a response body to JSON under the size cap, counting every byte this peer received
+    /// from a peer into `bytes_in`. Counted even when the cap trips or the JSON is invalid: the
+    /// bytes crossed the wire, and a metrics layer that only counted successful responses would
+    /// under-report exactly the traffic an operator is trying to account for.
+    async fn capped_json<T: DeserializeOwned>(&self, response: reqwest::Response) -> Result<T, SyncClientError> {
+        let mut body = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            body.extend_from_slice(&chunk);
+            if body.len() > MAX_RESPONSE_BYTES {
+                self.bytes_in.fetch_add(body.len() as u64, Ordering::Relaxed);
+                return Err(SyncClientError::ResponseTooLarge(MAX_RESPONSE_BYTES));
+            }
         }
+        self.bytes_in.fetch_add(body.len() as u64, Ordering::Relaxed);
+        Ok(serde_json::from_slice(&body)?)
     }
-    Ok(serde_json::from_slice(&body)?)
+}
+
+/// Counts one outgoing request body before it is sent. Split out so both POST paths count the same
+/// way and a future one can copy it.
+fn record_outgoing(bytes_out: &std::sync::Arc<std::sync::atomic::AtomicU64>, body: &[u8]) {
+    bytes_out.fetch_add(body.len() as u64, Ordering::Relaxed);
 }
 
 /// Thin HTTP client for the `/oag/sync/v1/*` wire protocol (spec section
@@ -78,6 +96,11 @@ async fn capped_json<T: DeserializeOwned>(response: reqwest::Response) -> Result
 #[derive(Clone)]
 pub struct SyncClient {
     http: reqwest::Client,
+    /// Process-lifetime bytes received from peers (`spec/19`'s `replication_bytes_in`), counted in
+    /// `capped_json` across every endpoint this client calls.
+    bytes_in: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Process-lifetime bytes sent to peers (`replication_bytes_out`), counted at each POST.
+    bytes_out: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl SyncClient {
@@ -93,7 +116,27 @@ impl SyncClient {
     /// A client over an already-built `reqwest::Client`, for an embedder that configures its own
     /// transport (proxies, TLS, connection pooling) and wants this wire protocol on top of it.
     pub fn with_http(http: reqwest::Client) -> Self {
-        Self { http }
+        Self {
+            http,
+            bytes_in: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            bytes_out: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
+
+    /// The `(bytes_in, bytes_out)` counters themselves, for a metrics layer that needs the exact
+    /// same `Arc`s the gossip loop increments. Same sharing pattern as `SyncService`'s.
+    pub fn replication_bytes_counters(
+        &self,
+    ) -> (std::sync::Arc<std::sync::atomic::AtomicU64>, std::sync::Arc<std::sync::atomic::AtomicU64>) {
+        (self.bytes_in.clone(), self.bytes_out.clone())
+    }
+
+    /// `(bytes_in, bytes_out)` this client has moved since it was built.
+    pub fn replication_bytes(&self) -> (u64, u64) {
+        (
+            self.bytes_in.load(Ordering::Relaxed),
+            self.bytes_out.load(Ordering::Relaxed),
+        )
     }
 
     fn base(addr: &str) -> String {
@@ -102,13 +145,13 @@ impl SyncClient {
 
     pub async fn hello(&self, addr: &str) -> Result<HelloResponse, SyncClientError> {
         let url = format!("{}/hello", Self::base(addr));
-        capped_json(self.http.get(url).send().await?.error_for_status()?).await
+        self.capped_json(self.http.get(url).send().await?.error_for_status()?).await
     }
 
     #[allow(dead_code)]
     pub async fn heads(&self, addr: &str) -> Result<HeadsResponse, SyncClientError> {
         let url = format!("{}/heads", Self::base(addr));
-        capped_json(self.http.get(url).send().await?.error_for_status()?).await
+        self.capped_json(self.http.get(url).send().await?.error_for_status()?).await
     }
 
     pub async fn fetch_events(
@@ -119,12 +162,12 @@ impl SyncClient {
         to: u64,
     ) -> Result<EventsResponse, SyncClientError> {
         let url = format!("{}/events/{origin_hex}?from={from}&to={to}", Self::base(addr));
-        capped_json(self.http.get(url).send().await?.error_for_status()?).await
+        self.capped_json(self.http.get(url).send().await?.error_for_status()?).await
     }
 
     pub async fn fetch_peers(&self, addr: &str) -> Result<PeersResponse, SyncClientError> {
         let url = format!("{}/peers", Self::base(addr));
-        capped_json(self.http.get(url).send().await?.error_for_status()?).await
+        self.capped_json(self.http.get(url).send().await?.error_for_status()?).await
     }
 
     /// Ephemeral peer trust, Phase 1: push one signed presence heartbeat.
@@ -137,7 +180,15 @@ impl SyncClient {
         heartbeat: &crate::presence::PresenceHeartbeat,
     ) -> Result<(), SyncClientError> {
         let url = format!("{}/presence", Self::base(addr));
-        self.http.post(url).json(heartbeat).send().await?.error_for_status()?;
+        let body = serde_json::to_vec(heartbeat)?;
+        record_outgoing(&self.bytes_out, &body);
+        self.http
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .send()
+            .await?
+            .error_for_status()?;
         Ok(())
     }
 
@@ -150,7 +201,15 @@ impl SyncClient {
         declaration: &crate::cluster::ClusterDeclaration,
     ) -> Result<(), SyncClientError> {
         let url = format!("{}/cluster", Self::base(addr));
-        self.http.post(url).json(declaration).send().await?.error_for_status()?;
+        let body = serde_json::to_vec(declaration)?;
+        record_outgoing(&self.bytes_out, &body);
+        self.http
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body)
+            .send()
+            .await?
+            .error_for_status()?;
         Ok(())
     }
 }
@@ -189,6 +248,55 @@ mod tests {
     /// connect timeout alone cannot catch this -- the connection *succeeded* -- so it is the total
     /// request timeout that bounds the wait. Without it, one non-responding peer could hold a
     /// sync round open indefinitely.
+    /// The byte counters are the aggregate half of replication cost, so the only meaningful test
+    /// is that real traffic moves them: a fetched response increments `bytes_in`, and a sent
+    /// presence heartbeat increments `bytes_out`. A fixture server that returns 200 is enough --
+    /// the point is what the *client* counts, not what the server validates.
+    #[tokio::test]
+    async fn replication_bytes_counters_move_with_real_traffic() {
+        async fn peers() -> &'static str {
+            r#"{"peers":[]}"#
+        }
+        async fn presence() -> &'static str {
+            "ok"
+        }
+        let router = Router::new()
+            .route("/oag/sync/v1/peers", get(peers))
+            .route("/oag/sync/v1/presence", axum::routing::post(presence));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        let base = format!("http://{addr}");
+
+        let client = SyncClient::new();
+        assert_eq!(client.replication_bytes(), (0, 0), "nothing moved yet");
+
+        client.fetch_peers(&base).await.unwrap();
+        let (bytes_in, bytes_out) = client.replication_bytes();
+        assert!(bytes_in > 0, "a fetched response body must be counted, got {bytes_in}");
+        assert_eq!(bytes_out, 0, "a GET sends no body");
+
+        let identity = oag_crypto::PeerIdentity::generate();
+        let heartbeat = crate::presence::build_and_sign(
+            &identity,
+            crate::presence::PresenceStatus::Online,
+            1,
+            2,
+        )
+        .unwrap();
+        client.send_presence(&base, &heartbeat).await.unwrap();
+        let (bytes_in_after, bytes_out_after) = client.replication_bytes();
+        // `bytes_in` counts *streamed* read bodies, not the tiny unread responses to POSTs. That
+        // boundary is deliberate and is stated in the metric's HELP text.
+        assert_eq!(bytes_in_after, bytes_in, "an unread POST response body is not counted");
+        assert!(
+            bytes_out_after > 0,
+            "the presence heartbeat body must be counted as bytes out, got {bytes_out_after}"
+        );
+    }
+
     #[tokio::test]
     async fn a_peer_that_accepts_but_never_responds_is_abandoned_at_the_timeout() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

@@ -21,10 +21,20 @@ pub async fn handler(State(state): State<AppState>) -> Result<Response, ApiError
     let snapshot = state.graph.metrics_snapshot().await?;
     let crawl_counts = CrawlCounts { total: state.crawler.crawls_total(), failed: state.crawler.crawls_failed() };
     let sync_errors = state.sync_errors.load(Ordering::Relaxed);
+    let replication_bytes_in = state.replication_bytes_in.load(Ordering::Relaxed);
+    let replication_bytes_out = state.replication_bytes_out.load(Ordering::Relaxed);
     // Best-effort: a metrics scrape shouldn't fail outright over a hiccup
     // reading replication state -- `None` just omits those gauges below.
     let replication = state.sync.replication_status().await.ok();
-    let body = render(&snapshot, &crawl_counts, sync_errors, replication.as_ref(), &state.api_latency.snapshot());
+    let body = render(
+        &snapshot,
+        &crawl_counts,
+        sync_errors,
+        replication.as_ref(),
+        &state.api_latency.snapshot(),
+        replication_bytes_in,
+        replication_bytes_out,
+    );
     Ok((
         StatusCode::OK,
         [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
@@ -54,6 +64,8 @@ pub fn render(
     sync_errors: u64,
     replication: Option<&oag_sync::ReplicationStatus>,
     api_latency: &oag_graph::latency::LatencySnapshot,
+    replication_bytes_in: u64,
+    replication_bytes_out: u64,
 ) -> String {
     let mut out = String::new();
     push_metric(
@@ -177,6 +189,20 @@ pub fn render(
     // The two duration histograms. Values are milliseconds, matching the `duration_ms` field on
     // every REST/MCP span, and each `# HELP` line says so -- a reader comparing `/metrics` against
     // the logs should not have to convert units in their head.
+    push_metric(
+        &mut out,
+        "replication_bytes_in",
+        "Bytes this peer received from other peers during replication, since process start: the streamed bodies of every replication read (hello/heads/events/peers), including ones later rejected as oversized or invalid. Small POST responses (presence, cluster) are not read and so are not counted.",
+        "counter",
+        replication_bytes_in as i64,
+    );
+    push_metric(
+        &mut out,
+        "replication_bytes_out",
+        "Bytes this peer sent to other peers during replication, since process start. Presence heartbeats and cluster declarations; event pushes are counted server-side on the receiving peer's bytes_in.",
+        "counter",
+        replication_bytes_out as i64,
+    );
     push_metric(
         &mut out,
         "events_pending_chain",
@@ -318,6 +344,12 @@ replication_lagging_peers 1
 # HELP replication_meets_target 1 if replication_peers_caught_up >= replication_target, else 0.
 # TYPE replication_meets_target gauge
 replication_meets_target 1
+# HELP replication_bytes_in Bytes this peer received from other peers during replication, since process start: the streamed bodies of every replication read (hello/heads/events/peers), including ones later rejected as oversized or invalid. Small POST responses (presence, cluster) are not read and so are not counted.
+# TYPE replication_bytes_in counter
+replication_bytes_in 1024
+# HELP replication_bytes_out Bytes this peer sent to other peers during replication, since process start. Presence heartbeats and cluster declarations; event pushes are counted server-side on the receiving peer's bytes_in.
+# TYPE replication_bytes_out counter
+replication_bytes_out 2048
 # HELP events_pending_chain Events whose predecessor event is not present locally: a fragment of a chain this peer has not finished pulling. Zero means every held chain is internally complete.
 # TYPE events_pending_chain gauge
 events_pending_chain 3
@@ -357,20 +389,20 @@ search_latency_sum 0
 search_latency_count 0
 ";
         assert_eq!(
-            render(&snapshot(), &crawl_counts(), 2, Some(&replication()), &api_latency()),
+            render(&snapshot(), &crawl_counts(), 2, Some(&replication()), &api_latency(), 1024, 2048),
             expected
         );
     }
 
     #[test]
     fn replication_gauges_are_omitted_when_status_is_unavailable() {
-        let text = render(&snapshot(), &crawl_counts(), 2, None, &api_latency());
+        let text = render(&snapshot(), &crawl_counts(), 2, None, &api_latency(), 1024, 2048);
         assert!(!text.contains("replication_target"));
     }
 
     #[test]
     fn every_metric_line_parses_as_prometheus_syntax() {
-        let text = render(&snapshot(), &crawl_counts(), 2, Some(&replication()), &api_latency());
+        let text = render(&snapshot(), &crawl_counts(), 2, Some(&replication()), &api_latency(), 1024, 2048);
         let mut value_lines = 0;
         for line in text.lines() {
             if line.starts_with('#') || line.is_empty() {
@@ -389,6 +421,6 @@ search_latency_count 0
             );
             value_lines += 1;
         }
-        assert_eq!(value_lines, 47, "expected exactly 47 in-scope metric lines");
+        assert_eq!(value_lines, 49, "expected exactly 49 in-scope metric lines");
     }
 }

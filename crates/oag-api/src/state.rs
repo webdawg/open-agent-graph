@@ -31,6 +31,12 @@ pub struct AppState {
     /// Defaults to a fresh, always-zero counter so every other construction
     /// site (including every test) keeps working unchanged.
     pub sync_errors: Arc<AtomicU64>,
+    /// Replication bytes received from peers (spec section 86's `replication_bytes_in`), shared
+    /// with the real gossip loop's `SyncClient` -- see [`Self::sync_errors`] for why this cannot
+    /// come from `AppState`'s own `sync` field.
+    pub replication_bytes_in: Arc<AtomicU64>,
+    /// Replication bytes sent to peers (`replication_bytes_out`), same sharing.
+    pub replication_bytes_out: Arc<AtomicU64>,
     /// The operator's own Kubo node's dialable libp2p WebSocket multiaddr
     /// (`[ipfs].libp2p_ws_multiaddr`), if configured -- handed to a browser
     /// loading `/ipfs-site/{cid}` as a direct dial target. `oag serve`
@@ -112,6 +118,8 @@ impl AppState {
             crawler,
             sync,
             sync_errors: Arc::new(AtomicU64::new(0)),
+            replication_bytes_in: Arc::new(AtomicU64::new(0)),
+            replication_bytes_out: Arc::new(AtomicU64::new(0)),
             ipfs_libp2p_ws_multiaddr: None,
             pinning_provider: None,
             transfer_rate_limiter: Arc::new(RateLimiter::default()),
@@ -176,6 +184,18 @@ impl AppState {
     /// live sync activity instead of an unrelated handle's zero.
     pub fn with_sync_errors(mut self, sync_errors: Arc<AtomicU64>) -> Self {
         self.sync_errors = sync_errors;
+        self
+    }
+
+    /// Hands this state the real gossip loop's replication byte counters -- same reasoning as
+    /// [`Self::with_sync_errors`].
+    pub fn with_replication_bytes(
+        mut self,
+        bytes_in: Arc<AtomicU64>,
+        bytes_out: Arc<AtomicU64>,
+    ) -> Self {
+        self.replication_bytes_in = bytes_in;
+        self.replication_bytes_out = bytes_out;
         self
     }
 

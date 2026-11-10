@@ -47,6 +47,9 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
     // its doc comment) whose internal counter would otherwise always read
     // zero.
     let sync_errors_counter = sync_service.sync_errors_counter();
+    // Same reason as `sync_errors_counter` above: `/metrics`'s `replication_bytes_in`/`out` must
+    // reflect the real gossip loop, not `AppState`'s separately-constructed `SyncService`.
+    let replication_bytes_counters = sync_service.replication_bytes_counters();
     if config.identity_ephemeral {
         sync_service = sync_service
             .with_minimum_trust(oag_sync::EPHEMERAL_MINIMUM_TRUST, config.trust_config)
@@ -106,6 +109,10 @@ pub async fn run(config: ResolvedConfig) -> anyhow::Result<()> {
         .with_pinning_provider(Some(pinning_provider))
         .with_relay_peers(config.relay_peers.clone())
         .with_sync_errors(sync_errors_counter)
+        .with_replication_bytes(
+            replication_bytes_counters.0,
+            replication_bytes_counters.1,
+        )
         .with_gateway_query_peers(config.gateway_query_peers.clone())
         .with_gateway_relay_peers(config.gateway_relay_peers.clone())
         .with_gateway_config(config.gateway_config.clone());

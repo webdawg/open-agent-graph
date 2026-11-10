@@ -131,6 +131,16 @@ impl SyncService {
         self.sync_errors.load(Ordering::Relaxed)
     }
 
+    /// The `(bytes_in, bytes_out)` replication counters, for a metrics layer that needs the exact
+    /// same `Arc`s the real gossip loop increments.
+    ///
+    /// Same reasoning as [`Self::sync_errors_counter`]: an `AppState` holds a separately
+    /// constructed `SyncService` that never runs the loop, so its own client's counters would
+    /// always read zero. The caller has to be handed this service's.
+    pub fn replication_bytes_counters(&self) -> (Arc<AtomicU64>, Arc<AtomicU64>) {
+        self.client.replication_bytes_counters()
+    }
+
     /// Spec section 86: one whole-attempt sync failure against one peer
     /// (`Self::sync_with_peer` itself returning `Err`) -- not incremented
     /// for a partial, per-event failure inside an otherwise-successful call
