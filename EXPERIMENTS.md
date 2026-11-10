@@ -101,6 +101,23 @@ stream was used, so no randomness-strength claim is made.
 
 ---
 
+## EXP-011 — Does the commit marker actually catch a torn store set?
+
+**Repository:** `oag-mesh`
+**Hypothesis.** A set of stores saved with the marker, then damaged in any of the ways a crash
+mid-save can damage it, is refused by `load_from_dir` rather than silently loaded.
+**Procedure.** Save a real seven-store set; then independently (a) delete one store file, (b)
+overwrite one with different bytes, (c) truncate the marker to invalid JSON, (d) write a marker
+with an unsupported version. Assert `load_from_dir` refuses each.
+**Result (RUN, `7223852`).** All four are refused with `TornSet` (the corrupt marker surfaces as
+`Parse`). A directory with no marker still loads, and a fresh save verifies as `Consistent`.
+**Conclusion.** The read-side gap is closed for every damage shape tested.
+**Scope, stated plainly.** The torn states were *constructed*, not induced by killing a process
+mid-save. A real crash could also lose a rename entirely (no fsync), which this mechanism does not
+address and which the experiment does not test.
+
+---
+
 ## EXP-008 (PLANNED) — Does traffic strengthen pads measurably?
 
 **Hypothesis.** After N routed requests, a pad that carried traffic is selected more often than an

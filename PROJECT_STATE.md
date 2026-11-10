@@ -23,7 +23,7 @@ mission as a whole.
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
 | `open-agent-graph` | 410 | 115 | 01–32 |
-| `oag-mesh` | 165 | 38 | 01–15 |
+| `oag-mesh` | 175 | 39 | 01–15 |
 | `oag-imagination-random-data-compute` | 40 | 28 | 01–03 |
 
 All three working trees are clean and pushed as of the last update.
@@ -61,8 +61,9 @@ All three working trees are clean and pushed as of the last update.
 - Responder acknowledgment (advisory, identity-bearing, no PoW).
 - Blinded responder dispatch: filter subscription under a responder-chosen random id, polled inbox.
 - Onion routing: ChaCha20-Poly1305 layers over X25519 keys derived from Ed25519 identities.
-- Transport: HTTP push + pull-based anti-entropy, optional periodic sync with jitter, manual
-  atomic-on-Unix disk persistence of all five stores.
+- Transport: HTTP push + pull-based anti-entropy, optional periodic sync with jitter, disk
+  persistence of all seven stores where each save writes a commit marker last and a load refuses
+  a torn set.
 
 ### oag-imagination-random-data-compute (layer 1, parallel)
 - Pad-guided routing engine: a request enters a node, the tensor pad picks the next hop, each hop
@@ -110,8 +111,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   genuinely open; they need new spec work.
 - **Reticulum carrier in the imagination layer is a seam only** — the adapter is unwritten.
 - **Mesh: no responder dispatch push, no `AllClear` semantics decision, poll-only acknowledgments,
-  unauthenticated GETs, untuned PoW, manual non-crash-safe persistence, no atomic multi-store
-  operations.**
+  unauthenticated GETs, untuned PoW, no fsync (a power loss can still lose a rename), and no
+  atomic multi-store *write* during a pull.** The read-side torn-set gap is closed: a saved set
+  carries a commit marker and a load refuses a set that contradicts it.
 - **`blob_store_size` metric is unbuilt** because no blob store exists (`spec/29`'s `blobs/<hash>`
   is itself unimplemented).
 

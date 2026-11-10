@@ -181,6 +181,41 @@ trust-on-first-use.
 
 ---
 
+## ADR-014 — A commit marker makes a saved store set atomic to the reader
+
+**Decision.** `MeshState::save_to_dir` writes all seven store files, hashes each one's exact bytes,
+and then writes `commit.json` recording `{version, files: [{file, blake3}]}`. `load_from_dir`
+verifies the marker first and refuses the set with `PersistenceError::TornSet` if any recorded file
+is missing or differs.
+
+**Context.** Each file was already atomic individually (temp + rename), but that only guarantees
+that a file is not truncated -- not that a *set* of files is from the same snapshot. A crash
+between the individual saves leaves some stores new and some old, every file still parses, and
+nothing downstream can detect the disagreement. This is a silent-consistency failure, which is worse
+than a crash: a node would act on stores that contradict each other with no signal.
+
+**Consequences.**
+- A torn set is refused rather than loaded. The node starts from whatever the previous consistent
+  set was, or empty, instead of acting on contradictory state.
+- The marker is written last, so its presence means the whole set is on disk; its absence after a
+  crash means the previous set is intact.
+- A corrupt or wrong-version marker is refused too, because it means the save was interrupted at
+  the last step and consistency is unknown.
+- **A directory with no marker still loads exactly as before.** This is deliberate: an existing
+  deployment upgrades, its directory has seven store files and no marker, and refusing would strand
+  every one of those nodes' state. Absence of a marker means "older version or first run", not
+  corruption. Only a marker that contradicts the files is refused.
+- BLAKE3 of the exact bytes, not a hash of the parsed value: the question is "did the bytes on disk
+  change since the save", which is the only thing a crash can make ambiguous.
+
+**What this does not do.** There is still no fsync, so a power loss can lose the rename itself;
+and there is still no atomic multi-store *write* on the pull side. The marker closes the read-side
+gap only.
+
+**Status.** Accepted (`7223852`).
+
+---
+
 ## ADR-012 — The Human Interface's search page size is fixed, not caller-controlled
 
 **Decision.** `/ui/search` pages at a fixed 50 results. Only the offset is caller-controlled.
