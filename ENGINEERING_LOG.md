@@ -6,6 +6,41 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — cap the imagination engine's route hops
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/engine.rs`, `spec/02-tensor-pad-routing.md`.
+
+**Gap closed.** The engine has no visited-set — the pad picks the next hop by weight, so a cycle
+between two nodes is a possible routing outcome, not an impossible one. Without a hop budget such a
+request would accumulate one contribution per hop and be re-sent in full each time, amplifying
+bandwidth and memory until the carrier's `MAX_MESSAGE_BYTES` happened to reject it.
+
+**Fix.** `MAX_ROUTE_HOPS` (64), well above `spec/02`'s own "6, 10, or 50 nodes" intent and matching
+the spirit of the base project's `relay_hops_remaining`. A node that has exhausted the budget
+returns `TooManyHops` instead of forwarding. It still records its own contribution: the bound is on
+forwarding, not on acknowledging participation.
+
+**The budget bounds forwarding, not answering.** A node that can answer does so however long the
+chain behind the request is — refusing an answer would turn a bounded-chain problem into a failed
+request.
+
+**Tests executed.** `cargo test --workspace` — 45 passed (oag-imagination) + 3 passed (adapter).
+
+**Test results.** oag-imagination 43 → 45. New: `a_request_at_the_hop_budget_is_not_forwarded`
+(two below the budget still routes; one below reaches it and is refused) and
+`the_hop_budget_does_not_stop_a_node_that_can_answer`.
+
+**Performance measurements.** None. The bound costs one length comparison per handled request.
+
+**Commit:** `548580d` — pushed.
+**Remaining defects.** The engine still has no visited-set, so a request can revisit the same node
+many times within the budget — the budget bounds the damage but does not detect the cycle. A
+visited-set would cost memory proportional to the chain, which is the same trade the dream log
+already makes.
+
+---
+
 ## 2026-11-09 — bound the imagination dream log
 
 **Repository:** `oag-imagination-random-data-compute`

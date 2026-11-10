@@ -181,6 +181,34 @@ trust-on-first-use.
 
 ---
 
+## ADR-021 — The imagination engine caps route hops
+
+**Decision.** A request may travel at most `MAX_ROUTE_HOPS` (64) hops. A node that has exhausted the
+budget returns `TooManyHops` instead of forwarding.
+
+**Context.** The engine has no visited-set: the pad picks the next hop by weight, so a cycle between
+two nodes is a possible routing outcome rather than an impossible one. Without a budget such a
+request accumulates one contribution per hop and is re-sent in full each time, amplifying bandwidth
+and memory until the carrier's `MAX_MESSAGE_BYTES` happens to reject it. That is a bound, but an
+accidental one, and it is measured in megabytes of waste per cycle.
+
+**Consequences.**
+- The amplification is bounded by design rather than by an unrelated size limit.
+- 64 is well above `spec/02`'s own "6, 10, or 50 nodes" intent, so no intended path is truncated.
+- The base project's relay already bounds the same shape with `relay_hops_remaining`; this brings
+  the imagination engine to the same posture.
+- **The budget bounds forwarding, not answering.** A node that can answer does so however long the
+  chain behind the request is; refusing an answer would turn a bounded-chain problem into a failed
+  request.
+- A refused node still records its own contribution — the bound is on forwarding, not on
+  acknowledging participation.
+- `HandleOutcome::TooManyHops` is distinct from `NoRoute`, so a caller can tell "nowhere to go" from
+  "the chain is too long".
+
+**Status.** Accepted (`548580d`).
+
+---
+
 ## ADR-020 — The imagination dream log is bounded by count *and* bytes
 
 **Decision.** `DreamLog` keeps at most 1,000 entries totalling at most 8 MiB serialized, evicting
