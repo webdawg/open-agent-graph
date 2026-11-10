@@ -90,7 +90,7 @@ Format: question, assumption I'm running with, status.
   `replication_bytes_in`/`out`, `search_latency`, `api_latency` (all need request-duration
   instrumentation -- a middleware/histogram layer, not a snapshot query), `verification_jobs`/
   `verification_failures` (now implemented -- see the next bullet), and `blob_store_size` (no blob
-  store exists yet -- spec section 84's `blobs/<hash>` is itself unimplemented). `peer_sync_lag` is covered, in aggregate: `replication_target`/
+  store exists yet -- no `blobs/<hash>` route exists anywhere in this codebase). `peer_sync_lag` is covered, in aggregate: `replication_target`/
   `replication_peers_caught_up`/`replication_lagging_peers`/`replication_meets_target`, derived
   from `SyncService::replication_status()` (the same computation `oag replication status` already
   used) via a second, read-only `SyncService` handle on `AppState` constructed straight from the
@@ -228,9 +228,9 @@ Format: question, assumption I'm running with, status.
   would make the delete fail with a constraint violation for as long as any suppression exists.
   `redactions.event_id`, by contrast, safely FKs to `events`, which `oag rebuild` never deletes.
   Status: resolved.
-- **Blob removal is out of scope.** No blob store exists yet (spec section 84's `blobs/<hash>`,
-  already tracked as deferred future work alongside native IPFS hosting). Status: deferred, tracked
-  in memory, not here.
+- **Blob removal is out of scope.** No blob store exists yet -- there is no `blobs/<hash>` route
+  anywhere in this codebase -- and blob storage is already tracked as deferred future work
+  alongside native IPFS hosting. Status: deferred, tracked in memory, not here.
 - **Actor `identity_uri` redaction added** (`oag redact actor-identity-uri` / `POST
   /api/v1/actors/{id}/redact-identity-uri` / `graph_redact_actor_identity_uri`). Confirmed safe by
   direct code research before building it, unlike whole-assertion redaction (which really does have

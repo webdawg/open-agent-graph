@@ -270,8 +270,7 @@ remain not yet implemented and change nothing described elsewhere in this docume
   a periodic re-read of `[identity]` — see `spec/24-ephemeral-peer-trust.md`). Still future work: a
   real multi-peer voting/consensus mechanism (Phase 1 uses a soft, local, address-correlation
   heuristic instead), and PacketCrypt-style proof-of-data-volume.
-- Native IPFS integration for large evidence blobs and static exports (spec section 84's
-  `blobs/<hash>` concept). **Phase 1, 2, and 3 implemented** — opt-in pinning of crawled evidence
+- Native IPFS integration for large evidence blobs and static exports. **Phase 1, 2, and 3 implemented** — opt-in pinning of crawled evidence
   content (Phase 1) and `oag backup` snapshots (Phase 2), both via `[ipfs].pinning_provider`
   (default disabled, now `"disabled" | "kubo" | "embedded"`). Evidence's CID lands in the existing
   `Evidence.metadata` column (`{"ipfs_cid": "..."}`, no schema change); `oag ipfs cat <cid>`
