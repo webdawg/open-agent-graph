@@ -22,7 +22,7 @@ mission as a whole.
 
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
-| `open-agent-graph` | 404 | 113 | 01–32 |
+| `open-agent-graph` | 410 | 115 | 01–32 |
 | `oag-mesh` | 165 | 38 | 01–15 |
 | `oag-imagination-random-data-compute` | 40 | 28 | 01–03 |
 
@@ -117,9 +117,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **rust-ai search pagination** — `/ui/search` caps at 50 with no way past it; REST `search` has no
-   offset. Named as deferred in `OPEN_QUESTIONS.md` ("correct at today's scale"), so this is a
-   scope decision, not an oversight.
+1. **rust-ai keyset pagination** — search now pages by `offset`, but the order is FTS5 `rank`,
+   which is not a stable keyset: a node inserted between page fetches can shift later pages. A
+   `(rank, node_id)` cursor would fix it. No current caller needs strict consistency, so it is
+   recorded rather than built.
 2. **Imagination Reticulum carrier** — the one carrier left as a seam.
 3. **rust-ai static page hosting follow-ups** — crawler side-fetch pinning, scheduled backup
    pinning, evidence-body inlining (see `spec/29` "Explicitly deferred").

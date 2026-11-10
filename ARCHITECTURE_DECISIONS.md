@@ -181,6 +181,46 @@ trust-on-first-use.
 
 ---
 
+## ADR-012 — The Human Interface's search page size is fixed, not caller-controlled
+
+**Decision.** `/ui/search` pages at a fixed 50 results. Only the offset is caller-controlled.
+REST, MCP, and CLI keep a caller-chosen `limit` (clamped to `[0, 1000]`).
+
+**Context.** Pagination was added because a `limit` with no `offset` made everything past the
+first page unreachable, and the Human Interface hard-coded 50 with no way forward. The obvious
+fix is to expose `limit` everywhere. That is the wrong fix for a browsing surface.
+
+**Consequences.**
+- The Human Interface cannot be made to serialize a whole matching node set into one HTML
+  response, accidentally or deliberately.
+- REST/MCP/CLI keep their existing caps, which are already bounded.
+- Pagination there is offset-based, so a caller must fetch a page at a time; that is the point.
+
+**Rejected alternative.** A shared, caller-controlled page size on all four surfaces. It would
+be simpler and would weaken the one surface where the page size is a rendering cost rather than
+a transport cost.
+
+**Status.** Accepted (`e1e6110`).
+
+---
+
+## ADR-013 — A negative offset is clamped, not rejected
+
+**Decision.** A negative `offset` is clamped to 0 in `GraphService::search`. The same value on
+REST, MCP, CLI, and the Human Interface therefore behaves identically.
+
+**Context.** The service layer is the one place all four surfaces call through. If clamping
+lived at each surface, three might clamp and one might error on the same input, and the
+inconsistency would be invisible until a caller hit it.
+
+**Consequences.** A negative offset means "from the start" rather than an error. This is the
+same posture already taken for a negative `limit`, which is clamped rather than rejected for the
+same reason.
+
+**Status.** Accepted (`e1e6110`).
+
+---
+
 ## ADR-011 — Persistent project records live in the foundational repository
 
 **Decision.** `PROJECT_STATE.md`, `RESEARCH_JOURNAL.md`, `INVENTION_REGISTER.md`,

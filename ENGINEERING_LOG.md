@@ -6,6 +6,46 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — search pagination
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:**
+- `crates/oag-storage/src/repo/nodes.rs` — `search` takes an `offset`; SQL is now
+  `LIMIT ? OFFSET ?`.
+- `crates/oag-graph/src/search.rs` — `search` takes an `offset`, clamped at 0.
+- `crates/oag-graph/src/resolve.rs` — the internal candidate lookup passes 0.
+- `crates/oag-api/src/dto.rs`, `handlers.rs` — REST `offset` query parameter.
+- `crates/oag-mcp/src/params.rs`, `server.rs` — MCP `offset` argument.
+- `crates/oag-cli/src/main.rs`, `commands.rs` — `--offset` flag.
+- `crates/oag-api/src/human.rs`, `templates/search.html` — fixed 50-per-page with
+  Previous/Next links.
+- Tests: `crates/oag-graph/src/tests.rs`, `crates/oag-api/src/tests.rs`,
+  `crates/oag-mcp/src/tests.rs`, `crates/oag-cli/src/commands.rs`.
+- Docs: `spec/07-search.md`, `spec/10-rest-api.md`, `spec/11-mcp-server.md`,
+  `spec/12-cli.md`, `spec/13-human-interface.md`, `docs/api.md`, `OPEN_QUESTIONS.md`,
+  `ARCHITECTURE_DECISIONS.md`.
+
+**Feature implemented.** `offset` on all four search surfaces. Previously a `limit` with no
+`offset` meant only the first page was reachable, and the Human Interface hard-coded 50 with no
+way forward.
+
+**Tests executed.** `cargo test -p oag-graph` (87 passed), `-p oag-api` (60 passed),
+`-p oag-mcp` (19 passed), `-p oag-cli` (19 passed, 2 ignored for needing public DNS).
+
+**Test results.** All passed. oag-graph 86 → 87, oag-api 59 → 60, oag-mcp 18 → 19,
+oag-cli 20 → 21.
+
+**Performance measurements.** None. No benchmark was run; the change adds one bound parameter to
+an existing indexed FTS5 query and does not alter its plan.
+
+**Commit:** `e1e6110` — pushed.
+**Remaining defects.** Ordering is FTS5 `rank`, which is not a stable keyset: a node inserted
+between two page fetches can shift later pages. Recorded in `OPEN_QUESTIONS.md`; a
+`(rank, node_id)` cursor would fix it. Not built, because no current caller needs strict
+consistency and the fix costs an extra `ORDER BY` column that every other caller would pay for.
+
+---
+
 ## 2026-11-09 — verification metrics
 
 **Repository:** `open-agent-graph` (`rust-ai`)
