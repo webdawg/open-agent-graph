@@ -6,6 +6,42 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — events_pending_chain
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-storage/src/repo/stats.rs`, `crates/oag-graph/src/metrics.rs`,
+`crates/oag-api/src/metrics.rs`, `crates/oag-storage/src/{tests,backup}.rs`,
+`spec/19-observability.md`, `OPEN_QUESTIONS.md`.
+
+**Feature implemented.** `events_pending_chain` (spec section 86): events whose `previous_event_id`
+is set but whose predecessor is not present locally. `events_total` counts rows and cannot tell a
+complete chain from a pile of fragments; during replication a fragment is the normal state, and a
+persistent non-zero value means a predecessor is missing for good. The self-join is on the primary
+key, so it is `O(n log n)`.
+
+**Defect found and fixed while doing it.** The earlier `search()` signature change (adding
+`offset`) had broken four tests in `oag-storage` -- three in `tests.rs`, one in `backup.rs` -- and
+that crate was not in the set run when the change landed. All four are fixed, and the full
+workspace suite now passes: 419 tests across 16 crates.
+
+**Tests executed.** `cargo test --workspace` — all crates pass.
+
+**Test results.** oag-storage 30 → 31. New: `pending_chain_counts_events_whose_predecessor_is_
+missing`, which inserts a genesis event, a child whose predecessor IS present, and a child whose
+predecessor never arrives. That dangling state is exactly what normal ingest never produces, so it
+is built by hand rather than driven through the service.
+
+**Performance measurements.** None. The query's complexity is stated (`O(n log n)` via the primary
+key); no timing was measured and none is claimed.
+
+**Commit:** `7086294` — pushed.
+**Remaining defects.** `events_by_origin` (a labeled metric needing a decision on label
+cardinality), `replication_bytes_in`/`out`, and `blob_store_size` remain unbuilt. The lesson from the
+broken storage tests is recorded rather than just fixed: a signature change to a shared storage
+function warrants running that crate, and the crate list in the engineering log should include it.
+
+---
+
 ## 2026-11-09 — api_latency and search_latency histograms
 
 **Repository:** `open-agent-graph` (`rust-ai`)

@@ -86,8 +86,9 @@ Format: question, assumption I'm running with, status.
   `crawl_jobs`/`crawl_failures` (process-lifetime `AtomicU64` counters on `CrawlerService`,
   incremented on every `crawl()` call regardless of caller -- CLI, REST, or MCP), and now
   `peer_sync_errors` (see below). Still NOT implemented: `events_by_origin` (a labeled/vector
-  metric -- needs a GROUP BY and a decision on label cardinality), `events_pending_chain`,
-  `replication_bytes_in`/`out` (still need request-duration instrumentation), `search_latency`/
+  metric -- needs a GROUP BY and a decision on label cardinality), `events_pending_chain` (now
+  implemented -- see the next bullet), `replication_bytes_in`/`out` (still need request-duration
+  instrumentation), `search_latency`/
   `api_latency` (now implemented -- see the bullet after the verification one), `verification_jobs`/
   `verification_failures` (now implemented -- see the next bullet), and `blob_store_size` (no blob
   store exists yet -- no `blobs/<hash>` route exists anywhere in this codebase). `peer_sync_lag` is covered, in aggregate: `replication_target`/
@@ -120,6 +121,12 @@ Format: question, assumption I'm running with, status.
   event among many successfully-applied ones). Status: open (revisit if partial per-event failures
   turn out to need their own signal too -- `search_latency`/`api_latency` above are a separate,
   still-unbuilt metric).
+- **`events_pending_chain` added.** A self-join on `events.event_id`: count events whose
+  `previous_event_id` is set but whose predecessor is not in the table. `events_total` counts rows
+  and cannot distinguish a complete chain from a pile of fragments, so during replication an
+  operator had no way to see how much of the local graph is dangling. Zero means every held chain
+  is internally complete; a persistent non-zero means a predecessor is missing for good. The join
+  is on the primary key, so it is `O(n log n)` rather than a scan-compare-scan.
 - **`search_latency`/`api_latency` added as fixed-bucket histograms.** `crates/oag-graph/src/latency.rs`
   is a hand-rolled histogram (atomic counters, fixed boundaries, no dependency), the same posture
   as the rest of this surface. `search_latency` is recorded inside `GraphService::search` and

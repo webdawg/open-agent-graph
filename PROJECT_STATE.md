@@ -22,7 +22,7 @@ mission as a whole.
 
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
-| `open-agent-graph` | 420 | 117 | 01–32 |
+| `open-agent-graph` | 421 | 118 | 01–32 |
 | `oag-mesh` | 187 | 42 | 01–15 |
 | `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
@@ -48,8 +48,10 @@ All three working trees are clean and pushed as of the last update.
 - Observability: hand-rolled Prometheus `/metrics` and structured `tracing` spans for REST, MCP,
   and event ingest. Metrics now include `crawls_total`/`crawls_failed`,
   `peer_syncs_total`/`peer_sync_errors`/`peer_sync_peers`,
-  `verification_jobs`/`verification_failures`, and the two duration histograms
-  `search_latency` (inside `GraphService`) and `api_latency` (an HTTP middleware).
+  `verification_jobs`/`verification_failures`, `events_pending_chain` (events whose predecessor
+  is missing locally -- the one metric that tells a complete chain from a pile of fragments), and
+  the two duration histograms `search_latency` (inside `GraphService`) and `api_latency` (an HTTP
+  middleware).
 
 ### oag-mesh (layer 1)
 - Cluster nesting (`BridgeDeclaration`) with escalating proof-of-work anti-sybil protection.
