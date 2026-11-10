@@ -1,8 +1,42 @@
 # ENGINEERING_LOG — Project OAG
 
-Append-only engineering journal. Newest entries at the bottom. Each entry records date,
+Append-only engineering journal. Newest entries at the top. Each entry records date,
 invocation, repository, files modified, features implemented, tests executed, test results,
 performance measurements, commit identifiers, push status, and remaining defects.
+
+---
+
+## 2026-11-09 — mesh commit marker (crash-consistent store set)
+
+**Repository:** `oag-mesh`
+**Files modified:**
+- `crates/oag-mesh/src/persistence.rs` — added `CommitEntry`/`CommitMarker`/`CommitState`,
+  `hash_file`, `write_commit_marker`, `verify_commit_marker`, `STORE_FILES`, and a
+  `PersistenceError::TornSet` variant; corrected the module doc (it still said "three in-memory
+  stores" when there are seven).
+- `crates/oag-mesh/src/transport.rs` — `save_to_dir` hashes each of the seven files and writes the
+  marker last; `load_from_dir` verifies it before loading.
+- `spec/08-persistence.md`, `OPEN_QUESTIONS.md`.
+
+**Feature implemented.** A saved set of the seven stores is now atomic *to a reader*. Each file
+was already individually atomic, but a crash between saves could leave a torn set where every file
+parses and nothing downstream could tell they disagreed. The marker closes that: written last, and
+verified first, with a `TornSet` refusal when the files contradict it.
+
+**Tests executed.** `cargo test -p oag-mesh` — 175 passed, 0 failed.
+
+**Test results.** oag-mesh 165 → 175. New: 7 persistence tests (legacy/no-marker, consistent,
+deleted file, modified file, corrupt marker, wrong version, idempotent re-write) and 3 transport
+tests (fresh save verifies; load refuses a torn set; load still accepts a pre-marker directory).
+
+**Performance measurements.** None. BLAKE3 over seven small JSON files on load is not a measured
+bottleneck and no benchmark was run.
+
+**Commit:** `7223852` — pushed.
+**Remaining defects.** No fsync, so a power loss can still lose a rename. No atomic multi-store
+*write* on the pull side. A caller that saves rarely can still lose up to a whole save's worth of
+in-memory state. The torn-set path is tested by constructing the torn state directly, not by
+inducing a real crash -- a real kill mid-save is not reproducible on demand.
 
 ---
 
@@ -43,40 +77,6 @@ an existing indexed FTS5 query and does not alter its plan.
 between two page fetches can shift later pages. Recorded in `OPEN_QUESTIONS.md`; a
 `(rank, node_id)` cursor would fix it. Not built, because no current caller needs strict
 consistency and the fix costs an extra `ORDER BY` column that every other caller would pay for.
-
----
-
-## 2026-11-09 — mesh commit marker (crash-consistent store set)
-
-**Repository:** `oag-mesh`
-**Files modified:**
-- `crates/oag-mesh/src/persistence.rs` — added `CommitEntry`/`CommitMarker`/`CommitState`,
-  `hash_file`, `write_commit_marker`, `verify_commit_marker`, `STORE_FILES`, and a
-  `PersistenceError::TornSet` variant; corrected the module doc (it still said "three in-memory
-  stores" when there are seven).
-- `crates/oag-mesh/src/transport.rs` — `save_to_dir` hashes each of the seven files and writes the
-  marker last; `load_from_dir` verifies it before loading.
-- `spec/08-persistence.md`, `OPEN_QUESTIONS.md`.
-
-**Feature implemented.** A saved set of the seven stores is now atomic *to a reader*. Each file
-was already individually atomic, but a crash between saves could leave a torn set where every file
-parses and nothing downstream could tell they disagreed. The marker closes that: written last, and
-verified first, with a `TornSet` refusal when the files contradict it.
-
-**Tests executed.** `cargo test -p oag-mesh` — 175 passed, 0 failed.
-
-**Test results.** oag-mesh 165 → 175. New: 7 persistence tests (legacy/no-marker, consistent,
-deleted file, modified file, corrupt marker, wrong version, idempotent re-write) and 3 transport
-tests (fresh save verifies; load refuses a torn set; load still accepts a pre-marker directory).
-
-**Performance measurements.** None. BLAKE3 over seven small JSON files on load is not a measured
-bottleneck and no benchmark was run.
-
-**Commit:** `7223852` — pushed.
-**Remaining defects.** No fsync, so a power loss can still lose a rename. No atomic multi-store
-*write* on the pull side. A caller that saves rarely can still lose up to a whole save's worth of
-in-memory state. The torn-set path is tested by constructing the torn state directly, not by
-inducing a real crash -- a real kill mid-save is not reproducible on demand.
 
 ---
 
