@@ -6,6 +6,42 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — replication_bytes_in/out
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-sync/src/{client,service}.rs`,
+`crates/oag-api/src/{state,metrics}.rs`, `crates/oag-cli/src/serve.rs`,
+`crates/oag-sync/src/client.rs` tests, `spec/19-observability.md`, `OPEN_QUESTIONS.md`.
+
+**Feature implemented.** The last two named request-duration metrics. `SyncClient` counts the
+streamed bodies of every replication read (`hello`/`heads`/`events`/`peers`) into `bytes_in`,
+including ones later rejected as oversized or invalid, and each serialized POST body (`presence`,
+`cluster`) into `bytes_out`. Process-lifetime counters shared by `Arc`.
+
+**Why the sharing mattered as much as the counting.** `AppState` holds a *separately constructed*
+`SyncService` that never runs the sync loop, so its own client's counters would always read zero --
+the same trap `peer_sync_errors` already documents. `oag serve` hands `AppState` the real service's
+`Arc`s at startup, exactly as it does for `sync_errors`.
+
+**Tests executed.** `cargo test -p oag-sync` — 41 passed. `cargo test -p oag-api` — 61 passed.
+
+**Test results.** oag-sync 40 → 41. New: `replication_bytes_counters_move_with_real_traffic`,
+which fetches a real response and sends a real signed heartbeat against a fixture server and
+asserts both counters moved.
+
+**Not counted, deliberately.** The tiny unread responses to the fire-and-forget POSTs: reading them
+would buffer a body for a few bytes. The `# HELP` line states the boundary rather than leaving it
+to be discovered.
+
+**Performance measurements.** None. The counters cost one atomic add per read body and per POST.
+
+**Commits:** `78b46d9`, `defda80`, `1b61899` — pushed.
+**Remaining defects.** `events_by_origin` (a labeled metric needing a decision on label cardinality)
+and `blob_store_size` (no blob store) remain unbuilt. `bytes_in` does not cover unread POST
+responses, by design and documented.
+
+---
+
 ## 2026-11-09 — onion endpoint rate limit
 
 **Repository:** `oag-mesh`

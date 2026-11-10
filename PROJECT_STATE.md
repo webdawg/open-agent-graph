@@ -22,7 +22,7 @@ mission as a whole.
 
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
-| `open-agent-graph` | 427 | 119 | 01–32 |
+| `open-agent-graph` | 428 | 121 | 01–32 |
 | `oag-mesh` | 188 | 43 | 01–15 |
 | `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
@@ -50,8 +50,9 @@ All three working trees are clean and pushed as of the last update.
   `peer_syncs_total`/`peer_sync_errors`/`peer_sync_peers`,
   `verification_jobs`/`verification_failures`, `events_pending_chain` (events whose predecessor
   is missing locally -- the one metric that tells a complete chain from a pile of fragments), and
-  the two duration histograms `search_latency` (inside `GraphService`) and `api_latency` (an HTTP
-  middleware).
+  `replication_bytes_in`/`out` (bytes moved from/to peers during replication, counted on the
+  real gossip loop's client), and the two duration histograms `search_latency` (inside
+  `GraphService`) and `api_latency` (an HTTP middleware).
 
 ### oag-mesh (layer 1)
 - Cluster nesting (`BridgeDeclaration`) with escalating proof-of-work anti-sybil protection.
