@@ -23,7 +23,7 @@ mission as a whole.
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
 | `open-agent-graph` | 427 | 119 | 01–32 |
-| `oag-mesh` | 187 | 42 | 01–15 |
+| `oag-mesh` | 188 | 43 | 01–15 |
 | `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
 All three working trees are clean and pushed as of the last update.
@@ -64,6 +64,8 @@ All three working trees are clean and pushed as of the last update.
 - Responder acknowledgment (advisory, identity-bearing, no PoW).
 - Blinded responder dispatch: filter subscription under a responder-chosen random id, polled inbox.
 - Onion routing: ChaCha20-Poly1305 layers over X25519 keys derived from Ed25519 identities.
+  The onion endpoint is volume-bounded by a node-wide token bucket — it is the one endpoint
+  that makes a node send traffic to a caller-chosen address, so its bandwidth needed a bound.
 - Transport: HTTP push + pull-based anti-entropy, optional periodic sync with jitter, disk
   persistence of all seven stores where each save writes a commit marker last and a load refuses
   a torn set.

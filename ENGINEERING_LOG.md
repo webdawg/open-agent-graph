@@ -6,6 +6,42 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — onion endpoint rate limit
+
+**Repository:** `oag-mesh`
+**Files modified:** `crates/oag-mesh/src/transport.rs` (`onion_limiter` field on `MeshState` plus
+both constructors; limiter check at the top of `receive_onion_layer`; restored a doc comment that an
+earlier edit had left attached to the wrong constant), `spec/15-onion-routing.md`,
+`OPEN_QUESTIONS.md`.
+
+**Gap closed.** The onion endpoint is the one endpoint in this crate that makes the node send
+traffic to an address chosen by the caller — the peeled `next_hop` is forwarded to, relay or final
+target. Inherent to the feature, but with no bound it also made the relay a constrained proxy for
+directing anonymous-event pushes at third parties.
+
+**Fix.** A node-wide token bucket (16 capacity, 0.5/s refill), the same shape as route search's.
+Deliberately a volume bound and not a permission system: the endpoint stays unauthenticated (onion
+routing's point is that the relay cannot authenticate the sender), the payload is still limited to
+an identity-stripped event plus proof-of-work or one more layer, and the target still enforces its
+own proof-of-work.
+
+**Tests executed.** `cargo test -p oag-mesh` — 188 passed, 0 failed.
+
+**Test results.** oag-mesh 187 → 188. New: `onion_rate_limiter_rejects_a_burst_and_recovers`. The
+limiter check runs before peeling, so a dummy layer exercises it: below the limit a request is
+rejected as unpeelable (400), past it as rate-limited (429 + `Retry-After`), and it recovers after
+the bucket refills.
+
+**Performance measurements.** None. No benchmark was run. The limiter costs one token check per
+request.
+
+**Commit:** `f47bf83` — pushed.
+**Remaining defects.** The unauthenticated, arbitrary-target design is unchanged and deliberate.
+The bound is node-wide, so one caller can exhaust the bucket and starve legitimate ones — there is
+no per-caller key because there is no caller identity. In-memory, so a restart resets it.
+
+---
+
 ## 2026-11-09 — crawler dual-stack DNS pinning
 
 **Repository:** `open-agent-graph` (`rust-ai`)

@@ -181,6 +181,32 @@ trust-on-first-use.
 
 ---
 
+## ADR-019 — The onion endpoint is volume-bounded, not authenticated
+
+**Decision.** `POST /oag-mesh/v1/onion` gets a node-wide token bucket (16 capacity, 0.5/s refill),
+the same shape as route search's. The endpoint stays deliberately unauthenticated.
+
+**Context.** This is the one endpoint in the mesh that makes the node send traffic to an address
+*chosen by the caller*: the peeled `next_hop` is forwarded to, whether it is another relay or the
+final target. That is inherent to onion routing — an exit relay must be able to reach an arbitrary
+target — but without a bound it also makes the relay a constrained proxy for directing
+anonymous-event pushes at third parties.
+
+**Consequences.**
+- The relay's own bandwidth is bounded; an attacker can no longer spend it at will.
+- **It is not an open relay and does not become one.** The payload is limited to an
+  identity-stripped event plus proof-of-work, or one more encrypted layer. Arbitrary traffic cannot
+  be sent through it. The target still enforces its own escalating proof-of-work.
+- **It is a volume bound, not a permission system.** No authentication is added, because onion
+  routing's whole point is that the relay cannot authenticate the sender.
+- The limiter is checked before peeling, so the bound holds even against layers that would be
+  rejected anyway — otherwise an attacker could get unlimited free peeling attempts.
+- In-memory only, same posture as the crate's other limiters; a restart resets it.
+
+**Status.** Accepted (`f47bf83`).
+
+---
+
 ## ADR-018 — Durations are reported in milliseconds, with fixed histogram buckets
 
 **Decision.** `search_latency` and `api_latency` are fixed-bucket histograms whose values are
