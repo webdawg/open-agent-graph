@@ -6,6 +6,42 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — api_latency and search_latency histograms
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files created:** `crates/oag-graph/src/latency.rs`, `crates/oag-api/src/latency.rs`.
+**Files modified:** `crates/oag-graph/src/{lib,service,search,semantic_search,metrics}.rs`,
+`crates/oag-api/src/{lib,state,metrics}.rs`, `crates/oag-graph/src/tests.rs`,
+`crates/oag-api/src/tests.rs`, `spec/19-observability.md`, `OPEN_QUESTIONS.md`.
+
+**Feature implemented.** The two duration histograms spec section 86 names. `search_latency` is
+recorded inside `GraphService::search` and `semantic_search` (so REST, MCP, CLI, and the Human
+Interface all measure the same thing); `api_latency` is recorded by an axum middleware that sees
+routing, auth, handler, and response as a whole. Fixed buckets, atomic counters, no dependency.
+Values are milliseconds, matching `duration_ms` on every span.
+
+**Why.** Every other metric here is a count, and a count answers "how much", not "how slow". The
+per-request duration existed only as a `tracing` field, which is right for one request in a log and
+useless for "is this peer getting slower?" across a million of them.
+
+**Tests executed.** `cargo test -p oag-graph` — 94 passed. `cargo test -p oag-api` — 61 passed.
+
+**Test results.** oag-graph 87 → 94 (6 histogram unit tests + `search_latency_records_every_
+search_this_process_serves`). oag-api 60 → 61 (`api_latency_counts_rest_requests_end_to_end`,
+which serves a real request and confirms the histogram counted it — a unit test of the histogram
+would not prove the middleware is wired to it).
+
+**Performance measurements.** None. No benchmark was run and none is claimed. The histograms cost
+one atomic increment per observation by construction.
+
+**Commit:** `fafc44a` — pushed.
+**Remaining defects.** `events_by_origin` (a labeled metric needing a decision on label cardinality),
+`events_pending_chain`, `replication_bytes_in`/`out`, and `blob_store_size` remain unbuilt. The
+histogram sum is accumulated as integer microseconds, so a peer with extremely long uptime could in
+principle lose precision in the sum; the bucket counts are unaffected.
+
+---
+
 ## 2026-11-09 — order the mesh's anti-entropy pull loop
 
 **Repository:** `oag-mesh`

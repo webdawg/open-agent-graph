@@ -181,6 +181,36 @@ trust-on-first-use.
 
 ---
 
+## ADR-018 — Durations are reported in milliseconds, with fixed histogram buckets
+
+**Decision.** `search_latency` and `api_latency` are fixed-bucket histograms whose values are
+milliseconds. A log line's `duration_ms` field and a `/metrics` histogram report the same unit.
+
+**Context.** The per-request duration already existed as `duration_ms` on every REST/MCP span, but
+a log line is not an aggregate: it answers "how long did this one request take", not "is this peer
+getting slower?" across a million requests. Adding the aggregate half forced three small decisions.
+
+**Consequences.**
+- **Milliseconds, not seconds.** Prometheus convention is seconds, but this project already reports
+  durations in milliseconds everywhere a human reads them. A reader comparing `/metrics` against the
+  logs should not have to convert units in their head. The unit is stated in each `# HELP` line
+  rather than encoded in the metric name, matching how the existing gauges here are named.
+- **Fixed bucket boundaries** (1/5/10/25/50/100/250/500/1000/2500/5000/10000ms, plus `+Inf`). A
+  histogram whose boundaries can change at runtime cannot be compared across scrapes, which defeats
+  the point of having one.
+- **`search_latency` is measured inside `GraphService`**, so REST, MCP, CLI, and the Human Interface
+  all report the same number. `api_latency` is measured by an HTTP middleware, because the request
+  as a whole — routing, auth, handler, response — is not visible to the graph service. The two
+  overlap for a search request, and that is correct: one measures the request, the other the search.
+- **Semantic search includes the embedding provider call.** From a caller's point of view that *is*
+  the search latency; excluding it would report semantic search as faster than it is.
+- **Empty results are measured too.** Excluding them would make the histogram a record of only the
+  slow, successful queries — the opposite of what an operator needs.
+
+**Status.** Accepted (`fafc44a`).
+
+---
+
 ## ADR-017 — Outbound mesh requests are bounded; a timeout is a failed delivery, not a cancellation
 
 **Decision.** Every outbound HTTP request in `oag-mesh` goes through a client with a 5-second

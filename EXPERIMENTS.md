@@ -213,6 +213,23 @@ unchanged -- ordering changes *when* the useful data arrives, not how long the t
 
 ---
 
+## EXP-017 — Are the latency histograms actually populated by real traffic?
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Hypothesis.** Serving a real REST request increments `api_latency`, and serving a real search
+increments `search_latency`, without either being derived from a log line or a snapshot query.
+**Procedure.** `api_latency_counts_rest_requests_end_to_end`: scrape `/metrics` on a fresh peer
+(count must be 0), serve one authenticated `/api/v1/status` request through the full middleware
+stack, scrape again. `search_latency_records_every_search_this_process_serves`: serve one matching
+search, one repeat, and one search with no matches.
+**Result (RUN, `fafc44a`).** `api_latency` went from 0 to a positive count after one request.
+`search_latency` counted each of the three searches, including the one with no matches.
+**Conclusion.** Both histograms are wired to real traffic, not merely constructible.
+**Scope.** Counts and wiring only. No percentile accuracy claim is made beyond the bucket boundary
+the value fell in, and no comparison against an external load generator was run.
+
+---
+
 ## EXP-008 (PLANNED) — Does traffic strengthen pads measurably?
 
 **Hypothesis.** After N routed requests, a pad that carried traffic is selected more often than an
