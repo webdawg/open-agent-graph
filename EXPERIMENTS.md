@@ -175,6 +175,23 @@ out; the test proves the mechanism, not the production numbers.
 
 ---
 
+## EXP-015 — Is the sync client actually bounded?
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Hypothesis.** A peer that accepts the TCP connection and then never sends a byte cannot hold a
+sync request open past the configured timeout.
+**Procedure.** Bind a listener that accepts connections and never responds; point a client built
+with a 50ms connect timeout and a 200ms request timeout at it. Separately, point the default
+`SyncClient::new()` at a reachable fixture peer.
+**Result (RUN, `b2e2182`).** The raw request errored in well under a second. The default client
+completed a real `/peers` fetch inside a 5s wrapper.
+**Conclusion.** The bound holds, and the production constructor is the bounded one — not only the
+test-only path.
+**Scope.** Loopback only. The production values (10s/120s) were not waited out; the test proves the
+mechanism, not the production numbers.
+
+---
+
 ## EXP-008 (PLANNED) — Does traffic strengthen pads measurably?
 
 **Hypothesis.** After N routed requests, a pad that carried traffic is selected more often than an

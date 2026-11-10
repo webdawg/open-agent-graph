@@ -22,7 +22,7 @@ mission as a whole.
 
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
-| `open-agent-graph` | 410 | 115 | 01–32 |
+| `open-agent-graph` | 412 | 116 | 01–32 |
 | `oag-mesh` | 186 | 41 | 01–15 |
 | `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
@@ -119,9 +119,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   atomic multi-store *write* during a pull.** The read-side torn-set gap is closed: a saved set
   carries a commit marker and a load refuses a set that contradicts it. Every outbound request is
   bounded by a connect and a total-request timeout.
-- **The base project (`rust-ai`) has the same missing-timeout defect.** `oag-sync`'s HTTP client
-  and several CLI/API clients use `reqwest::Client::new()`, which sets no timeout, so a peer that
-  silently drops packets holds the request open until the OS gives up. Not yet fixed there.
+- **The base project's external-service clients are still unbounded in time.** `oag-sync`'s own
+  client is now bounded (`b2e2182`), but the operator-configured LLM extractor, embeddings, and
+  IPFS providers still build their clients without timeouts. They are a lower trust tier -- each
+  requires an operator to enable it -- and are recorded in `spec/18` rather than fixed silently.
 - **`blob_store_size` metric is unbuilt** because no blob store exists (`spec/29`'s `blobs/<hash>`
   is itself unimplemented).
 

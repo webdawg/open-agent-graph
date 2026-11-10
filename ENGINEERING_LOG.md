@@ -6,6 +6,36 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — sync client timeouts (base project)
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-sync/src/client.rs`, `spec/18-rate-limiting-and-resource-limits.md`.
+
+**Defect fixed.** The same one just fixed in the mesh: `SyncClient` was built from
+`reqwest::Client::default()`, which sets no timeout. Its response *size* was already capped and
+streamed (4 MiB, `MAX_RESPONSE_BYTES`), but nothing bounded how long a peer could make this node
+wait. A peer that silently drops packets held a sync round open until the OS gave up.
+
+**Fix.** `SYNC_CONNECT_TIMEOUT` (10s) and `SYNC_REQUEST_TIMEOUT` (120s). The total is deliberately
+longer than the mesh's 30s: an `/events` response is a real batch of signed events, not a small
+snapshot, so a legitimate peer on a slow link needs more room. `SyncClient::new()` uses the bounded
+defaults; `sync_client_with_timeouts` takes the values as parameters so a test can prove the bound
+without waiting the production value out; `with_http` lets an embedder supply its own transport.
+
+**Tests executed.** `cargo test -p oag-sync` — 40 passed, 0 failed.
+
+**Test results.** oag-sync 38 → 40. New: `a_peer_that_accepts_but_never_responds_is_abandoned_at_
+the_timeout` and `the_default_client_is_bounded_and_reaches_a_real_peer`.
+
+**Performance measurements.** None beyond the bound itself. No throughput benchmark was run.
+
+**Commit:** `b2e2182` — pushed.
+**Remaining defects.** The operator-configured external-service clients (LLM extractor, embeddings
+provider, IPFS provider) still have no timeouts. They are a lower trust tier and are recorded in
+`spec/18` rather than fixed silently. The CLI and gateway one-shot clients are likewise unbounded.
+
+---
+
 ## 2026-11-09 — mesh outbound HTTP timeouts
 
 **Repository:** `oag-mesh`
