@@ -518,8 +518,11 @@ Format: question, assumption I'm running with, status.
   inside this feature's own `fetch_upstream_http` (pin to the first IPv4 address when one exists,
   via a new `prefer_ipv4` helper) -- `oag_crawler::fetch::safe_fetch` itself still has this
   characteristic and was deliberately left unchanged, since it's shared, already-shipped code with
-  its own existing callers. Status: open (revisit `oag-crawler`'s own crawl path too -- the same
-  dual-stack failure mode likely affects it against any similarly-unlucky-DNS-ordered target).
+  its own existing callers. **Now fixed in `oag-crawler` too**: `build_pinned_client` pins exactly
+  one address and documents why the loop form was wrong, `safe_fetch` reduces its resolved set
+  through a new `oag_crawler::fetch::prefer_ipv4` before pinning, and `oag-api`'s gateway now calls
+  that shared helper instead of keeping its own copy -- the same logic in two places is how they
+  drift. Status: resolved.
 - **NTP time carried over OAG-to-OAG hops uses a simplified RTT/2 correction, not the real
   four-timestamp algorithm.** Only the real exchange against a configured real upstream NTP server
   (`ntp_wire::query_upstream`) uses the actual RFC 5905 offset formula; every signed-JSON hop

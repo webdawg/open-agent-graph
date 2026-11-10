@@ -534,26 +534,6 @@ async fn resolve_directly(state: &AppState, service: &GatewayService) -> Result<
     }
 }
 
-/// `oag_crawler::fetch::build_pinned_client`'s repeated
-/// `reqwest::ClientBuilder::resolve` calls only keep the *last* pinned
-/// address for a given host (it overwrites rather than accumulating a
-/// fallback list), so passing every DNS-resolved address through means
-/// whichever happens to be last in resolver order wins -- in practice often
-/// an IPv6 address a host can resolve but not actually route. Confirmed
-/// live: a real sandbox resolved a real Cloudflare IPv6 address for a
-/// dual-stack site but had no outbound IPv6 route at all, failing the
-/// connection outright with no fallback to the (working) IPv4 address also
-/// in the resolved set. Pins to the first IPv4 address when one exists --
-/// the bias every real-world dual-stack-broken network needs -- leaving the
-/// set untouched (and thus still IPv6-only-capable) when no IPv4 address
-/// was returned.
-fn prefer_ipv4(addrs: Vec<std::net::SocketAddr>) -> Vec<std::net::SocketAddr> {
-    match addrs.iter().position(|a| a.is_ipv4()) {
-        Some(pos) => vec![addrs[pos]],
-        None => addrs,
-    }
-}
-
 /// SSRF-guarded, DNS-pinned GET, reusing `oag_crawler::fetch`'s resolve/pin
 /// primitives (the exact same safety property `oag-crawler`'s own
 /// `safe_fetch` has) but without its narrow content-type allowlist -- a
@@ -579,7 +559,7 @@ async fn fetch_upstream_http(
         let addrs = oag_crawler::fetch::resolve_and_validate(&host, port, allow_private_networks)
             .await
             .map_err(|e| GatewayError::UpstreamBlocked(e.to_string()))?;
-        let addrs = prefer_ipv4(addrs);
+        let addrs = oag_crawler::fetch::prefer_ipv4(addrs);
         let client = oag_crawler::fetch::build_pinned_client(
             &host,
             &addrs,
@@ -1054,7 +1034,7 @@ mod tests {
         let v6: std::net::SocketAddr = "[2606:4700:10::1]:80".parse().unwrap();
         let v4a: std::net::SocketAddr = "172.66.1.1:80".parse().unwrap();
         let v4b: std::net::SocketAddr = "172.66.1.2:80".parse().unwrap();
-        let result = prefer_ipv4(vec![v6, v4a, v4b]);
+        let result = oag_crawler::fetch::prefer_ipv4(vec![v6, v4a, v4b]);
         assert_eq!(result, vec![v4a]);
     }
 
@@ -1062,7 +1042,7 @@ mod tests {
     fn prefer_ipv4_leaves_an_ipv6_only_set_untouched() {
         let v6a: std::net::SocketAddr = "[2606:4700:10::1]:80".parse().unwrap();
         let v6b: std::net::SocketAddr = "[2606:4700:10::2]:80".parse().unwrap();
-        let result = prefer_ipv4(vec![v6a, v6b]);
+        let result = oag_crawler::fetch::prefer_ipv4(vec![v6a, v6b]);
         assert_eq!(result, vec![v6a, v6b]);
     }
 

@@ -94,12 +94,34 @@ pub fn build_pinned_client(
         .redirect(reqwest::redirect::Policy::none())
         .timeout(config.request_timeout)
         .user_agent(config.user_agent.clone());
-    for addr in addrs {
+    // reqwest's `resolve` maps a host to exactly ONE address and *overwrites* on every call, so
+    // looping over the set silently keeps only the LAST entry. That is a real failure mode, not a
+    // theoretical one: a dual-stack host resolved to [IPv4, IPv6] with no outbound IPv6 route
+    // failed outright with zero fallback to the working IPv4 address, purely because IPv6
+    // happened to be resolved last. Pin exactly one address, chosen by the caller --
+    // `prefer_ipv4` below is the usual choice. Pinning nothing would let the system resolver
+    // decide, which is exactly the DNS-reordering lottery this pinning exists to remove.
+    if let Some(addr) = addrs.first() {
         // TLS SNI/certificate validation still uses `host` (the URL/Host
         // header is unchanged) — only the actual socket target is pinned.
         builder = builder.resolve(host, *addr);
     }
     builder.build().map_err(|e| CrawlError::ClientBuild(e.to_string()))
+}
+
+/// Reduces a resolved address set to a single IPv4 address when one is present, and otherwise
+/// leaves it untouched.
+///
+/// This is the bias every real-world dual-stack-broken network needs: when a host has both an A
+/// and an AAAA record and this machine has no usable IPv6 route, the IPv6 attempt fails and there
+/// is no fallback -- `build_pinned_client` pins one address, so "whichever came last" is the only
+/// choice on offer. Preferring IPv4 makes the outcome deterministic and matches what a browser or
+/// `curl` does on such a network. An IPv6-only host has no A record, so it is unaffected.
+pub fn prefer_ipv4(addrs: Vec<SocketAddr>) -> Vec<SocketAddr> {
+    match addrs.iter().position(|a| a.is_ipv4()) {
+        Some(pos) => vec![addrs[pos]],
+        None => addrs,
+    }
 }
 
 /// Fetch one URL safely: SSRF-validated and DNS-pinned, with a manual
@@ -118,6 +140,9 @@ pub async fn safe_fetch(url: &Url, config: &CrawlerConfig) -> Result<FetchedPage
         let port = current.port_or_known_default().ok_or(CrawlError::NoHost)?;
 
         let addrs = resolve_and_validate(&host, port, config.allow_private_networks).await?;
+        // Pin a deterministic address rather than whichever the resolver happened to return last:
+        // see `prefer_ipv4` for why the unpinned order is a real failure mode.
+        let addrs = prefer_ipv4(addrs);
         let client = build_pinned_client(&host, &addrs, config)?;
 
         let response = client.get(current.clone()).send().await?;
@@ -196,5 +221,120 @@ pub async fn check_robots(url: &Url, config: &CrawlerConfig) -> RobotsRules {
     match safe_fetch(&robots_url, config).await {
         Ok(page) => RobotsRules::parse(&String::from_utf8_lossy(&page.body), &config.user_agent),
         Err(_) => RobotsRules::allow_all(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::routing::get;
+    use axum::Router;
+
+    fn v4(port: u16) -> SocketAddr {
+        format!("127.0.0.1:{port}").parse().unwrap()
+    }
+
+    fn v6(port: u16) -> SocketAddr {
+        format!("[::1]:{port}").parse().unwrap()
+    }
+
+    #[test]
+    fn prefer_ipv4_reduces_a_dual_stack_set_to_its_ipv4_address() {
+        // The order the resolver happened to return must not decide the outcome.
+        let result = prefer_ipv4(vec![v6(80), v4(80), v4(8080)]);
+        assert_eq!(result, vec![v4(80)]);
+    }
+
+    #[test]
+    fn prefer_ipv4_leaves_an_ipv6_only_set_untouched() {
+        // An IPv6-only host has no A record, so it must still be reachable -- the bias is a
+        // preference for IPv4 when one exists, never a requirement for it.
+        let result = prefer_ipv4(vec![v6(80), v6(8080)]);
+        assert_eq!(result, vec![v6(80), v6(8080)]);
+    }
+
+    #[test]
+    fn prefer_ipv4_passes_an_empty_set_through() {
+        assert!(prefer_ipv4(vec![]).is_empty());
+    }
+
+    /// `build_pinned_client` pins exactly one address: reqwest's `resolve` maps a host to a single
+    /// SocketAddr and *overwrites* on every call, so looping over the set silently kept only the
+    /// last entry. With the set `[IPv4-live, IPv6-dead]` the fetch must succeed -- under the old
+    /// last-wins behaviour it would have pinned the dead IPv6 entry and failed with no fallback.
+    #[tokio::test]
+    async fn build_pinned_client_pins_the_first_address_in_the_set() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            axum::serve(listener, Router::new().route("/", get(|| async { "hello" })))
+                .await
+                .unwrap();
+        });
+
+        let client = build_pinned_client(
+            "localhost",
+            &[v4(port), v6(port)],
+            &CrawlerConfig::default(),
+        )
+        .unwrap();
+        let response = client
+            .get(format!("http://localhost:{port}/"))
+            .send()
+            .await
+            .expect("the first address (live IPv4) must be the one pinned");
+        assert_eq!(response.status(), 200);
+    }
+
+    /// The complementary case, kept because it is the failure the fix removes: with the unusable
+    /// address *first*, pinning it fails and there is no fallback. This is why `safe_fetch` runs
+    /// the set through `prefer_ipv4` before pinning rather than relying on resolver order.
+    #[tokio::test]
+    async fn pinning_an_unusable_first_address_fails_without_fallback() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            axum::serve(listener, Router::new().route("/", get(|| async { "hello" })))
+                .await
+                .unwrap();
+        });
+
+        let client = build_pinned_client(
+            "localhost",
+            &[v6(port), v4(port)],
+            &CrawlerConfig { request_timeout: Duration::from_secs(2), ..Default::default() },
+        )
+        .unwrap();
+        let result = client.get(format!("http://localhost:{port}/")).send().await;
+        assert!(
+            result.is_err(),
+            "pinning the unusable first address must fail -- there is no second attempt"
+        );
+    }
+
+    /// The path `safe_fetch` actually takes: an unpinned resolver order decides nothing, because
+    /// the set is reduced to one address first.
+    #[tokio::test]
+    async fn the_safe_fetch_path_reduces_a_dual_stack_set_before_pinning() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            axum::serve(listener, Router::new().route("/", get(|| async { "hello" })))
+                .await
+                .unwrap();
+        });
+
+        // Worst-case resolver order: the address that cannot work comes last.
+        let resolved = vec![v4(port), v6(port)];
+        let pinned = prefer_ipv4(resolved);
+        assert_eq!(pinned, vec![v4(port)]);
+
+        let client = build_pinned_client("localhost", &pinned, &CrawlerConfig::default()).unwrap();
+        let response = client
+            .get(format!("http://localhost:{port}/"))
+            .send()
+            .await
+            .expect("the reduced set must fetch successfully");
+        assert_eq!(response.status(), 200);
     }
 }
