@@ -4,9 +4,12 @@
 //! *right now* from data this codebase already tracks (simple `COUNT(*)`s
 //! and a `PRAGMA`-derived file size), plus the process-lifetime verification
 //! counters (`verification_jobs`/`verification_failures`), which needed real
-//! instrumentation but now have it on `GraphService`. Still not covered: no
-//! request-duration histograms or event origin breakdowns, since those need
-//! middleware/labeled-vector work rather than a snapshot query or a counter.
+//! instrumentation but now have it on `GraphService`, plus the search-duration
+//! histogram (`search_latency`), which needed a middleware-shaped counter rather
+//! than a snapshot query. Still not covered: the REST request-duration histogram
+//! (`api_latency`, which lives on `oag-api` because it measures the HTTP layer
+//! rather than the graph) and event origin breakdowns, which need a decision on
+//! label cardinality.
 //! See the repo root's `OPEN_QUESTIONS.md` "Metrics" section for the full
 //! list of what's deferred and why. No external metrics platform is required
 //! to operate OAG (spec section 86, verbatim).
@@ -15,7 +18,7 @@ use oag_storage::repo::stats as stats_repo;
 use crate::error::GraphError;
 use crate::service::GraphService;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct MetricsSnapshot {
     pub events_total: i64,
     pub nodes_total: i64,
@@ -33,6 +36,10 @@ pub struct MetricsSnapshot {
     /// bad assertion id, bad result string, missing permission). Spec section
     /// 86's `verification_failures`.
     pub verification_failures: i64,
+    /// Process-lifetime durations of this process's searches, both keyword and semantic (spec
+    /// section 86's `search_latency`). A histogram rather than a count: a count cannot answer
+    /// "is this peer getting slower?".
+    pub search_latency: crate::latency::LatencySnapshot,
 }
 
 impl GraphService {
@@ -51,6 +58,7 @@ impl GraphService {
             sqlite_size_bytes: stats_repo::sqlite_size_bytes(&mut conn).await?,
             verification_jobs: self.verification_jobs.load(std::sync::atomic::Ordering::Relaxed) as i64,
             verification_failures: self.verification_failures.load(std::sync::atomic::Ordering::Relaxed) as i64,
+            search_latency: self.search_latency.snapshot(),
         })
     }
 }

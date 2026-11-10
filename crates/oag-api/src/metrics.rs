@@ -24,7 +24,7 @@ pub async fn handler(State(state): State<AppState>) -> Result<Response, ApiError
     // Best-effort: a metrics scrape shouldn't fail outright over a hiccup
     // reading replication state -- `None` just omits those gauges below.
     let replication = state.sync.replication_status().await.ok();
-    let body = render(&snapshot, &crawl_counts, sync_errors, replication.as_ref());
+    let body = render(&snapshot, &crawl_counts, sync_errors, replication.as_ref(), &state.api_latency.snapshot());
     Ok((
         StatusCode::OK,
         [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
@@ -53,6 +53,7 @@ pub fn render(
     crawl_counts: &CrawlCounts,
     sync_errors: u64,
     replication: Option<&oag_sync::ReplicationStatus>,
+    api_latency: &oag_graph::latency::LatencySnapshot,
 ) -> String {
     let mut out = String::new();
     push_metric(
@@ -172,6 +173,22 @@ pub fn render(
             replication.meets_target as i64,
         );
     }
+
+    // The two duration histograms. Values are milliseconds, matching the `duration_ms` field on
+    // every REST/MCP span, and each `# HELP` line says so -- a reader comparing `/metrics` against
+    // the logs should not have to convert units in their head.
+    push_histogram(
+        &mut out,
+        "api_latency",
+        "Milliseconds taken to serve each REST request, including routing, auth, handler, and response. Milliseconds, not seconds.",
+        api_latency,
+    );
+    push_histogram(
+        &mut out,
+        "search_latency",
+        "Milliseconds taken by each search this peer served (keyword and semantic), measured inside GraphService so every surface reports the same thing. Milliseconds, not seconds.",
+        &snapshot.search_latency,
+    );
     out
 }
 
@@ -181,9 +198,36 @@ fn push_metric(out: &mut String, name: &str, help: &str, metric_type: &str, valu
     out.push_str(&format!("{name} {value}\n"));
 }
 
+/// Renders one histogram in the Prometheus exposition format: `_bucket` lines with cumulative
+/// counts and an `le` label, then `_sum` and `_count`. The metric name carries no unit suffix --
+/// the values are milliseconds and the `# HELP` line says so.
+fn push_histogram(
+    out: &mut String,
+    name: &str,
+    help: &str,
+    snapshot: &oag_graph::latency::LatencySnapshot,
+) {
+    out.push_str(&format!("# HELP {name} {help}\n"));
+    out.push_str(&format!("# TYPE {name} histogram\n"));
+    // `snapshot.buckets` already ends with a `+Inf` entry, which is where Prometheus's own
+    // `_bucket` series for a histogram terminates.
+    for (le, cumulative) in &snapshot.buckets {
+        out.push_str(&format!("{name}_bucket{{le=\"{le}\"}} {cumulative}\n"));
+    }
+    out.push_str(&format!("{name}_sum {}\n", snapshot.sum_ms));
+    out.push_str(&format!("{name}_count {}\n", snapshot.count));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn api_latency() -> oag_graph::latency::LatencySnapshot {
+        let h = oag_graph::latency::LatencyHistogram::new();
+        h.record(3.0);
+        h.record(12.0);
+        h.snapshot()
+    }
 
     fn snapshot() -> MetricsSnapshot {
         MetricsSnapshot {
@@ -196,6 +240,7 @@ mod tests {
             sqlite_size_bytes: 45056,
             verification_jobs: 5,
             verification_failures: 2,
+            search_latency: oag_graph::latency::LatencyHistogram::new().snapshot(),
         }
     }
 
@@ -265,32 +310,74 @@ replication_lagging_peers 1
 # HELP replication_meets_target 1 if replication_peers_caught_up >= replication_target, else 0.
 # TYPE replication_meets_target gauge
 replication_meets_target 1
+# HELP api_latency Milliseconds taken to serve each REST request, including routing, auth, handler, and response. Milliseconds, not seconds.
+# TYPE api_latency histogram
+api_latency_bucket{le=\"1\"} 0
+api_latency_bucket{le=\"5\"} 1
+api_latency_bucket{le=\"10\"} 1
+api_latency_bucket{le=\"25\"} 2
+api_latency_bucket{le=\"50\"} 2
+api_latency_bucket{le=\"100\"} 2
+api_latency_bucket{le=\"250\"} 2
+api_latency_bucket{le=\"500\"} 2
+api_latency_bucket{le=\"1000\"} 2
+api_latency_bucket{le=\"2500\"} 2
+api_latency_bucket{le=\"5000\"} 2
+api_latency_bucket{le=\"10000\"} 2
+api_latency_bucket{le=\"+Inf\"} 2
+api_latency_sum 15
+api_latency_count 2
+# HELP search_latency Milliseconds taken by each search this peer served (keyword and semantic), measured inside GraphService so every surface reports the same thing. Milliseconds, not seconds.
+# TYPE search_latency histogram
+search_latency_bucket{le=\"1\"} 0
+search_latency_bucket{le=\"5\"} 0
+search_latency_bucket{le=\"10\"} 0
+search_latency_bucket{le=\"25\"} 0
+search_latency_bucket{le=\"50\"} 0
+search_latency_bucket{le=\"100\"} 0
+search_latency_bucket{le=\"250\"} 0
+search_latency_bucket{le=\"500\"} 0
+search_latency_bucket{le=\"1000\"} 0
+search_latency_bucket{le=\"2500\"} 0
+search_latency_bucket{le=\"5000\"} 0
+search_latency_bucket{le=\"10000\"} 0
+search_latency_bucket{le=\"+Inf\"} 0
+search_latency_sum 0
+search_latency_count 0
 ";
-        assert_eq!(render(&snapshot(), &crawl_counts(), 2, Some(&replication())), expected);
+        assert_eq!(
+            render(&snapshot(), &crawl_counts(), 2, Some(&replication()), &api_latency()),
+            expected
+        );
     }
 
     #[test]
     fn replication_gauges_are_omitted_when_status_is_unavailable() {
-        let text = render(&snapshot(), &crawl_counts(), 2, None);
+        let text = render(&snapshot(), &crawl_counts(), 2, None, &api_latency());
         assert!(!text.contains("replication_target"));
     }
 
     #[test]
     fn every_metric_line_parses_as_prometheus_syntax() {
-        let text = render(&snapshot(), &crawl_counts(), 2, Some(&replication()));
+        let text = render(&snapshot(), &crawl_counts(), 2, Some(&replication()), &api_latency());
         let mut value_lines = 0;
         for line in text.lines() {
-            if line.starts_with("# HELP") || line.starts_with("# TYPE") {
+            if line.starts_with('#') || line.is_empty() {
                 continue;
             }
+            // Either `name value` or `name{le="..."} value`. Labels are part of the name token.
             let mut parts = line.split_whitespace();
             let name = parts.next().expect("value line must have a metric name");
             let value = parts.next().expect("value line must have a value");
             assert!(parts.next().is_none(), "unexpected extra token on line: {line}");
             assert!(!name.is_empty());
-            value.parse::<i64>().unwrap_or_else(|e| panic!("value '{value}' for {name} did not parse as a number: {e}"));
+            // Counts and gauges are integers; histogram sums are milliseconds and are floats.
+            assert!(
+                value.parse::<i64>().is_ok() || value.parse::<f64>().is_ok(),
+                "value '{value}' for {name} did not parse as a number"
+            );
             value_lines += 1;
         }
-        assert_eq!(value_lines, 16, "expected exactly 16 in-scope metrics");
+        assert_eq!(value_lines, 46, "expected exactly 46 in-scope metric lines");
     }
 }

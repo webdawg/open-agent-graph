@@ -51,6 +51,9 @@ impl GraphService {
             .acquire()
             .await
             .map_err(oag_storage::StorageError::from)?;
-        Ok(nodes::search(&mut conn, &sanitized, limit, offset).await?)
+        let started = std::time::Instant::now();
+        let results = nodes::search(&mut conn, &sanitized, limit, offset).await?;
+        self.search_latency.record(started.elapsed().as_secs_f64() * 1_000.0);
+        Ok(results)
     }
 }

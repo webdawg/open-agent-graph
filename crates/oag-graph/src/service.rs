@@ -96,6 +96,10 @@ pub struct GraphService {
     /// external-I/O failure mode the way a crawl does.
     pub(crate) verification_jobs: Arc<std::sync::atomic::AtomicU64>,
     pub(crate) verification_failures: Arc<std::sync::atomic::AtomicU64>,
+    /// Process-lifetime duration of every search this process has served (spec section 86's
+    /// `search_latency`), covering both keyword and semantic search. Recorded at this one
+    /// service layer so REST, MCP, CLI, and the Human Interface all measure the same thing.
+    pub(crate) search_latency: Arc<crate::latency::LatencyHistogram>,
 }
 
 impl GraphService {
@@ -106,6 +110,7 @@ impl GraphService {
             commit_lock: tokio::sync::Mutex::new(()),
             verification_jobs: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             verification_failures: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            search_latency: Arc::new(crate::latency::LatencyHistogram::new()),
         }
     }
 
@@ -117,6 +122,12 @@ impl GraphService {
     /// `Arc`s (a metrics layer, a second handle). See the field's own doc comment.
     pub fn verification_counters(&self) -> (Arc<std::sync::atomic::AtomicU64>, Arc<std::sync::atomic::AtomicU64>) {
         (self.verification_jobs.clone(), self.verification_failures.clone())
+    }
+
+    /// The search-latency histogram, for a caller that needs the exact same `Arc` (a metrics
+    /// layer). Same sharing pattern as the verification counters above.
+    pub fn search_latency(&self) -> Arc<crate::latency::LatencyHistogram> {
+        self.search_latency.clone()
     }
 
     /// Records one `verify_assertion` call. `ok` is whether it returned `Ok` -- see the fields'

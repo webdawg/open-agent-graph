@@ -6,6 +6,7 @@ pub mod gateway;
 pub mod handlers;
 pub mod human;
 pub mod ipfs_site;
+pub mod latency;
 pub mod logging;
 pub mod metrics;
 pub mod ntp_wire;
@@ -124,6 +125,10 @@ pub fn build_router(state: AppState) -> Router {
         .layer(middleware::from_fn_with_state(
             state.clone(),
             rate_limit::rate_limit_middleware,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            latency::api_latency_middleware,
         ))
         .layer(
             TraceLayer::new_for_http()

@@ -1856,3 +1856,60 @@ async fn search_pages_through_results_over_rest_and_the_human_interface() {
         "a short page must not offer a next page:\n{html}"
     );
 }
+
+/// `api_latency` is recorded by an HTTP-layer middleware, so the only honest test is end to end:
+/// serve a real request, scrape `/metrics`, and confirm the histogram counted it. A unit test of
+/// the histogram alone would not prove the middleware is wired to it.
+#[tokio::test]
+async fn api_latency_counts_rest_requests_end_to_end() {
+    let (app, key) = test_app("api-latency").await;
+
+    let scrape = |app: axum::Router| async move {
+        let response = app
+            .oneshot(Request::get("/metrics").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        String::from_utf8(bytes.to_vec()).unwrap()
+    };
+
+    let histogram_count = |text: &str, name: &str| -> i64 {
+        text.lines()
+            .find(|line| line.starts_with(&format!("{name}_count ")))
+            .unwrap_or_else(|| panic!("missing {name}_count in:\n{text}"))
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+
+    let first = scrape(app.clone()).await;
+    let baseline = histogram_count(&first, "api_latency");
+    assert_eq!(baseline, 0, "a fresh process has served no requests yet:\n{first}");
+
+    // One authenticated request through the full middleware stack.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/status")
+                .header("authorization", format!("Bearer {key}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let second = scrape(app).await;
+    let after = histogram_count(&second, "api_latency");
+    assert!(
+        after > baseline,
+        "a served REST request must be recorded in api_latency: baseline {baseline}, after {after}\n{second}"
+    );
+    // The histogram must be a well-formed Prometheus one: buckets, then sum, then count.
+    assert!(second.contains("# TYPE api_latency histogram"));
+    assert!(second.contains("api_latency_bucket{le=\"+Inf\"}"));
+    assert!(second.contains("api_latency_sum "));
+}

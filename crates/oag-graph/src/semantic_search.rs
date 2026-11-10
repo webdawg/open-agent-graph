@@ -97,6 +97,7 @@ impl GraphService {
         query: &str,
         limit: i64,
     ) -> Result<Vec<(Node, f32)>, GraphError> {
+        let started = std::time::Instant::now();
         let query_embedding = provider.embed(query).await?;
 
         let mut conn = self.pool().acquire().await.map_err(oag_storage::StorageError::from)?;
@@ -109,6 +110,9 @@ impl GraphService {
                 results.push((node, score));
             }
         }
+        // Includes the embedding provider call: from a caller's point of view that *is* the
+        // search latency, and excluding it would report semantic search as faster than it is.
+        self.search_latency.record(started.elapsed().as_secs_f64() * 1_000.0);
         Ok(results)
     }
 }

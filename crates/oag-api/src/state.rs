@@ -85,6 +85,10 @@ pub struct AppState {
     /// REST API's bearer-token-keyed limiter, since this endpoint has no
     /// bearer token to key on.
     pub gateway_rate_limiter: Arc<RateLimiter>,
+    /// Process-lifetime duration of every REST request this peer has served (spec section 86's
+    /// `api_latency`). Recorded by `latency::api_latency_middleware`, which sees the request as a
+    /// whole -- routing, auth, handler, response -- in a way `GraphService` cannot.
+    pub api_latency: Arc<oag_graph::latency::LatencyHistogram>,
 }
 
 impl AppState {
@@ -118,6 +122,7 @@ impl AppState {
             gateway_config: Arc::new(crate::gateway::GatewayConfig::default()),
             gateway_cache: Arc::new(crate::gateway::GatewayCache::new()),
             gateway_rate_limiter: Arc::new(RateLimiter::default()),
+            api_latency: Arc::new(oag_graph::latency::LatencyHistogram::new()),
         }
     }
 

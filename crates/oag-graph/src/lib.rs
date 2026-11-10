@@ -4,6 +4,7 @@ pub mod corroboration;
 pub mod error;
 pub mod history;
 pub mod identifier;
+pub mod latency;
 pub mod metrics;
 pub mod provenance;
 pub mod rebuild;

@@ -1059,6 +1059,31 @@ async fn search_with_a_negative_limit_returns_nothing_not_everything() {
 }
 
 #[tokio::test]
+async fn search_latency_records_every_search_this_process_serves() {
+    // `search_latency` (spec section 86) is a duration, not a count, so the only meaningful test
+    // is that serving a search actually lands an observation in the histogram. Recorded at the
+    // service layer so REST, MCP, CLI, and the Human Interface all measure the same thing.
+    let (service, auth) = service_with_admin("search-latency").await;
+    let histogram = service.search_latency();
+    assert_eq!(histogram.snapshot().count, 0, "no search served yet");
+
+    service.assert(&auth, sample_input("Latency Target")).await.unwrap();
+    service.search("Latency Target", 20, 0).await.unwrap();
+
+    let after_one = histogram.snapshot();
+    assert_eq!(after_one.count, 1, "one search served");
+    assert!(after_one.sum_ms >= 0.0);
+
+    service.search("Latency Target", 20, 0).await.unwrap();
+    assert_eq!(histogram.snapshot().count, 2, "each search is one observation");
+
+    // A search with nothing to match still took time and must still be measured -- excluding
+    // empty results would make the histogram a record of only the slow, successful queries.
+    service.search("no-such-node-anywhere", 20, 0).await.unwrap();
+    assert_eq!(histogram.snapshot().count, 3);
+}
+
+#[tokio::test]
 async fn search_pages_through_results_with_an_offset() {
     // Without an offset a caller can only ever see the first page of a result
     // set, which is why the Human Interface's search page capped at 50 with no

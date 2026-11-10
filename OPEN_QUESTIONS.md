@@ -87,8 +87,8 @@ Format: question, assumption I'm running with, status.
   incremented on every `crawl()` call regardless of caller -- CLI, REST, or MCP), and now
   `peer_sync_errors` (see below). Still NOT implemented: `events_by_origin` (a labeled/vector
   metric -- needs a GROUP BY and a decision on label cardinality), `events_pending_chain`,
-  `replication_bytes_in`/`out`, `search_latency`, `api_latency` (all need request-duration
-  instrumentation -- a middleware/histogram layer, not a snapshot query), `verification_jobs`/
+  `replication_bytes_in`/`out` (still need request-duration instrumentation), `search_latency`/
+  `api_latency` (now implemented -- see the bullet after the verification one), `verification_jobs`/
   `verification_failures` (now implemented -- see the next bullet), and `blob_store_size` (no blob
   store exists yet -- no `blobs/<hash>` route exists anywhere in this codebase). `peer_sync_lag` is covered, in aggregate: `replication_target`/
   `replication_peers_caught_up`/`replication_lagging_peers`/`replication_meets_target`, derived
@@ -120,6 +120,20 @@ Format: question, assumption I'm running with, status.
   event among many successfully-applied ones). Status: open (revisit if partial per-event failures
   turn out to need their own signal too -- `search_latency`/`api_latency` above are a separate,
   still-unbuilt metric).
+- **`search_latency`/`api_latency` added as fixed-bucket histograms.** `crates/oag-graph/src/latency.rs`
+  is a hand-rolled histogram (atomic counters, fixed boundaries, no dependency), the same posture
+  as the rest of this surface. `search_latency` is recorded inside `GraphService::search` and
+  `semantic_search`, so all four surfaces measure the same thing; the semantic path includes the
+  embedding provider call, because from a caller's point of view that *is* the search latency.
+  `api_latency` is recorded by an axum middleware, because the HTTP request as a whole -- routing,
+  auth, handler, response -- is not something the graph service can see. Values are milliseconds,
+  matching `duration_ms` on every span, and each `# HELP` line says so.
+  **Why not just use the `duration_ms` span field?** A log line is not an aggregate: it answers
+  "how long did this one request take", not "is this peer getting slower". The histogram is the
+  aggregate half; the span is the per-request half, and both remain.
+  **One trap worth recording:** `LatencySnapshot.buckets` already ends with a `+Inf` entry, and a
+  renderer that also emits a `+Inf` line double-counts the terminal bucket. The exact-text renderer
+  test catches it; a `renders_exact_expected_text` failure is what you would see otherwise.
 - **Output format: hand-rolled Prometheus text exposition, no external crate.** `GET /metrics`
   returns `text/plain; version=0.0.4` built by a small pure `render()` function in `oag-api`, rather
   than pulling in `metrics`/`metrics-exporter-prometheus`. Assumption: spec section 86 explicitly
