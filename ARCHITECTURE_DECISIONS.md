@@ -181,6 +181,36 @@ trust-on-first-use.
 
 ---
 
+## ADR-017 — Outbound mesh requests are bounded; a timeout is a failed delivery, not a cancellation
+
+**Decision.** Every outbound HTTP request in `oag-mesh` goes through a client with a 5-second
+connect timeout and a 30-second total request timeout. A timed-out request is recorded as a failed
+delivery by `link_quality`, exactly like a refusal.
+
+**Context.** `reqwest::Client::new()` sets no timeout. For a client talking to an
+operator-configured list of arbitrary addresses, that is not theoretical: a peer that silently
+drops packets holds the request open until the operating system gives up, which can be minutes.
+Two properties of this crate make that worse than a slow pull:
+
+- `sync_with_all_peers` pulls peers sequentially, so one black-holed peer stalls the entire tick
+  before any live peer is reached.
+- `search_for_route` fans out through `push_route_search`, which sits behind an *inbound*
+  `POST /oag-mesh/v1/route-search`. One broken peer can hang a third party's request.
+
+**Consequences.**
+- No outbound request can hold a sync tick or an inbound request open indefinitely.
+- The connect timeout covers the handshake that never completes; the total timeout covers the
+  connection that succeeds and then goes silent. Both are needed — neither subsumes the other.
+- A timeout is *not* a cancellation: the peer may still complete the work and merge the state. That
+  is safe because every merge is idempotent (`spec/10`), and it is the reason idempotence matters
+  rather than being a convenience.
+- A timed-out request feeds `link_quality` as a failure, which is the observation that makes the
+  next fan-out spend its budget better. The two mechanisms compose.
+
+**Status.** Accepted (`531b6f9`).
+
+---
+
 ## ADR-016 — Link quality orders fan-out; it never excludes a peer
 
 **Decision.** Route search asks its peers best-first by an exponential moving average of whether

@@ -6,6 +6,45 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — mesh outbound HTTP timeouts
+
+**Repository:** `oag-mesh`
+**Files modified:** `crates/oag-mesh/src/transport.rs` (new `HTTP_CONNECT_TIMEOUT` /
+`HTTP_REQUEST_TIMEOUT` constants and `build_http_client`; both `MeshState` constructors now use
+it), `spec/04-transport.md`, `OPEN_QUESTIONS.md`.
+
+**Defect fixed.** Every outbound request used `reqwest::Client::new()`, which sets no timeout at
+all. A peer that is unreachable *and silently dropping packets* — rather than refusing the
+connection — holds the request open until the OS gives up, which can be minutes.
+
+**Why it mattered more here than a slow pull.** `sync_with_all_peers` pulls peers sequentially, so
+one black-holed peer stalls the whole tick before any live peer is reached. And
+`search_for_route`'s fan-out calls `push_route_search` directly, on the path of an *inbound*
+`POST /oag-mesh/v1/route-search` — so one broken peer can hang a request from a third party.
+
+**Fix.** A 5s connect timeout (handshake never completes) and a 30s total request timeout
+(connection succeeds, then silence). Both named constants; `build_http_client` takes them as
+parameters so a test can prove the bound without waiting the production value out. A timed-out
+request is an ordinary failed delivery: `pull_and_merge` reports it and `link_quality` records it.
+
+**Tests executed.** `cargo test -p oag-mesh` — 186 passed, 0 failed.
+
+**Test results.** oag-mesh 184 → 186. New: `a_peer_that_accepts_but_never_responds_is_abandoned_
+at_the_timeout` (raw client, 50ms/200ms, asserts an error well inside 5s) and
+`pull_and_merge_against_a_black_holed_peer_is_bounded_and_recorded` (end to end through the mesh's
+own pull path, ~1.3s, and the failure is recorded).
+
+**Performance measurements.** None beyond the bound itself: the pull returned in ~1.3s against a
+200ms request timeout. No throughput benchmark was run and none is claimed.
+
+**Commit:** `531b6f9` — pushed.
+**Remaining defects.** The base project (`rust-ai`) has the same missing-timeout defect in
+`oag-sync` and several CLI/API clients; not yet fixed there. The mesh's push-side broadcasts use
+the same bounded client, so they are covered. The 30s total timeout is a starting value, not
+derived from a deployment's link characteristics.
+
+---
+
 ## 2026-11-09 — mesh link-quality fan-out ordering
 
 **Repository:** `oag-mesh`

@@ -158,6 +158,23 @@ behaviour over radio. Those remain open.
 
 ---
 
+## EXP-014 — Is a black-holed peer actually bounded?
+
+**Repository:** `oag-mesh`
+**Hypothesis.** A peer that accepts the TCP connection and then never sends a byte cannot hold an
+outbound request open past the configured timeout.
+**Procedure.** Bind a listener that accepts connections and never responds. Point a client built
+with a 50ms connect timeout and a 200ms request timeout at it, and separately drive
+`pull_and_merge` through a `MeshState` using that client.
+**Result (RUN, `531b6f9`).** The raw request errored in well under a second. `pull_and_merge`
+returned `false` in ~1.3s and recorded one attempt, zero successes, for the peer.
+**Conclusion.** The bound holds end to end, and a timed-out request is correctly visible to the
+link-quality ledger as a failed delivery.
+**Scope.** Loopback only. The production values (5s/30s) are named constants and were not waited
+out; the test proves the mechanism, not the production numbers.
+
+---
+
 ## EXP-008 (PLANNED) — Does traffic strengthen pads measurably?
 
 **Hypothesis.** After N routed requests, a pad that carried traffic is selected more often than an

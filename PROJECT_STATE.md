@@ -23,7 +23,7 @@ mission as a whole.
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
 | `open-agent-graph` | 410 | 115 | 01–32 |
-| `oag-mesh` | 184 | 40 | 01–15 |
+| `oag-mesh` | 186 | 41 | 01–15 |
 | `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
 All three working trees are clean and pushed as of the last update.
@@ -117,7 +117,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 - **Mesh: no responder dispatch push, no `AllClear` semantics decision, poll-only acknowledgments,
   unauthenticated GETs, untuned PoW, no fsync (a power loss can still lose a rename), and no
   atomic multi-store *write* during a pull.** The read-side torn-set gap is closed: a saved set
-  carries a commit marker and a load refuses a set that contradicts it.
+  carries a commit marker and a load refuses a set that contradicts it. Every outbound request is
+  bounded by a connect and a total-request timeout.
+- **The base project (`rust-ai`) has the same missing-timeout defect.** `oag-sync`'s HTTP client
+  and several CLI/API clients use `reqwest::Client::new()`, which sets no timeout, so a peer that
+  silently drops packets holds the request open until the OS gives up. Not yet fixed there.
 - **`blob_store_size` metric is unbuilt** because no blob store exists (`spec/29`'s `blobs/<hash>`
   is itself unimplemented).
 
