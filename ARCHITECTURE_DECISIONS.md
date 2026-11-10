@@ -181,6 +181,39 @@ trust-on-first-use.
 
 ---
 
+## ADR-016 — Link quality orders fan-out; it never excludes a peer
+
+**Decision.** Route search asks its peers best-first by an exponential moving average of whether
+each interaction delivered. A peer at score `0.0` is asked *last*, not dropped, and the ordering
+function is a permutation of the input — asserted as a property test, not left as a comment.
+
+**Context.** The fan-out budget is the one scarce resource a route search has, and every mechanism
+in the mesh treated the configured peer list as an unordered set of equally-good addresses. A
+search with a budget of one would spend it on whichever address was configured first, including
+one that has been refusing connections for hours. That is the "pathways strengthen based on
+observed utility" question from the mission's networking domain, in the one place this crate can
+answer it without a routing-table redesign.
+
+**Consequences.**
+- A dead peer is demoted within a handful of rounds (alpha 0.1, the same learning rate as the base
+  project's tensor pad), and a recovered peer climbs back.
+- A peer that is down today may be the only path tomorrow, and nothing here makes this node forget
+  an address its operator configured. That is the standing "degrade, don't drop" decision applied
+  to connectivity.
+- Both success and failure are recorded. A peer that did not answer is exactly the observation the
+  next search needs, and it is invisible if only successes are counted.
+- **It is a liveness signal, not a trust signal.** A peer that replies with garbage scores exactly
+  as well as one that replies correctly. Honesty remains `spec/05`'s corroboration layer's job, and
+  nothing here feeds `trust_score` or any federation decision.
+- **In-memory only.** A restart re-learns quality within a few rounds. Losing it costs a little
+  wasted fan-out, and persisting it would add an eighth store and change the commit-marker set
+  (`spec/08`) for a value that is by nature ephemeral.
+
+**Status.** Accepted (`67ad91e`), and measured on a real loopback network rather than only unit
+tested.
+
+---
+
 ## ADR-015 — The imagination Reticulum adapter is a separate crate, and takes a seed string
 
 **Decision.** `oag-imagination-reticulum` is its own crate in the imagination repository, not a

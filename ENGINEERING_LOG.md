@@ -6,6 +6,50 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-09 — mesh link-quality fan-out ordering
+
+**Repository:** `oag-mesh`
+**Files created:** `crates/oag-mesh/src/link_quality.rs`.
+**Files modified:** `crates/oag-mesh/src/lib.rs`, `crates/oag-mesh/src/transport.rs`
+(`MeshState.link_quality`; `pull_and_merge` now returns whether it delivered; route search orders
+peers and records both outcomes), `spec/13-distributed-route-search.md`, `OPEN_QUESTIONS.md`.
+
+**Feature implemented.** A per-peer exponential moving average of whether each interaction
+actually delivered. Route search asks its peers best-first, so the fan-out budget -- the one
+scarce resource a search has -- is not spent on peers that have been refusing connections for
+hours. Ordering only: the function is a permutation of the input, asserted as a property, so a
+down peer is asked last rather than dropped.
+
+**Design decisions.** Alpha 0.1, the same learning rate as the base project's tensor pad: a
+single dropped packet moves a healthy peer by a tenth of the gap, so routing does not oscillate,
+while a consistently-dead peer is demoted within a handful of rounds. Unseen peers score 0.5
+(neutral, not optimistic) so a node with no history spreads its fan-out rather than preferring
+configuration order. Both successes and failures are recorded -- a peer that did not answer is
+exactly the observation the next search needs. In-memory only: losing it costs a little wasted
+fan-out, and persisting it would add an eighth store and change the commit-marker set for a value
+that is by nature ephemeral. It is a liveness signal, not a trust signal.
+
+**Tests executed.** `cargo test -p oag-mesh` — 184 passed, 0 failed.
+
+**Test results.** oag-mesh 175 → 184. New: 6 ledger unit tests (neutral unseen peer, dead sorts
+last, ordering is a permutation that never drops, smoothed score, recovery, budget-of-one goes to
+the proven peer) and 3 real-network transport tests (`a_failed_fan_out_is_recorded_and_the_next_
+search_spends_its_budget_better`, `pull_and_merge_records_a_failure_against_an_unreachable_peer`,
+`pull_and_merge_records_a_success_against_a_live_peer`).
+
+**Performance measurements.** The ordering effect was measured on a real loopback network, not
+modelled: with a dead peer and a fan-out budget of one, the first search returns `None` and the
+second returns a path after a single observation. See `EXPERIMENTS.md` EXP-013. No throughput or
+latency benchmark was run, and none is claimed.
+
+**Commit:** `67ad91e` — pushed.
+**Remaining defects.** Not exercised over radio, only loopback TCP. The end-to-end delivery-rate
+effect is unmeasured -- only the budget-slot effect is. A peer that answers with garbage scores
+exactly as well as one that answers correctly, which is deliberate (liveness, not trust) but means
+this cannot be used as a reputation input.
+
+---
+
 ## 2026-11-09 — imagination Reticulum carrier
 
 **Repository:** `oag-imagination-random-data-compute`

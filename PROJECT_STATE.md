@@ -23,7 +23,7 @@ mission as a whole.
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
 | `open-agent-graph` | 410 | 115 | 01–32 |
-| `oag-mesh` | 175 | 39 | 01–15 |
+| `oag-mesh` | 184 | 40 | 01–15 |
 | `oag-imagination-random-data-compute` | 43 | 29 | 01–03 |
 
 All three working trees are clean and pushed as of the last update.
@@ -64,6 +64,11 @@ All three working trees are clean and pushed as of the last update.
 - Transport: HTTP push + pull-based anti-entropy, optional periodic sync with jitter, disk
   persistence of all seven stores where each save writes a commit marker last and a load refuses
   a torn set.
+- Adaptive fan-out ordering: a per-peer link-quality ledger (an exponential moving average of
+  whether each interaction actually delivered, fed by route-search replies and `pull_and_merge`
+  outcomes) orders which peers a route search asks first, so a scarce fan-out budget is not spent
+  on peers that have been dead for hours. It orders and never excludes; in-memory only; a
+  liveness signal, not a trust signal.
 
 ### oag-imagination-random-data-compute (layer 1, parallel)
 - Pad-guided routing engine: a request enters a node, the tensor pad picks the next hop, each hop
@@ -126,6 +131,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    pinning, evidence-body inlining (see `spec/29` "Explicitly deferred").
 4. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
    proposed, not implemented; both are large and need a design pass before code.
+5. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
+   a pull that updates several stores is still best-effort per store. Judged the smaller of the two
+   gaps now that the read side is closed.
 
 ## How to work here
 

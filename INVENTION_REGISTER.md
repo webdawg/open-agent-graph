@@ -176,6 +176,39 @@ in `rust-ai/spec/22-future-work.md`.
 
 ---
 
+## OAG-INV-011 — Link-quality-ordered fan-out
+
+**Description.** A per-peer exponential moving average of whether each interaction actually
+delivered, used to order which peers a route search asks first.
+
+**Theoretical foundation.** The mission's networking domain asks whether communication pathways
+can strengthen or weaken based on observed utility. This is the smallest honest instance of that:
+not a routing table, not next-hop selection, just "spend the scarce fan-out budget on the peers
+that have been answering".
+
+**Relationship to existing components.** Composes with `spec/13`'s route search and
+`spec/10`'s `pull_and_merge`, both of which now report whether the interaction delivered. Uses the
+same learning rate as the base project's tensor pad (`spec/23`), applied to connectivity rather
+than to routing weights.
+
+**Novelty assessment.** Low-to-moderate. Exponential-moving-average health scoring and
+least-recently-used/least-successful-first ordering are both well known. The original part is the
+placement: a liveness signal kept deliberately separate from the trust system, used only to order
+a bounded fan-out, and guaranteed to be a permutation so it cannot become a censor.
+
+**Feasibility.** High. **Implementation requirements.** A ledger, two instrumentation points, and
+an ordering call.
+
+**Experimental validation criteria.** Whether ordering actually improves delivery. Met on one axis:
+with a dead peer and a fan-out budget of one, the first search fails and the second succeeds after
+a single observation.
+
+**Status.** IMPLEMENTED MECHANISM and EXPERIMENTALLY VERIFIED CAPABILITY on the fan-out-ordering
+axis (`67ad91e`, `EXPERIMENTS.md` EXP-013). Not verified on radio, and not verified to improve
+end-to-end delivery rate -- only to avoid wasting a budget slot.
+
+---
+
 ## OAG-INV-010 — Deterministic replay of generated scenarios
 
 **Description.** A generated scenario is fully reproducible from its seed, so a "dream" can be

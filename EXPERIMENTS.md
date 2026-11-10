@@ -139,6 +139,25 @@ behaviour.
 
 ---
 
+## EXP-013 — Does observed deliverability improve fan-out?
+
+**Repository:** `oag-mesh`
+**Hypothesis.** Recording whether each route-search interaction delivered, and asking peers
+best-first, lets a constrained search succeed where it previously failed.
+**Procedure.** A node configured with `[dead, live]` (a closed port and a real mesh node that
+knows the target), a fan-out budget of one, and no history. Run the search; then run it again with
+the same budget after the first search's outcome has been recorded.
+**Result (RUN, `67ad91e`).** First search: `None` -- its single slot went to the dead peer.
+`link_quality` recorded one attempt, zero successes, for the dead peer. Second search: a path was
+found, because the live peer (still at the neutral `0.5`) now outranks the dead one (~`0.45`).
+**Conclusion.** The adaptation is observable in behaviour after a single observation, not merely
+present in the code.
+**Scope, stated plainly.** This measures the *ordering* effect with a budget of one on a
+two-peer topology. It does not measure end-to-end delivery rate, convergence over many rounds, or
+behaviour over radio. Those remain open.
+
+---
+
 ## EXP-008 (PLANNED) — Does traffic strengthen pads measurably?
 
 **Hypothesis.** After N routed requests, a pad that carried traffic is selected more often than an
