@@ -87,8 +87,8 @@ Format: question, assumption I'm running with, status.
   incremented on every `crawl()` call regardless of caller -- CLI, REST, or MCP), and now
   `peer_sync_errors` (see below). Still NOT implemented: `events_by_origin` (a labeled/vector
   metric -- needs a GROUP BY and a decision on label cardinality), `events_pending_chain` (now
-  implemented -- see the next bullet), `replication_bytes_in`/`out` (still need request-duration
-  instrumentation), `search_latency`/
+  implemented -- see the next bullet), `replication_bytes_in`/`out` (implemented -- see the bullet
+  after the verification one), `search_latency`/
   `api_latency` (now implemented -- see the bullet after the verification one), `verification_jobs`/
   `verification_failures` (now implemented -- see the next bullet), and `blob_store_size` (no blob
   store exists yet -- no `blobs/<hash>` route exists anywhere in this codebase). `peer_sync_lag` is covered, in aggregate: `replication_target`/
@@ -127,6 +127,17 @@ Format: question, assumption I'm running with, status.
   operator had no way to see how much of the local graph is dangling. Zero means every held chain
   is internally complete; a persistent non-zero means a predecessor is missing for good. The join
   is on the primary key, so it is `O(n log n)` rather than a scan-compare-scan.
+- **`replication_bytes_in`/`out` added.** Process-lifetime counters on `SyncClient`: `bytes_in`
+  sums the streamed bodies of every replication read (`hello`/`heads`/`events`/`peers`), including
+  ones later rejected as oversized or invalid -- counting only successful reads would under-report
+  exactly the traffic an operator is trying to account for. `bytes_out` sums each serialized POST
+  body (`presence`, `cluster`).
+  **The sharing matters as much as the counting.** `AppState` holds a separately constructed
+  `SyncService` that never runs the sync loop, so its own client's counters would always read zero
+  -- the same trap `peer_sync_errors` documents. `oag serve` hands `AppState` the real service's
+  `Arc`s at startup.
+  **Not counted, deliberately:** the tiny unread responses to the fire-and-forget POSTs. Reading
+  them would buffer a body for a few bytes; the `# HELP` line states the boundary.
 - **`search_latency`/`api_latency` added as fixed-bucket histograms.** `crates/oag-graph/src/latency.rs`
   is a hand-rolled histogram (atomic counters, fixed boundaries, no dependency), the same posture
   as the rest of this surface. `search_latency` is recorded inside `GraphService::search` and
