@@ -72,15 +72,18 @@ signal. Still not built: pinning the crawler's `llms.txt`/ARD/agent-card side-fe
 pin/fetch endpoint, automatic/scheduled backup pinning, and inlining large evidence bodies into
 IPFS in place of local storage (no local full-body evidence storage exists to replace).
 
-**Next named direction: static page hosting** (`USER_INPUT_RECORD.md` Entry 19). Three concrete
-gaps between today's single-file evidence pinning and actually hosting a page: (1) no local
-full-body storage yet for the page's own bytes, as already noted above; (2) Phase 1's
-`KuboHttpProvider` pins one file at a time — a page is a bundle (HTML/CSS/JS), which needs a UnixFS
-*directory* CID, a genuinely new mechanism, not a config change; (3) "load from IPFS instead of an
-HTTP server" names three non-equivalent client options with different trust/latency properties —
-a public gateway (still an HTTP server, just not OAG's own), Helia running in-browser over
-bitswap/libp2p with no gateway at all, or a service-worker gateway-in-browser cache — and which one
-is meant decides most of the rest of the design. Nothing designed yet beyond this breakdown.
+**Static page hosting: Phase 3 built** (`USER_INPUT_RECORD.md` Entry 19, `spec/29-ipfs-pinning.md`
+"Static page hosting"). The three gaps named here are all closed: (1) the page's own bytes are
+read straight off the local directory by `oag ipfs host-page <dir>` — no separate full-body store
+is needed for a local site; (2) `PinningProvider::pin_directory` pins the whole tree as one UnixFS
+directory CID (`recursive=true&wrap-with-directory=true&cid-version=1`), not a loop of single-file
+pins; (3) the client option was decided as **Helia in-browser over bitswap/libp2p, with no HTTP
+gateway at all** — `GET /ipfs-site/{cid}` hands the browser a CID and a vendored bundle
+(`crates/oag-api/assets/`), which walks the whole directory and builds `blob:` URLs for every
+file. Live-verified end-to-end with a real headless browser and a real embedded `rust-ipfs` node.
+Still not built: pinning the crawler's `llms.txt`/ARD/agent-card side-fetches, any REST/MCP
+pin/fetch endpoint, automatic/scheduled backup pinning, and inlining large evidence bodies into
+IPFS in place of local storage.
 
 ## Self-hosted roadmap governance
 

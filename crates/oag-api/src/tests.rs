@@ -607,6 +607,58 @@ async fn human_interface_pages_require_the_same_api_key_as_rest() {
 
 /// The core security property of the human interface: fields containing
 /// attacker/crawler-controlled text (here, an evidence title and excerpt)
+/// `spec/29-ipfs-pinning.md`'s static page hosting: the bootstrap page and the bundle are
+/// deliberately unauthenticated (unlike `/ui/*`), the CID is injected into the page, and a
+/// non-CID-looking path segment is a typed 400 rather than something escaped into a `<script>`.
+#[tokio::test]
+async fn ipfs_site_routes_are_unauthenticated_and_inject_the_cid() {
+    let (app, _key) = test_app("ipfs-site").await;
+    let cid = "bafybeih5crpmkgaewasbbss3nbrdjxdhyilswd2otxqtoiqwfdmbej7v3i";
+
+    // No auth header at all -- a hosted site is public by design.
+    let response = app
+        .clone()
+        .oneshot(Request::get(format!("/ipfs-site/{cid}")).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = body_text(response).await;
+    assert!(
+        body.contains(&format!("window.__OAG_IPFS_CID__ = \"{cid}\"")),
+        "the CID must be injected into the bootstrap page: {body}"
+    );
+    assert!(body.contains("/ipfs-site/_bundle.js"));
+
+    // A non-CID-looking path segment is rejected outright, not escaped.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/ipfs-site/..%2F..%2Fetc%2Fpasswd")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // The bundle is served as JavaScript.
+    let response = app
+        .clone()
+        .oneshot(Request::get("/ipfs-site/_bundle.js").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(
+        response
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("javascript")
+    );
+}
+
 /// must render HTML-escaped, never as live markup -- proves askama's
 /// default autoescaping is actually active on these templates, not just
 /// assumed.
