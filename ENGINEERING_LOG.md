@@ -74,6 +74,50 @@ bounded but not small, and a per-request cap would be the next tightening if mem
 
 ---
 
+## 2026-11-09 — record every pin path in `pinned_cids`
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files created:** `crates/oag-storage/migrations/0015_pinned_cids.sql`,
+`crates/oag-storage/src/repo/pinned_cids.rs`.
+**Files deleted:** `crates/oag-storage/src/repo/pins.rs` (replaced by `pinned_cids`; the endpoint
+now reads one indexed table instead of scanning `evidence.metadata`).
+**Files modified:** `crates/oag-storage/src/repo/mod.rs`, `crates/oag-graph/src/{pins,lib,assert,
+tests}.rs`, `crates/oag-cli/src/commands.rs`, `crates/oag-graph/src/assert.rs`,
+`spec/29-ipfs-pinning.md`, `OPEN_QUESTIONS.md`.
+
+**Gap closed.** The discovery surface shipped reading only `evidence.metadata`'s `ipfs_cid` key,
+which covered the crawler's page pins and nothing else — `oag ipfs pin`, `oag backup --pin`, and
+`oag ipfs host-page` left no queryable trace. So it answered "what did this peer pin as evidence"
+rather than "what does it hold".
+
+**Fix.** One `pinned_cids` table recording every pin path: `evidence` (the assert/evidence choke
+point, which is how the crawler's pin lands), `cli-pin`, `backup-pin`, `host-page`. `source` is
+descriptive metadata for an operator, never a permission or trust signal. The migration backfills
+existing evidence CIDs and is idempotent, so a long-running peer does not report an empty list
+after upgrading and a re-run cannot duplicate rows.
+
+**Best-effort recording on the assert path**, with a warning, same reasoning as
+`observe_sync_outcome`: the pin record is a derived index, not evidentiary state, and the evidence
+row keeps its own `ipfs_cid` metadata either way — a failure there must not fail the evidence write
+it is observing. The CLI paths warn too, since a failure to index must not un-pin content.
+
+**Tests executed.** `cargo test --workspace` — all 31 test binaries pass, no failures.
+
+**Test results.** oag-storage 33 → 34, oag-graph 95 → 96. New: idempotent recording and
+most-recent-first listing, the limit, the backfill's idempotence, `record_pin`'s own cap. The
+existing endpoint, MCP, and service tests continue to pass against the new table.
+
+**Performance measurements.** None. The change replaces a full scan of `evidence` with an indexed
+lookup, so it is strictly cheaper than what it replaced — no benchmark was run and none is claimed.
+
+**Commit:** `d52dc8f` — pushed.
+**Remaining defects.** Recording on the assert path is best-effort, so a peer that fails to index a
+pin will under-report until a later pin of the same CID or a rebuild. `pinned_cids` has no
+garbage-collection: a peer that unpins content through its IPFS node directly still lists the CID,
+which is the same "record, not live check" limit already documented.
+
+---
+
 ## 2026-11-09 — CID discovery surface
 
 **Repository:** `open-agent-graph` (`rust-ai`)
