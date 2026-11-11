@@ -205,6 +205,15 @@ comparison a control rather than a fitted curve.
   parameter-tuning line with a mechanism rather than a shrug, and points at the real lever:
   **reducing** the unit count (hashing a sample of tokens rather than all of them), which is
   unmeasured and is recorded as the follow-up.
+- `40f588c` — implemented that lever as `Tokenizer::WordsBudget`: a deterministic stride sample,
+  stride `ceil(len / target)`, so the unit count is bounded regardless of document length. **The
+  surface flattens**: with a budget of 50, document sizes 100/200/400/800 all land in a 2.4-4.9 bit
+  band for e=1..2, against the unbudgeted 800-token row's 0.5-0.9. And the budget is the knob: at a
+  fixed 800-token document, a 2-token edit moves 5.2/4.9/2.6/1.2/1.0/0.9 bits at budgets
+  20/50/100/200/400/800 — monotone in the budget alone. Honest limit: budgeted sensitivity at a
+  given budget is *below* an unbudgeted document of that unit count (5.2 at budget 20 vs 9.8 for a
+  20-token document), because the stride sample has gaps and a small edit can miss the sampled
+  units.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
