@@ -214,6 +214,15 @@ comparison a control rather than a fitted curve.
   given budget is *below* an unbudgeted document of that unit count (5.2 at budget 20 vs 9.8 for a
   20-token document), because the stride sample has gaps and a small edit can miss the sampled
   units.
+- `ca9c2f4` — measured stride against shuffle sampling at the same budget
+  (`Tokenizer::WordsShuffledBudget`, Fisher-Yates from a deterministic LCG with document order
+  restored). **The stride is a step function**: 1.0 bits for edits on a stride boundary, 0.0 for
+  edits between them, and averaging over seeds does not remove it because the mean over seeds is
+  the same step function. **The shuffle has no blind spot** — positive and smooth at every
+  position, variance as the price. Also found a bias in the stride's favour: it always samples
+  index 0, so every document's opening is over-weighted by construction. For a crawler comparing
+  a page against its previous fetch, edits are arbitrary rather than periodic, so the shuffle's
+  random failure is the better failure mode.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
