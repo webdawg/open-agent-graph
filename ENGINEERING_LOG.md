@@ -223,6 +223,13 @@ comparison a control rather than a fitted curve.
   index 0, so every document's opening is over-weighted by construction. For a crawler comparing
   a page against its previous fetch, edits are arbitrary rather than periodic, so the shuffle's
   random failure is the better failure mode.
+- `a819f12` — measured the third scheme: `Tokenizer::WordsWindowBudget` hashes a fixed budget of
+  *windows* (runs of consecutive tokens) instead of individual tokens. A 2-token edit touches 2 of
+  800 token-units but every window overlapping it. **The window scheme has no zeros**: 1.0 bits at
+  on-stride positions and 1.0 bits between them, against the stride's 0.0 at between-stride
+  positions. It combines the stride's spread coverage with the shuffle's lack of a periodic blind
+  spot. Cost: a unit is a 3-token window, so the index says *which window* changed, not which
+  token. Limits: one window width, one document size, one budget, one seed.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
