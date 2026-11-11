@@ -170,6 +170,15 @@ comparison a control rather than a fitted curve.
   EXP-005 and EXP-008's character numbers are marked invalid in place; EXP-008's word-level
   order-invariance result is unaffected. Corrected: character trigrams freeze the hash completely
   (all 60 variants hash identically); word bigrams still do not fix short documents.
+- `91534a3` — **bigram vote weight 2 improves both sensitivities**, overturning EXP-005. At 200
+  tokens: weight 0 (unigrams) gives order 0 bits / substitution 1.5; weight 1 gives 24 / **0.9**
+  (worst of both); weight 2 gives 31 / **4.2**; weight 4 gives 33 / 4.4. A 2-token substitution
+  changes ~3 bigrams rather than 2 unigrams, so bigrams carry more substitution information than
+  they cost in vote weight. And weight 2 **recovers the 60-token top-1** that unigrams miss and
+  weight 1 loses, while keeping 200; weight 4 freezes and loses all. The default
+  `with_capacity_levels_and_shingle` weight of 1 is now known to be the measured worst setting —
+  recorded for follow-up rather than changed on one synthetic result. 8 tokens fails at every
+  weight.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
