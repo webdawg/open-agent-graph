@@ -179,6 +179,13 @@ comparison a control rather than a fitted curve.
   `with_capacity_levels_and_shingle` weight of 1 is now known to be the measured worst setting —
   recorded for follow-up rather than changed on one synthetic result. 8 tokens fails at every
   weight.
+- `057be25` — fine sweep after exposing `unigram_weight` (the knob was integer-only with unigrams
+  pinned at 1, so no ratio between 0 and 1 was expressible). Order sensitivity is smooth and
+  monotone (0→33 reversal bits across ratios 0→4); substitution sensitivity is not monotone; and
+  **top-1 is not a function of the ratio at all** — yes at 0.00 and 2.00, no at 0.10/0.20/0.25/0.50/
+  1.00/3.00/4.00. That qualifies EXP-010: "weight 2 is the optimum" overstates it. The
+  sensitivities are real and the 60-token gain stands, but top-1 flips between adjacent settings,
+  so tuning by top-1 on one corpus is not a reliable method. Recorded as a methodological finding.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
