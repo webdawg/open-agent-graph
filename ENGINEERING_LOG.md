@@ -110,7 +110,20 @@ comparison a control rather than a fitted curve.
 **Tests executed.** `cargo test -p oag-collisions` — 14 passed, 0 failed.
 
 **Commits:** `cc7613a`, `04572c7`, `5e83384`, `e0bea3d`, `693ab0b`, `3bb7127`, `1dde7b6`,
-`1a80111` — pushed.
+`1a80111`, `2712e73`, `550525d`, `4fcd431` — pushed.
+
+**Follow-on work (same layer).**
+- `2712e73` — third measurement, the CMB dipole: 369.8 km/s against a published 369.8 ± 0.9, a
+  completely independent method from the other two.
+- `550525d` — the collision index was bounded. It stored every item under all 64 prefixes of its
+  hash with no cap, so memory was O(items × 64) and grew without limit. Now
+  `with_capacity_and_levels(n, levels)` with oldest-first eviction, plus a `bucket_entries()`
+  accessor because the item count is the wrong quantity to reason about.
+- `4fcd431` — the prefix-level trade-off was measured rather than assumed
+  (`examples/ranking_tradeoff.rs`): 32 levels keeps top-1 correctness and drops memory to 40%;
+  16 levels saves 88% and returns the wrong answer. The default stays at 64 because the
+  measurement is one synthetic corpus and changing a default on one result is exactly the
+  unmeasured trade the experiment exists to prevent.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
