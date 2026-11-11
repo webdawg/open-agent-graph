@@ -195,6 +195,16 @@ comparison a control rather than a fitted curve.
   never reaches the collision threshold at all (0 to 8 of 8 invisible depending on the setting),
   which matches the EXP-007 surface: at 200 units a 2-token edit moves ~1.5 bits on average,
   frequently zero. The unit count is the binding constraint, not the tokenizer choice.
+- `4d4aef2` — repeated the margin measurement at 40/60/100/200 tokens to test whether the
+  tokenizer settings separate in the resolvable band. **They anti-separate.** At 100 tokens,
+  where unigrams give a positive mean margin of 14.8, both bigram settings give **negative**
+  margins (-8.5, -5.2) across six corpora each with small standard deviations. The mechanism is
+  in the unit count: bigram settings hash roughly double (79 units for 40 tokens, 199 for 100),
+  and EXP-007 measured that doubling the unit count collapses sensitivity. So the tokenizer
+  choice and the unit-count constraint are the *same* constraint. This closes the
+  parameter-tuning line with a mechanism rather than a shrug, and points at the real lever:
+  **reducing** the unit count (hashing a sample of tokens rather than all of them), which is
+  unmeasured and is recorded as the follow-up.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
