@@ -74,6 +74,51 @@ bounded but not small, and a per-request cap would be the next tightening if mem
 
 ---
 
+## 2026-11-09 — new layer: oag-collisions (inference by collision)
+
+**Repository:** `oag-collisions` (new; the operator created it as a fourth layer on top of the
+three foundations, explicitly overriding the earlier workspace confinement)
+**Files created:** `Cargo.toml`, `crates/oag-collisions/{Cargo.toml,src/lib.rs}`,
+`crates/oag-collisions/src/aberration.rs`, `crates/oag-collisions/examples/aberration.rs`,
+`SPEC.md`, `EXPERIMENTS.md`, `LICENSE`.
+
+**What it is.** A collision is an inference result, not an error: two independently produced values
+that land in the same slot are not a coincidence to discard, the collision *is* the answer, and its
+strength is how much of the slot they share. Implemented as locality-sensitive hashing (SimHash over
+BLAKE3 token hashes) with every prefix indexed, so a query collides partially with everything and the
+longest shared prefix ranks the result. No vector database, no model, no training.
+
+**The experiment (PART 0).** The operator's statement "the sun is travelling at light speed" was
+taken literally and tested. Speed alone gives a constant aberration -- an offset indistinguishable
+from the coordinate origin -- but an *accelerated* observer sees the sky slide, and a circular orbit
+is continuous acceleration, at `a / c` radians per second for `a = v^2 / r`. That quantity is the
+published secular aberration drift (VLBI/Gaia, ~5 microarcsec/year).
+
+**Result.** The control passes: 230 km/s reproduces 4.539 microarcsec/year against ~5 published.
+The claim does not survive: at light speed the drift would be **7.7 arcseconds per year**, 1.7
+million times the measurement and 0.17 degrees across an 80-year lifetime -- visible to the naked
+eye, never recorded. The discrepancy is a factor of ~1300 in velocity.
+
+**Second control (EXP-002).** Earth's orbital speed is the AU over the Julian year -- both defined
+quantities, known to four digits independently of any star catalogue -- and it produces the
+classical aberration constant every star catalogue is corrected by: computed 20.48939 arcsec against
+the IAU's 20.49552 (the 0.006 gap is exactly the 29.780 vs 29.7859 km/s difference). Earth's drift
+is 128.716 arcsec/year, 2.836e7 times the galactic one. One un-tuned formula landing on two
+independently known quantities, seven and a half orders of magnitude apart, is what makes the first
+comparison a control rather than a fitted curve.
+
+**Tests executed.** `cargo test -p oag-collisions` — 14 passed, 0 failed.
+
+**Commits:** `cc7613a`, `04572c7`, `5e83384`, `e0bea3d`, `693ab0b`, `3bb7127`, `1dde7b6`,
+`1a80111` — pushed.
+**Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
+(2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
+than asserting on a property the mechanism does not have at that scale. The collision index has no
+eviction policy — it is unbounded in the number of indexed items, which is acceptable for a new
+layer's first increment and should be revisited before it indexes a graph's worth of nodes.
+
+---
+
 ## 2026-11-09 — record every pin path in `pinned_cids`
 
 **Repository:** `open-agent-graph` (`rust-ai`)

@@ -13,6 +13,7 @@ Last updated: 2026-11-09.
 |---|---|---|---|
 | 0 | `open-agent-graph` | `/home/webdawg/DATA/CODE/rust-ai` | one peer's signed event graph |
 | 1 | `oag-mesh` | `/home/webdawg/DATA/CODE/oag-mesh` | a mesh of peers — clusters, federated trust, onion routing |
+| 2 | `oag-collisions` | `/home/webdawg/DATA/CODE/oag-collisions` | inference by collision -- a similarity mechanism built on locality-sensitive hashing |
 | 1 (parallel) | `oag-imagination-random-data-compute` | `/home/webdawg/DATA/CODE/oag-imagination-random-data-compute` | synthetic data — dreams from verifiable randomness |
 
 These state files live in `rust-ai` because it is the foundational layer, but they describe the
