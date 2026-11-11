@@ -74,6 +74,54 @@ bounded but not small, and a per-request cap would be the next tightening if mem
 
 ---
 
+## 2026-11-09 — CID discovery surface
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files created:** `crates/oag-storage/src/repo/pins.rs`, `crates/oag-graph/src/pins.rs`.
+**Files modified:** `crates/oag-storage/src/repo/mod.rs`, `crates/oag-graph/src/lib.rs`,
+`crates/oag-api/src/{dto,handlers,lib,tests}.rs`, `crates/oag-mcp/src/{params,server,tests}.rs`,
+`crates/oag-graph/src/tests.rs`, `spec/29-ipfs-pinning.md`, `docs/api.md`, `OPEN_QUESTIONS.md`.
+
+**Feature implemented.** The discovery query that `spec/31` and `spec/32` both name as missing:
+"how would a peer even learn *which* upstream peer has a given CID without being told?" A caller can
+now ask a peer directly.
+
+- `GET /api/v1/pins?cid=<cid>` -> `{"cid": ..., "holds": bool}`.
+- `GET /api/v1/pins?limit=<n>` -> `{"pins": [...], "total": N, "limit": n}`, clamped to
+  `[0, MAX_PIN_LIST_LIMIT]` at the service layer, matching search's cap.
+- MCP `graph_pins`, same two modes. `graph:read`, like every other read surface.
+
+**Scope, stated rather than implied.** The only CID this codebase records today is the projector's
+`ipfs_cid` key in `evidence.metadata`, written when the crawler pins a page. So the surface answers
+"which CIDs has this peer recorded pinning *as evidence*" — not "what does the IPFS node hold".
+Pins from `oag ipfs pin`, `oag backup --pin`, and `oag ipfs host-page` are not recorded anywhere
+queryable; closing that needs a `pinned_cids` table plus instrumenting three paths, and is
+deliberately not done speculatively.
+
+**And it is a record, not a live check.** Nothing fetches the content to confirm retrievability; a
+peer that garbage-collected a CID still answers "yes". Same honesty property as a DNS name.
+
+**Tests executed.** `cargo test -p oag-storage` (33), `-p oag-graph` (95), `-p oag-api` (62),
+`-p oag-mcp` (20).
+
+**Test results.** oag-storage 31 → 33, oag-graph 94 → 95, oag-api 61 → 62, oag-mcp 19 → 20.
+New: storage tests for distinct-CID listing/counting/holding and the limit; a service test that
+seeds real assertions with `pinned_cid` evidence and checks the duplicate collapses, `holds_pin`,
+and the limit clamp; an HTTP test for the route's auth and both response shapes; and an MCP test for
+the tool.
+
+**Performance measurements.** None. The storage query is a full scan of `evidence` with a
+`json_extract`, bounded by `LIMIT` — acceptable for an operator-driven query, and documented as
+needing a real index if it ever becomes a hot path.
+
+**Commit:** `8c676a0` — pushed.
+**Remaining defects.** The surface under-reports what a peer holds (see scope above). No consumer
+uses it yet: the relay still tries configured upstreams in order, and wiring a pre-check there adds
+a failure mode (a failed check would skip a peer that might have worked) for a modest saving. That
+trade is deliberately not made.
+
+---
+
 ## 2026-11-09 — replication_bytes_in/out
 
 **Repository:** `open-agent-graph` (`rust-ai`)

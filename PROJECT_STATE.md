@@ -22,7 +22,7 @@ mission as a whole.
 
 | Repository | Tests | Commits | Specs |
 |---|---|---|---|
-| `open-agent-graph` | 428 | 121 | 01–32 |
+| `open-agent-graph` | 433 | 122 | 01–32 |
 | `oag-mesh` | 188 | 43 | 01–15 |
 | `oag-imagination-random-data-compute` | 48 | 31 | 01–03 |
 
@@ -43,7 +43,8 @@ All three working trees are clean and pushed as of the last update.
   behaviour-driven trust; peer clustering with a faster intra-cluster loop; long-word DNS
   addressing.
 - Service receipts and multi-hop relay; verified internet gateway (NTP + HTTP, quorum fan-out).
-- Native IPFS: evidence pinning, `oag backup --pin`, `oag ipfs cat|pin|host-page`, and
+- Native IPFS: evidence pinning, `oag backup --pin`, `oag ipfs cat|pin|host-page`, the CID
+  discovery query (`GET /api/v1/pins` + `graph_pins`), and
   `/ipfs-site/{cid}` static page hosting with a vendored gateway-free Helia bundle.
 - Observability: hand-rolled Prometheus `/metrics` and structured `tracing` spans for REST, MCP,
   and event ingest. Metrics now include `crawls_total`/`crawls_failed`,
