@@ -161,6 +161,15 @@ comparison a control rather than a fitted curve.
   order, bigrams cost substitution sensitivity. Also qualifies EXP-004 — at the same 200 tokens a
   2-token replacement moved 0 bits here, so the earlier “works at 200 tokens” was one draw of
   replacement tokens, not a property of the size.
+- `0760b15` — **real defect**: `insert_text` ignored the index's tokenizer (it called the free
+  `tokenize`, while `collide_text` honoured it), so any bigram or character index hashed unigrams on
+  insert and the configured scheme on query. Found because identical trigram hashes produced *zero*
+  collisions, which is impossible for a matching pair. Fixed with weighted units
+  (`Tokenizer::tokenize` returns `(text, weight)`, `insert_units` is the single insert path,
+  `simhash_weighted` added); the regression test is verified to fail when the fix is reverted.
+  EXP-005 and EXP-008's character numbers are marked invalid in place; EXP-008's word-level
+  order-invariance result is unaffected. Corrected: character trigrams freeze the hash completely
+  (all 60 variants hash identically); word bigrams still do not fix short documents.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
