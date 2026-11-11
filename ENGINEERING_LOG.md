@@ -147,6 +147,13 @@ comparison a control rather than a fitted curve.
   Consequence: the unit count is a sensitivity dial as well as a memory dial, coupled in the
   opposite direction from intuition — indexing more text can silently freeze the index. Why 60
   tokens fails is recorded as an open question, not explained.
+- `29458ce` — the sensitivity window mapped (`examples/sensitivity.rs`): units against edit
+  distance, bits moved, averaged over 8 seeds. The ~19.5-bit plateau is the unrelated-document
+  distance. Detection degrades gracefully, but the **ranking** gap between e=2 and e=4 collapses
+  from 5.1 bits at 10 units to **0.1 bits at 800** — so at 800 units two near-duplicates at
+  different distances cannot be ordered at all. The window is a ranking window, not a detection
+  window. The surface also falsifies the sensitivity explanation for the 60-token failure: 60
+  tokens sits comfortably inside the resolvable band, so that question stays open — narrowed.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
