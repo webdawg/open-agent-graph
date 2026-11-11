@@ -137,6 +137,16 @@ comparison a control rather than a fitted curve.
   one result, an unrelated variant at 8 bits, with the correct answer absent). The `shingle` knob
   stays but defaults to 1, with the negative result recorded beside it — nobody should "fix"
   short-document performance with bigrams on the strength of an intuition.
+- `3d70ffd` — character n-grams were falsified too (they also degrade the working case), but the
+  diagnostic reframed the problem. Character trigrams give 887 units per document, and a query plus
+  a variant sharing 885 of them produced hashes differing in **zero** bits. Measuring SimHash's
+  sensitivity directly — fix a 2-token change, vary the unit count — gives 17 bits moved at 10
+  units, 4 at 50, 0 at 200, 1 at 800. Sensitivity is **inversely** proportional to the unit count,
+  so short documents are *over*-sensitive, contradicting the mechanism claimed in EXP-004. That
+  write-up's measurements were right and its explanation was wrong; `EXPERIMENTS.md` now says so.
+  Consequence: the unit count is a sensitivity dial as well as a memory dial, coupled in the
+  opposite direction from intuition — indexing more text can silently freeze the index. Why 60
+  tokens fails is recorded as an open question, not explained.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
