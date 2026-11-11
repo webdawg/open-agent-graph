@@ -113,9 +113,10 @@ comparison a control rather than a fitted curve.
 `1a80111` — pushed.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
-than asserting on a property the mechanism does not have at that scale. The collision index has no
-eviction policy — it is unbounded in the number of indexed items, which is acceptable for a new
-layer's first increment and should be revisited before it indexes a graph's worth of nodes.
+than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
+eviction policy~~ — fixed in `550525d`: the index is bounded by item count (default 100,000,
+evicting oldest-first), because each item costs 64 bucket entries and an unbounded index is a
+memory-exhaustion vector.
 
 ---
 
