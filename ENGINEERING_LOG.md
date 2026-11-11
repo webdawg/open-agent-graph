@@ -131,6 +131,12 @@ comparison a control rather than a fitted curve.
     bit's vote is decided by noise.
   The default stays at 64: one synthetic corpus, and changing a default on one result is the
   unmeasured trade the experiment exists to prevent.
+- `362ca03` — the recorded follow-up was tested and **falsified**: hashing word bigrams rather than
+  unigrams does not fix the short-document failure and *degrades* the long-document case (at 200
+  tokens the unigram index returns the correct variant at 51 shared bits; the bigram index returns
+  one result, an unrelated variant at 8 bits, with the correct answer absent). The `shingle` knob
+  stays but defaults to 1, with the negative result recorded beside it — nobody should "fix"
+  short-document performance with bigrams on the strength of an intuition.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
