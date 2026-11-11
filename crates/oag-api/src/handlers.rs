@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::dto::{
     now_or, AssertRequest, DeclareAliasRequest, DisputeRequest, EvidenceRequest, ResolveRequest,
-    RetractRequest, SearchQuery, SubgraphQuery, VerifyRequest,
+    PinsQuery, RetractRequest, SearchQuery, SubgraphQuery, VerifyRequest,
 };
 use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
@@ -301,6 +301,37 @@ pub async fn subgraph(
         .get_subgraph(node_id, q.depth.unwrap_or(1), q.max_nodes.unwrap_or(200))
         .await?;
     Ok(Json(sg))
+}
+
+/// `GET /api/v1/pins` -- which CIDs this peer has recorded holding. The discovery primitive the
+/// relay and gateway work names as missing: a caller can ask a peer whether it holds a CID instead
+/// of being told which peer to ask.
+///
+/// Answers one CID when `?cid=` is given (`{"holds": bool}`), otherwise lists them bounded by
+/// `?limit=` (`{"pins": [...], "total": N, "limit": N}`). `graph:read`, same as every other
+/// read-only surface -- the list is CIDs of content this peer holds, not actor or peer data.
+pub async fn pins(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<PinsQuery>,
+) -> ApiResult<Json<serde_json::Value>> {
+    authenticate_read(&headers, &state.graph).await?;
+    let payload = match q.cid {
+        Some(cid) => serde_json::json!({
+            "cid": cid,
+            "holds": state.graph.holds_pin(&cid).await?,
+        }),
+        None => {
+            let limit = q.limit.unwrap_or(oag_graph::pins_limit_default());
+            let pins = state.graph.list_pins(limit).await?;
+            serde_json::json!({
+                "pins": pins,
+                "total": state.graph.pin_count().await?,
+                "limit": limit,
+            })
+        }
+    };
+    Ok(Json(payload))
 }
 
 pub async fn history(

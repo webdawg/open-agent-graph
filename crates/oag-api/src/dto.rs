@@ -150,6 +150,16 @@ pub struct SearchQuery {
     pub semantic: Option<bool>,
 }
 
+/// `GET /api/v1/pins` -- the discovery query. Either ask about one CID (`cid=`) or list them
+/// (`limit=`). `limit` is clamped to `[0, MAX_PIN_LIST_LIMIT]` at the service layer, matching
+/// search's cap.
+#[derive(Debug, Deserialize)]
+pub struct PinsQuery {
+    /// Ask whether this peer holds this specific CID, rather than listing them.
+    pub cid: Option<String>,
+    pub limit: Option<i64>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct SubgraphQuery {
     pub node: String,

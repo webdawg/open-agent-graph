@@ -42,6 +42,15 @@ pub struct AssertionIdParams {
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
+pub struct PinsParams {
+    /// Ask whether this peer holds one specific CID instead of listing them.
+    #[serde(default)]
+    pub cid: Option<String>,
+    #[serde(default)]
+    pub limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct SubgraphParams {
     pub node_id: String,
     pub depth: Option<u32>,

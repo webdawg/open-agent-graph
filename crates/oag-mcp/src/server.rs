@@ -13,8 +13,8 @@ use tracing::Instrument;
 use crate::params::{
     ActorIdParams, AddEvidenceParams, AssertParams, AssertionIdParams, CrawlParams,
     DeclareAliasParams, DisputeParams, EdgeIdParams, EvidenceParam, HistoryParams, NodeIdParams,
-    RedactActorIdentityUriParams, RedactEvidenceParams, ResolveParams, RetractParams, SearchParams,
-    SubgraphParams, SupersedeParams, VerifyParams,
+    PinsParams, RedactActorIdentityUriParams, RedactEvidenceParams, ResolveParams, RetractParams,
+    SearchParams, SubgraphParams, SupersedeParams, VerifyParams,
 };
 
 fn map_err(e: GraphError) -> ErrorData {
@@ -291,6 +291,35 @@ impl OagMcpServer {
                 .map_err(map_err)?;
             let value = serde_json::to_value(&sg)
                 .map_err(|e| ErrorData::internal_error(e.to_string(), None))?;
+            Ok(Json(value))
+        })
+        .await
+    }
+
+    /// The discovery query: which CIDs this peer has recorded holding. `cid` answers one CID
+    /// directly; omitting it lists them bounded by `limit`.
+    #[tool(description = "Ask which IPFS CIDs this peer has recorded holding -- the discovery query a relay uses to find content without being told which peer to ask. Pass cid to check one, or limit to list them. Reports what the peer has RECORDED pinning as evidence, not a live fetch.")]
+    async fn graph_pins(
+        &self,
+        Extension(parts): Extension<http::request::Parts>,
+        Parameters(p): Parameters<PinsParams>,
+    ) -> Result<Json<serde_json::Value>, ErrorData> {
+        self.traced("graph_pins", async {
+            self.authenticate_read(&parts).await?;
+            let value = match p.cid {
+                Some(cid) => serde_json::json!({
+                    "cid": cid,
+                    "holds": self.graph.holds_pin(&cid).await.map_err(map_err)?,
+                }),
+                None => {
+                    let limit = p.limit.unwrap_or(oag_graph::pins_limit_default());
+                    serde_json::json!({
+                        "pins": self.graph.list_pins(limit).await.map_err(map_err)?,
+                        "total": self.graph.pin_count().await.map_err(map_err)?,
+                        "limit": limit,
+                    })
+                }
+            };
             Ok(Json(value))
         })
         .await

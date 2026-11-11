@@ -177,6 +177,30 @@ daemon of any kind — pinned a two-file test site (`index.html` + `css/style.cs
 `/ipfs-site/<cid>`, and confirmed the page rendered with its CSS actually applied, fetched purely
 over bitswap.
 
+## The discovery surface: which CIDs does this peer hold?
+
+A relay that wants a CID must otherwise try its configured upstream peers in listed order, first
+success wins, because nothing can tell it *which* peer holds the content. `GET /api/v1/pins` and
+the MCP `graph_pins` tool are the missing query: ask a peer whether it holds a CID rather than being
+told whom to ask.
+
+- `GET /api/v1/pins?cid=<cid>` -> `{"cid": ..., "holds": bool}`
+- `GET /api/v1/pins?limit=<n>` -> `{"pins": [...], "total": N, "limit": N}`, `limit` clamped to
+  `[0, MAX_PIN_LIST_LIMIT]` at the service layer, matching search's cap.
+- `graph:read`, like every other read surface.
+
+**What "holds" means, stated plainly.** The only CID this codebase records today is the projector's
+`{"ipfs_cid": ...}` key in `evidence.metadata`, written when the crawler pins a page. So this
+answers "which CIDs has this peer recorded pinning *as evidence*". Pins made by `oag ipfs pin`,
+`oag backup --pin`, or `oag ipfs host-page` are not recorded anywhere queryable yet -- that gap is
+recorded rather than papered over, and until it is closed this surface under-reports what a peer's
+IPFS node actually holds.
+
+**A record, not a live check.** Nothing here fetches the content to confirm it is still retrievable.
+A peer that pinned a CID and has since garbage-collected it still answers "yes". That is the same
+honesty property as a DNS name: a pointer, not a guarantee, and the fetch is where the guarantee is
+tested.
+
 ## Explicitly deferred
 
 - Pinning the crawler's `llms.txt`/ARD/agent-card side-fetches.

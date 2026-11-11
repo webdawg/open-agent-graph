@@ -45,6 +45,22 @@ Format: question, assumption I'm running with, status.
   it" fallback the way a crawl (which has plenty of other useful work to do regardless) has.
   Status: resolved.
 
+## CID discovery surface (spec/29)
+
+- **`GET /api/v1/pins` added -- the discovery query the relay and gateway work name as missing.**
+  "How would a peer even learn *which* upstream peer has a given CID without being told?" A caller
+  can now ask a peer directly. `?cid=` answers one CID; `?limit=` lists them bounded, clamped at the
+  service layer like search's limit.
+- **What it covers is narrower than the name suggests, and that is recorded.** The only CID this
+  codebase records is the projector's `{"ipfs_cid": ...}` key in `evidence.metadata`, written when
+  the crawler pins a page. So the surface answers "which CIDs has this peer recorded pinning *as
+  evidence*". Pins from `oag ipfs pin`, `oag backup --pin`, and `oag ipfs host-page` are not recorded
+  anywhere queryable. Closing that would mean a `pinned_cids` table plus instrumenting those three
+  paths, and is deliberately not done speculatively. Status: open, and the endpoint's own docs say so.
+- **A record, not a live check.** Nothing fetches the content to confirm it is retrievable; a peer
+  that garbage-collected a CID still answers "yes". Same honesty property as a DNS name. Status:
+  resolved (deliberate).
+
 ## Semantic search (spec section 64)
 
 - **Local embedding model?** Spec section 64 lists "local model" as a possible `EmbeddingProvider`

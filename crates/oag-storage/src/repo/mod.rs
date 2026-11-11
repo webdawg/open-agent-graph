@@ -10,6 +10,7 @@ pub mod nodes;
 pub mod peer_cluster;
 pub mod peer_presence;
 pub mod peers;
+pub mod pins;
 pub mod rebuild;
 pub mod redactions;
 pub mod replication;

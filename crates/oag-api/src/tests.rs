@@ -1857,6 +1857,82 @@ async fn search_pages_through_results_over_rest_and_the_human_interface() {
     );
 }
 
+/// `GET /api/v1/pins` is the discovery query's surface: a caller can ask a peer whether it holds a
+/// CID rather than being told which peer to ask. This test proves the wiring against a real router
+/// -- an empty list on a fresh peer, `holds: false` for a CID nobody has recorded, and the
+/// `graph:read` requirement.
+#[tokio::test]
+async fn the_pins_endpoint_answers_the_discovery_query() {
+    let (app, key) = test_app("pins-endpoint").await;
+    let auth_header = format!("Bearer {key}");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/pins")
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let text = body_text(response).await;
+    let json: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(json["total"], 0);
+    assert_eq!(json["pins"].as_array().unwrap().len(), 0);
+
+    // Asking about one CID directly.
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/v1/pins?cid=QmUnknown")
+                .header("authorization", &auth_header)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let text = body_text(response).await;
+    let json: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(json["cid"], "QmUnknown");
+    assert_eq!(json["holds"], false, "nothing recorded on a fresh peer:\n{text}");
+
+    // `graph:read` is required, like every other read surface -- a missing key is rejected.
+    let response = app
+        .clone()
+        .oneshot(Request::get("/api/v1/pins").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // And a key without graph:read is rejected too.
+    let mut read_only_state = oag_graph::GraphService::new(
+        oag_storage::pool::open_pool(&temp_db_path("pins-no-read")).await.unwrap(),
+        oag_crypto::PeerIdentity::generate(),
+    );
+    let actor_id = read_only_state
+        .declare_actor(oag_core::ActorType::Agent, Some("no-read".into()), None, None)
+        .await
+        .unwrap();
+    let limited_key = read_only_state
+        .create_key(actor_id, vec![oag_core::Permission::GraphAssert])
+        .await
+        .unwrap();
+    let limited_app = crate::build_router(crate::AppState::new(std::sync::Arc::new(read_only_state)));
+    let response = limited_app
+        .oneshot(
+            Request::get("/api/v1/pins")
+                .header("authorization", format!("Bearer {limited_key}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
 /// `api_latency` is recorded by an HTTP-layer middleware, so the only honest test is end to end:
 /// serve a real request, scrape `/metrics`, and confirm the histogram counted it. A unit test of
 /// the histogram alone would not prove the middleware is wired to it.

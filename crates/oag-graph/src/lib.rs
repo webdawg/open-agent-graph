@@ -5,6 +5,8 @@ pub mod error;
 pub mod history;
 pub mod identifier;
 pub mod latency;
+pub mod pins;
+pub use pins::pins_limit_default;
 pub mod metrics;
 pub mod provenance;
 pub mod rebuild;

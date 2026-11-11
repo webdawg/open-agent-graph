@@ -11,6 +11,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
+| GET | `/pins?cid=&limit=` | `graph:read` | Ask which IPFS CIDs this peer has recorded holding -- the discovery query a relay uses |
 | GET | `/search?q=&limit=&offset=&semantic=` | `graph:read` | Keyword (or `semantic=true` embedding-ranked) node search; `offset` pages through the result set |
 | POST | `/resolve` | `graph:read` | Resolve an identifier string to its node, if one exists |
 | GET | `/nodes/{id}` | `graph:read` | Get a node by id |
@@ -132,6 +133,7 @@ tool per `GraphService` capability:
 | Tool | Equivalent to |
 |---|---|
 | `graph_search` | `GET /search` (`limit` + `offset`) |
+| `graph_pins` | `GET /pins` (`cid` or `limit`) |
 | `graph_resolve` | `POST /resolve` |
 | `graph_get_node` | `GET /nodes/{id}` |
 | `graph_get_actor` | `GET /actors/{id}` |

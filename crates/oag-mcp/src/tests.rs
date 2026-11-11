@@ -203,6 +203,39 @@ async fn graph_assert_and_get_subgraph_over_real_http() {
 }
 
 #[tokio::test]
+async fn graph_pins_answers_the_discovery_query_over_real_http() {
+    let (url, raw_key) = spawn_mcp_server("pins").await;
+
+    let transport = StreamableHttpClientTransport::with_client(
+        reqwest::Client::default(),
+        StreamableHttpClientTransportConfig::with_uri(url).auth_header(raw_key),
+    );
+    let client = DummyClientHandler.serve(transport).await.unwrap();
+
+    // Asking about one CID: nothing recorded on a fresh peer.
+    let result = client
+        .call_tool(CallToolRequestParams::new("graph_pins").with_arguments(
+            json!({ "cid": "QmUnknown" }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+    let structured = result.structured_content.unwrap();
+    assert_eq!(structured["holds"], false);
+    assert_eq!(structured["cid"], "QmUnknown");
+
+    // Listing them: empty, with a total.
+    let result = client
+        .call_tool(CallToolRequestParams::new("graph_pins").with_arguments(
+            json!({ "limit": 10 }).as_object().unwrap().clone(),
+        ))
+        .await
+        .unwrap();
+    let structured = result.structured_content.unwrap();
+    assert_eq!(structured["total"], 0);
+    assert_eq!(structured["pins"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
 async fn missing_auth_header_is_rejected_over_real_http() {
     let (url, _raw_key) = spawn_mcp_server("no-auth").await;
 

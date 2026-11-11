@@ -42,6 +42,7 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/metrics", get(metrics::handler))
         .route("/api/v1/search", get(handlers::search))
+        .route("/api/v1/pins", get(handlers::pins))
         .route("/api/v1/nodes/{id}", get(handlers::get_node))
         .route("/api/v1/actors/{id}", get(handlers::get_actor))
         .route("/api/v1/nodes/{id}/edges", get(handlers::get_node_edges))

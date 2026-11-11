@@ -1059,6 +1059,56 @@ async fn search_with_a_negative_limit_returns_nothing_not_everything() {
 }
 
 #[tokio::test]
+async fn pins_report_the_cids_this_peer_has_recorded_holding() {
+    // The discovery primitive: a caller can ask a peer whether it holds a CID instead of being
+    // told which peer to ask. "Holds" here is a *record* -- the CID this peer recorded pinning as
+    // evidence -- not a live fetch; see `pins`' module docs for exactly what that covers and what
+    // it does not.
+    let (service, auth) = service_with_admin("pins").await;
+    assert_eq!(service.pin_count().await.unwrap(), 0);
+    assert!(service.list_pins(10).await.unwrap().is_empty());
+    assert!(!service.holds_pin("QmUnknown").await.unwrap());
+
+    let mut input = sample_input("Pins Target");
+    input.evidence = vec![EvidenceInput {
+        evidence_type: Some("documentation".into()),
+        uri: Some("https://example.com/pinned".into()),
+        title: None,
+        excerpt: None,
+        content_hash: None,
+        observed_at: None,
+        retrieved_at: None,
+        pinned_cid: Some("QmPinnedAlpha".into()),
+        metadata: None,
+    }];
+    service.assert(&auth, input).await.unwrap();
+
+    // A second assertion recording the SAME cid must not create a second distinct entry.
+    let mut second = sample_input("Pins Target 2");
+    second.evidence = vec![EvidenceInput {
+        evidence_type: Some("documentation".into()),
+        uri: Some("https://example.com/pinned-2".into()),
+        title: None,
+        excerpt: None,
+        content_hash: None,
+        observed_at: None,
+        retrieved_at: None,
+        pinned_cid: Some("QmPinnedAlpha".into()),
+        metadata: None,
+    }];
+    service.assert(&auth, second).await.unwrap();
+
+    assert_eq!(service.pin_count().await.unwrap(), 1, "distinct CIDs only");
+    assert!(service.holds_pin("QmPinnedAlpha").await.unwrap());
+    assert!(!service.holds_pin("QmPinnedBeta").await.unwrap());
+    assert_eq!(service.list_pins(10).await.unwrap(), vec!["QmPinnedAlpha"]);
+
+    // The limit is honoured and clamped at the service layer, like search's.
+    assert!(service.list_pins(0).await.unwrap().is_empty());
+    assert_eq!(service.list_pins(10_000).await.unwrap().len(), 1);
+}
+
+#[tokio::test]
 async fn search_latency_records_every_search_this_process_serves() {
     // `search_latency` (spec section 86) is a duration, not a count, so the only meaningful test
     // is that serving a search actually lands an observation in the histogram. Recorded at the
