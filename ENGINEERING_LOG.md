@@ -238,6 +238,14 @@ comparison a control rather than a fitted curve.
   fraction of tokens. Periodicity decides *which* edits are missed; coverage decides *how many*.
   Also explains the stride's 35.4% being below the naive 50%: a single-unit change is often
   absorbed by the majority vote.
+- `819cc25` — swept the window width (2, 3, 5, 8) at a fixed budget of 200 on an 800-token
+  document. Rates: 40.7%, 86.5%, 97.2%, 95.4% against coverage predictions of 50%, 75%, 100%,
+  100%. **The trend confirms coverage but the absolutes do not.** The reason: the majority vote
+  absorbs a changed unit -- a 2-token edit changes 3 of 799 windows under width 2, so with a budget
+  of 200 the expected number of changed sampled units is under one, and one changed unit out of 200
+  almost never flips a bit. The decisive quantity is therefore the fraction of *sampled* units that
+  changed, not the fraction of positions covered. The absorption floor was inferred from the
+  saturation residual, not measured directly.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
