@@ -119,10 +119,17 @@ comparison a control rather than a fitted curve.
   hash with no cap, so memory was O(items × 64) and grew without limit. Now
   `with_capacity_and_levels(n, levels)` with oldest-first eviction, plus a `bucket_entries()`
   accessor because the item count is the wrong quantity to reason about.
-- `4fcd431` — the prefix-level trade-off was measured rather than assumed
-  (`examples/ranking_tradeoff.rs`): 32 levels keeps top-1 correctness and drops memory to 40%;
-  16 levels saves 88% and returns the wrong answer. The default stays at 64 because the
-  measurement is one synthetic corpus and changing a default on one result is exactly the
+- `4fcd431`, `89044f9` — the prefix-level trade-off was measured rather than assumed
+  (`examples/ranking_tradeoff.rs`). Two corrections to the first reading:
+  - *Ties.* At 16 and 8 levels the correct variant is still in the top set but tied, so the first
+    answer is arbitrary. The index has not lost the right answer; it has lost the ability to choose
+    it. 32 is the fewest levels that gets top-1 right without a tie.
+  - *Length.* The crossover does not survive moving the document length. At 200 tokens the correct
+    variant wins on 51 shared bits; at 60 the best hit is an unrelated variant on 11 bits (chance);
+    at 20 and 8 nothing crosses the 8-bit threshold at all. For short documents **no** level count
+    works, because unigram SimHash is a majority vote over bit positions and with few tokens each
+    bit's vote is decided by noise.
+  The default stays at 64: one synthetic corpus, and changing a default on one result is the
   unmeasured trade the experiment exists to prevent.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
