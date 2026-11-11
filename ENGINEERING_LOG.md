@@ -230,6 +230,14 @@ comparison a control rather than a fitted curve.
   positions. It combines the stride's spread coverage with the shuffle's lack of a periodic blind
   spot. Cost: a unit is a 3-token window, so the index says *which window* changed, not which
   token. Limits: one window width, one document size, one budget, one seed.
+- `b402cdd` — measured the **false-negative rate** over every second position of an 800-token
+  document, 8 seeds each, budget 200. Stride 35.4%, shuffle 40.6%, windows **86.5%**. This
+  **corrects EXP-015/016's framing**: the window scheme wins on *coverage* (each unit spans 3
+  tokens, so 600 of 800 token positions are covered), not on lacking a periodic blind spot — the
+  shuffle has no blind spot and is barely better than the stride, because both sample the same
+  fraction of tokens. Periodicity decides *which* edits are missed; coverage decides *how many*.
+  Also explains the stride's 35.4% being below the naive 50%: a single-unit change is often
+  absorbed by the majority vote.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
