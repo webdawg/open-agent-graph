@@ -154,6 +154,13 @@ comparison a control rather than a fitted curve.
   different distances cannot be ordered at all. The window is a ranking window, not a detection
   window. The surface also falsifies the sensitivity explanation for the 60-token failure: 60
   tokens sits comfortably inside the resolvable band, so that question stays open — narrowed.
+- `6f472bf` — unigram SimHash is **exactly invariant to word order** (the EXP-007 gap). A 200-token
+  document and its full reversal collide at **64 shared bits** through the index; an adjacent swap is
+  likewise invisible. Structural, not tunable. Bigrams detect order (24 bits) but EXP-005 measured
+  them degrading substitution, so the layer faces a measured either/or: unigrams are blind to
+  order, bigrams cost substitution sensitivity. Also qualifies EXP-004 — at the same 200 tokens a
+  2-token replacement moved 0 bits here, so the earlier “works at 200 tokens” was one draw of
+  replacement tokens, not a property of the size.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
