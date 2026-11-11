@@ -1109,6 +1109,26 @@ async fn pins_report_the_cids_this_peer_has_recorded_holding() {
 }
 
 #[tokio::test]
+async fn record_pin_is_idempotent_and_reports_through_the_discovery_query() {
+    // The path the CLI pin commands use (`oag ipfs pin`, `oag backup --pin`,
+    // `oag ipfs host-page`). Idempotent per CID: re-pinning the same bytes must not create a second
+    // entry, because the discovery surface should answer "what does this peer hold", not "how many
+    // times did it pin".
+    let (service, _auth) = service_with_admin("record-pin").await;
+    assert_eq!(service.pin_count().await.unwrap(), 0);
+
+    service.record_pin("QmCliPinned", "cli-pin").await.unwrap();
+    service.record_pin("QmCliPinned", "cli-pin").await.unwrap();
+    assert_eq!(service.pin_count().await.unwrap(), 1, "one row per CID");
+    assert!(service.holds_pin("QmCliPinned").await.unwrap());
+    assert_eq!(service.list_pins(10).await.unwrap(), vec!["QmCliPinned"]);
+
+    // A CID longer than the project's pinned_cid cap is rejected rather than truncated.
+    let too_long = "x".repeat(200);
+    assert!(service.record_pin(&too_long, "cli-pin").await.is_err());
+}
+
+#[tokio::test]
 async fn search_latency_records_every_search_this_process_serves() {
     // `search_latency` (spec section 86) is a duration, not a count, so the only meaningful test
     // is that serving a search actually lands an observation in the histogram. Recorded at the

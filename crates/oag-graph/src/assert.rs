@@ -22,7 +22,7 @@ const MAX_URI_LEN: usize = 2048;
 const MAX_TITLE_LEN: usize = 512;
 const MAX_EXCERPT_LEN: usize = 4096;
 const MAX_CONTENT_HASH_LEN: usize = 128;
-const MAX_PINNED_CID_LEN: usize = 128;
+pub(crate) const MAX_PINNED_CID_LEN: usize = 128;
 const MAX_METADATA_BYTES: usize = 8192;
 const MAX_REASON_LEN: usize = 2048;
 const MAX_EVIDENCE_PER_ASSERTION: usize = 20;
@@ -189,6 +189,17 @@ impl GraphService {
         assertion_id: AssertionId,
         evidence: EvidenceInput,
     ) -> Result<(), GraphError> {
+        // A CID on evidence means this peer pinned that content, which is exactly what the
+        // discovery surface (`GET /api/v1/pins`) reports. Best-effort, same reasoning as
+        // `observe_sync_outcome`: the pin record is a derived index, not evidentiary state -- the
+        // evidence row keeps its own `ipfs_cid` metadata either way, so a failure here must not
+        // fail (or appear to fail) the evidence write it is observing.
+        if let Some(cid) = &evidence.pinned_cid {
+            if let Err(e) = self.record_pin(cid, "evidence").await {
+                tracing::warn!(cid = %cid, error = %e, "failed to record a pinned CID for the discovery surface");
+            }
+        }
+
         self.commit_event(
             EventPayload::AddEvidence(AddEvidencePayload {
                 assertion_id: assertion_id.to_hex(),

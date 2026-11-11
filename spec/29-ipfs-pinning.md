@@ -189,12 +189,23 @@ told whom to ask.
   `[0, MAX_PIN_LIST_LIMIT]` at the service layer, matching search's cap.
 - `graph:read`, like every other read surface.
 
-**What "holds" means, stated plainly.** The only CID this codebase records today is the projector's
-`{"ipfs_cid": ...}` key in `evidence.metadata`, written when the crawler pins a page. So this
-answers "which CIDs has this peer recorded pinning *as evidence*". Pins made by `oag ipfs pin`,
-`oag backup --pin`, or `oag ipfs host-page` are not recorded anywhere queryable yet -- that gap is
-recorded rather than papered over, and until it is closed this surface under-reports what a peer's
-IPFS node actually holds.
+**What "holds" means, stated plainly.** Every recorded pin path lands in one table
+(`pinned_cids`, migration `0015`), so the answer is not limited to one source:
+
+| `source` | Path |
+|---|---|
+| `evidence` | the assert/evidence path -- how the crawler's page pin lands |
+| `cli-pin` | `oag ipfs pin` |
+| `backup-pin` | `oag backup --pin` |
+| `host-page` | `oag ipfs host-page` |
+
+`source` is descriptive metadata for an operator, never a permission or trust signal: a CID pinned
+by a script is not more trustworthy than one pinned by a person.
+
+Pins made *before* this table existed are backfilled by the migration from the one place a CID was
+already recorded (`evidence.metadata`'s `ipfs_cid` key), so a long-running peer does not report an
+empty pin list after upgrading. The backfill is idempotent (`OR IGNORE` plus the primary key), which
+matters because migrations can be re-run.
 
 **A record, not a live check.** Nothing here fetches the content to confirm it is still retrievable.
 A peer that pinned a CID and has since garbage-collected it still answers "yes". That is the same

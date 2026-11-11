@@ -523,6 +523,13 @@ pub async fn backup(
             .await
             .map_err(|e| anyhow::anyhow!("{e} (is [ipfs].pinning_provider set in config.toml?)"))?;
         println!("pinned to IPFS: {cid}");
+        // Record it in the graph's own pin index so `GET /api/v1/pins` reports it. Best-effort:
+        // a failure to index must not un-pin content the user just pinned.
+        if let Ok(graph) = open_graph(data_dir).await {
+            if let Err(e) = graph.record_pin(&cid, "backup-pin").await {
+                println!("warning: pinned, but could not record the CID for `oag ipfs pins`: {e}");
+            }
+        }
         println!(
             "note: this CID is an unverified retrieval pointer only, same as every other \
              pinned_cid in this project (spec/29-ipfs-pinning.md) -- not independently confirmed, \
@@ -914,6 +921,13 @@ pub async fn ipfs_pin(
         .map_err(|e| anyhow::anyhow!("{e} (is [ipfs].pinning_provider set in config.toml?)"))?;
     println!("pinned {} to IPFS: {cid}", path.display());
     println!("retrieve it with: oag ipfs cat {cid}");
+    // Record it in the graph's own pin index so `GET /api/v1/pins` reports it. Best-effort: a
+    // failure to index must not un-pin content the user just pinned.
+    if let Ok(graph) = open_graph(data_dir).await {
+        if let Err(e) = graph.record_pin(&cid, "cli-pin").await {
+            println!("warning: pinned, but could not record the CID for `oag ipfs pins`: {e}");
+        }
+    }
     Ok(())
 }
 
@@ -983,6 +997,12 @@ pub async fn ipfs_host_page(
         .map_err(|e| anyhow::anyhow!("{e} (is [ipfs].pinning_provider set in config.toml?)"))?;
     println!("pinned {} file(s) to IPFS as a directory: {cid}", files.len());
     println!("open it via a running `oag serve` (same [ipfs] config) at: /ipfs-site/{cid}");
+    // Record it in the graph's own pin index so `GET /api/v1/pins` reports it. Best-effort.
+    if let Ok(graph) = open_graph(data_dir).await {
+        if let Err(e) = graph.record_pin(&cid, "host-page").await {
+            println!("warning: pinned, but could not record the CID for `oag ipfs pins`: {e}");
+        }
+    }
     println!(
         "note: this CID is an unverified retrieval pointer only, same as every other pinned_cid \
          in this project (spec/29-ipfs-pinning.md) -- not independently confirmed, never a trust \

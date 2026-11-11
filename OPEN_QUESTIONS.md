@@ -51,12 +51,15 @@ Format: question, assumption I'm running with, status.
   "How would a peer even learn *which* upstream peer has a given CID without being told?" A caller
   can now ask a peer directly. `?cid=` answers one CID; `?limit=` lists them bounded, clamped at the
   service layer like search's limit.
-- **What it covers is narrower than the name suggests, and that is recorded.** The only CID this
-  codebase records is the projector's `{"ipfs_cid": ...}` key in `evidence.metadata`, written when
-  the crawler pins a page. So the surface answers "which CIDs has this peer recorded pinning *as
-  evidence*". Pins from `oag ipfs pin`, `oag backup --pin`, and `oag ipfs host-page` are not recorded
-  anywhere queryable. Closing that would mean a `pinned_cids` table plus instrumenting those three
-  paths, and is deliberately not done speculatively. Status: open, and the endpoint's own docs say so.
+- **The recording gap is closed: `pinned_cids` (migration `0015`).** The endpoint first shipped
+  reading only `evidence.metadata`'s `ipfs_cid` key, which covered the crawler's pins and nothing
+  else. Now one table records every pin path -- `evidence` (the assert/evidence choke point),
+  `cli-pin` (`oag ipfs pin`), `backup-pin` (`oag backup --pin`), `host-page`
+  (`oag ipfs host-page`) -- so the surface answers the full question. The migration backfills
+  existing evidence CIDs and is idempotent, so a long-running peer does not report an empty list
+  after upgrading and a re-run cannot duplicate rows.
+  **Still not a live check:** nothing fetches the content to confirm it is retrievable. Status:
+  resolved for recording; the live-check limit is deliberate and documented.
 - **A record, not a live check.** Nothing fetches the content to confirm it is retrievable; a peer
   that garbage-collected a CID still answers "yes". Same honesty property as a DNS name. Status:
   resolved (deliberate).
