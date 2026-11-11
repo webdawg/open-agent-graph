@@ -186,6 +186,15 @@ comparison a control rather than a fitted curve.
   1.00/3.00/4.00. That qualifies EXP-010: "weight 2 is the optimum" overstates it. The
   sensitivities are real and the 60-token gain stands, but top-1 flips between adjacent settings,
   so tuning by top-1 on one corpus is not a reliable method. Recorded as a methodological finding.
+- `10f78f6` — replaced the knife-edge top-1 with a **margin measured over 8 corpora** (correct
+  variant's shared bits minus the best other). It retires the parameter-tuning line rather than
+  resolving it: mean margins 1-6 bits against standard deviations of 15-28, so every tokenizer
+  setting is indistinguishable from zero within noise. EXP-010's “weight 2 improves both” and
+  EXP-011's “optimum between 1 and 4” were both readings of a metric too knife-edge to support
+  them. The dominant failure is **visibility, not ranking** — in most corpora the correct variant
+  never reaches the collision threshold at all (0 to 8 of 8 invisible depending on the setting),
+  which matches the EXP-007 surface: at 200 units a 2-token edit moves ~1.5 bits on average,
+  frequently zero. The unit count is the binding constraint, not the tokenizer choice.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
