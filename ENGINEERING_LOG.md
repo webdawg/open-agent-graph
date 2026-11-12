@@ -1096,8 +1096,8 @@ One article syndicated to several domains was previously scored as several indep
 **Performance measurements.** None; the extra work is one hash map per corroboration query, which
 was already O(evidence items) and still is.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `26b45da`.
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** A caller can assert distinct `content_hash` values for identical content and
 regain the independence the grouping removes; `content_hash` is caller-asserted on the REST/MCP
 path. Documented in `spec/06`.
