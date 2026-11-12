@@ -1,4 +1,5 @@
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use futures_util::StreamExt;
 use serde::de::DeserializeOwned;
@@ -13,7 +14,17 @@ pub enum SyncClientError {
     ResponseTooLarge(usize),
     #[error("peer response was not valid JSON: {0}")]
     InvalidJson(#[from] serde_json::Error),
+    /// The peer's rate limiter rejected this request, and said when to retry.
+    ///
+    /// Distinct from `Http` on purpose: a 429 is not a dead peer, and treating it as one is how a
+    /// sync flood becomes thousands of pointless retries against a limiter that already answered.
+    #[error("peer rate limited this request; retry after {}s", retry_after.as_secs())]
+    RateLimited { retry_after: Duration },
 }
+
+/// Used when a 429 omits `Retry-After`, so a client that honours the header still backs off a
+/// sensible amount rather than immediately.
+const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(30);
 
 /// Spec section 61 ("disk exhaustion" / resource-exhaustion defenses):
 /// a peer we sync *with* is exactly as untrusted as a peer syncing with
@@ -68,6 +79,29 @@ impl SyncClient {
     /// from a peer into `bytes_in`. Counted even when the cap trips or the JSON is invalid: the
     /// bytes crossed the wire, and a metrics layer that only counted successful responses would
     /// under-report exactly the traffic an operator is trying to account for.
+    /// Sends `request`, turning a 429 into [`SyncClientError::RateLimited`] carrying the peer's
+    /// `Retry-After`, and every other non-success into the usual `Http` error.
+    ///
+    /// Split out so all five endpoints treat a rate limit identically rather than each deciding
+    /// whether `error_for_status` is good enough.
+    async fn send_capped(
+        &self,
+        request: reqwest::RequestBuilder,
+    ) -> Result<reqwest::Response, SyncClientError> {
+        let response = request.send().await?;
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let retry_after = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok())
+                .map(Duration::from_secs)
+                .unwrap_or(DEFAULT_RETRY_AFTER);
+            return Err(SyncClientError::RateLimited { retry_after });
+        }
+        Ok(response.error_for_status()?)
+    }
+
     async fn capped_json<T: DeserializeOwned>(&self, response: reqwest::Response) -> Result<T, SyncClientError> {
         let mut body = Vec::new();
         let mut stream = response.bytes_stream();
@@ -145,13 +179,13 @@ impl SyncClient {
 
     pub async fn hello(&self, addr: &str) -> Result<HelloResponse, SyncClientError> {
         let url = format!("{}/hello", Self::base(addr));
-        self.capped_json(self.http.get(url).send().await?.error_for_status()?).await
+        self.capped_json(self.send_capped(self.http.get(url)).await?).await
     }
 
     #[allow(dead_code)]
     pub async fn heads(&self, addr: &str) -> Result<HeadsResponse, SyncClientError> {
         let url = format!("{}/heads", Self::base(addr));
-        self.capped_json(self.http.get(url).send().await?.error_for_status()?).await
+        self.capped_json(self.send_capped(self.http.get(url)).await?).await
     }
 
     pub async fn fetch_events(
@@ -162,12 +196,12 @@ impl SyncClient {
         to: u64,
     ) -> Result<EventsResponse, SyncClientError> {
         let url = format!("{}/events/{origin_hex}?from={from}&to={to}", Self::base(addr));
-        self.capped_json(self.http.get(url).send().await?.error_for_status()?).await
+        self.capped_json(self.send_capped(self.http.get(url)).await?).await
     }
 
     pub async fn fetch_peers(&self, addr: &str) -> Result<PeersResponse, SyncClientError> {
         let url = format!("{}/peers", Self::base(addr));
-        self.capped_json(self.http.get(url).send().await?.error_for_status()?).await
+        self.capped_json(self.send_capped(self.http.get(url)).await?).await
     }
 
     /// Ephemeral peer trust, Phase 1: push one signed presence heartbeat.
@@ -182,13 +216,13 @@ impl SyncClient {
         let url = format!("{}/presence", Self::base(addr));
         let body = serde_json::to_vec(heartbeat)?;
         record_outgoing(&self.bytes_out, &body);
-        self.http
-            .post(url)
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(body)
-            .send()
-            .await?
-            .error_for_status()?;
+        self.send_capped(
+            self.http
+                .post(url)
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(body),
+        )
+        .await?;
         Ok(())
     }
 
@@ -203,13 +237,13 @@ impl SyncClient {
         let url = format!("{}/cluster", Self::base(addr));
         let body = serde_json::to_vec(declaration)?;
         record_outgoing(&self.bytes_out, &body);
-        self.http
-            .post(url)
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(body)
-            .send()
-            .await?
-            .error_for_status()?;
+        self.send_capped(
+            self.http
+                .post(url)
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(body),
+        )
+        .await?;
         Ok(())
     }
 }

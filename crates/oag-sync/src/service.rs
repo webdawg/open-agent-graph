@@ -92,6 +92,14 @@ pub struct SyncService {
     /// the live gossip loop's own count, not an independently-constructed
     /// handle's always-zero one.
     sync_errors: Arc<AtomicU64>,
+    /// Addresses this peer's own rate limiter told us to back off from, and until when.
+    ///
+    /// `Arc`-wrapped for the same reason as `sync_errors` above: the gossip loop, the cluster
+    /// gossip loop, and the HTTP router are clones of one service, and a backoff recorded by any
+    /// of them has to be visible to all. Without it a peer that answers 429 is contacted again on
+    /// the very next tick, which is how a full-mesh sync flood produces thousands of retries
+    /// against a limiter that already gave its answer.
+    backoffs: Arc<std::sync::Mutex<std::collections::HashMap<String, std::time::Instant>>>,
 }
 
 impl SyncService {
@@ -115,7 +123,41 @@ impl SyncService {
             cluster_identity: None,
             own_cluster: None,
             sync_errors: Arc::new(AtomicU64::new(0)),
+            backoffs: Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
         }
+    }
+
+    /// Whether a previous 429 from `addr` is still in its backoff window.
+    pub(crate) fn backed_off(&self, addr: &str) -> bool {
+        let mut backoffs = self.backoffs.lock().unwrap();
+        let now = std::time::Instant::now();
+        backoffs.retain(|_, until| *until > now);
+        backoffs.get(addr).is_some_and(|until| *until > now)
+    }
+
+    /// Records a backoff if `error` is a rate limit, and returns nothing otherwise.
+    fn note_rate_limit(&self, addr: &str, error: &SyncClientError) {
+        if let SyncClientError::RateLimited { retry_after } = error {
+            self.record_backoff(addr, *retry_after);
+        }
+    }
+
+    /// Remembers that `addr` asked us not to retry before `retry_after` elapses.
+    pub(crate) fn record_backoff(&self, addr: &str, retry_after: std::time::Duration) {
+        let mut backoffs = self.backoffs.lock().unwrap();
+        let now = std::time::Instant::now();
+        backoffs.retain(|_, until| *until > now);
+        let until = now + retry_after;
+        // Keep the later of any existing deadline and this one, so a peer that shortens its window
+        // cannot have an old, longer deadline overwritten by a shorter one.
+        backoffs
+            .entry(addr.to_string())
+            .and_modify(|existing| {
+                if until > *existing {
+                    *existing = until;
+                }
+            })
+            .or_insert(until);
     }
 
     /// A clone of the `Arc` backing `peer_sync_errors` -- share this with
@@ -305,7 +347,10 @@ impl SyncService {
     /// relay, without ever contacting that third peer directly). Safe to
     /// call repeatedly; this is the gossip loop's steady-state operation.
     pub async fn sync_with_peer(&self, addr: &str) -> Result<SyncSummary, SyncError> {
-        let hello = self.client.hello(addr).await?;
+        let hello = self.client.hello(addr).await.map_err(|e| {
+            self.note_rate_limit(addr, &e);
+            SyncError::from(e)
+        })?;
         let remote_peer_id: PeerId = hello.peer_id.parse()?;
         let remote_public_key_bytes = decode_hex32(&hello.public_key).ok_or(SyncError::InvalidPublicKey)?;
         let remote_public_key =
@@ -382,6 +427,10 @@ impl SyncService {
             let events = match self.client.fetch_events(addr, origin_hex, local_seq + 1, *remote_seq).await {
                 Ok(events) => events,
                 Err(e) => {
+                    // A rate-limited fetch is a signal about this peer, not about the event: record
+                    // the backoff so the next tick leaves it alone, and report it as the fetch
+                    // failure it also is.
+                    self.note_rate_limit(addr, &e);
                     summary.errors.push(format!("{origin_hex}: fetch failed: {e}"));
                     continue;
                 }

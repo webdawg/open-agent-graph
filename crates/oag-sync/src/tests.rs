@@ -7,7 +7,8 @@ use oag_storage::pool::open_pool;
 
 use crate::federation::FederationPolicy;
 use crate::server::router;
-use crate::service::SyncService;
+use crate::client::{SyncClientError};
+use crate::service::{SyncError, SyncService};
 
 struct TestPeer {
     dir: std::path::PathBuf,
@@ -418,6 +419,40 @@ async fn rate_limiter_rejects_after_threshold() {
         (1..=60).contains(&seconds),
         "Retry-After must be within the 60s window, got {seconds}"
     );
+}
+
+/// A peer's 429 is a signal about the peer, not a dead peer. The client surfaces it distinctly,
+/// carrying the `Retry-After` the limiter sent, and the service records a backoff from it -- so the
+/// gossip loop leaves that peer alone instead of retrying on the next tick.
+#[tokio::test]
+async fn a_rate_limited_peer_is_distinct_from_a_dead_one_and_is_backed_off() {
+    let peer = spawn_peer("rate-limit-distinct").await;
+    let client = reqwest::Client::new();
+    let hello_url = format!("{}/oag/sync/v1/hello", peer.addr);
+
+    let mut saw_429 = false;
+    for _ in 0..650 {
+        if client.get(&hello_url).send().await.unwrap().status()
+            == reqwest::StatusCode::TOO_MANY_REQUESTS
+        {
+            saw_429 = true;
+            break;
+        }
+    }
+    assert!(saw_429, "the limiter must reject before the client can observe it");
+
+    let service = peer.sync.clone();
+    match service.sync_with_peer(&peer.addr).await {
+        Err(SyncError::Client(SyncClientError::RateLimited { retry_after })) => {
+            assert!(
+                !retry_after.is_zero(),
+                "the limiter sends Retry-After, so the client should carry it"
+            );
+        }
+        other => panic!("expected a distinct RateLimited, got {other:?}"),
+    }
+
+    assert!(service.backed_off(&peer.addr), "the service must record the backoff");
 }
 
 /// Spec section 61 ("event flooding" / "signature spam"): a push batch over

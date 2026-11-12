@@ -1462,3 +1462,38 @@ returns it immediately when a read transaction cannot upgrade to a write while a
 holds the writer. A single-writer queue would remove it and is not built. No sync client honours
 `Retry-After` yet either; the limiter now states it and the client still treats a 429 as a generic
 failure retried on the next cycle.
+
+---
+
+## 2026-11-09 — the sync client consumes Retry-After and the gossip loop backs off
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-sync/src/client.rs`, `crates/oag-sync/src/service.rs`,
+`crates/oag-sync/src/gossip.rs`, `crates/oag-sync/src/tests.rs`, `spec/18-rate-limiting-and-resource-limits.md`,
+`RESEARCH_JOURNAL.md`.
+
+**Feature implemented.** `SyncClient` now turns a 429 into `SyncClientError::RateLimited {
+retry_after }` instead of letting `error_for_status` flatten it into a generic failure, carrying the
+peer's `Retry-After` (or a 30s default when absent). `SyncService` records a per-address deadline
+from it -- keeping the later of two deadlines -- and `gossip::sync_round` skips any address still
+inside that window.
+
+**Why.** The previous entry made both limiters *send* `Retry-After`; nothing consumed it. A client
+that cannot tell "rate limited, retry at T" from "peer down" has to guess, and the guessing is what
+produced 2,594 retries against a limiter that had already answered.
+
+**Tests executed.** `cargo test -p oag-sync --lib`: 43 passed, 0 failed (was 41). New:
+`a_rate_limited_peer_is_distinct_from_a_dead_one_and_is_backed_off` (the 429 is distinct and
+carries a non-zero `Retry-After`; the service records the backoff),
+`sync_round_leaves_a_peer_in_its_rate_limit_backoff_window_alone` (a dead address increments the
+shared error counter; a backed-off one does not).
+
+**Performance measurements.** None added. The chaos test still drives `sync_with_peer` directly
+and so still exercises the limiter rather than the backoff -- stated in `spec/18` rather than left
+for a reader to assume the loop was measured.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** A 429 on `fetch_events` is recorded as a backoff *and* counted as a
+per-event fetch failure, so it is double-counted. `Retry-After` is honoured by the sync client only;
+`oag-api`'s own outgoing calls (the gateway, the crawler) do not consume it either.

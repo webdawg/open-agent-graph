@@ -366,3 +366,35 @@ honours it yet.
 and now "SQLite contention"). The pattern is consistent: a summary line that is never re-derived
 from the raw data decays into an assumption. Classifying at the point of measurement is cheap;
 auditing a printed claim later is not.
+
+---
+
+## A rate limit is only a backoff signal if the client can tell it from a dead peer
+
+**Date:** 2026-11-09. **Repository:** `open-agent-graph`.
+
+**Context.** The previous entry measured a 50-peer chaos run and found that 2,594 of 4,565
+recoverable sync errors were `429`s from this project's own limiter. It also added `Retry-After` to
+both limiters. This entry closes the other half.
+
+**The distinction that matters.** `SyncClient` used `error_for_status()`, which maps every non-2xx
+to the same `reqwest::Error`. So "the peer asked me to retry in 45 seconds" and "the peer is down"
+were indistinguishable to every caller. A client that cannot make that distinction has to guess a
+backoff, and guessing produces exactly the measured flood.
+
+A 429 is not a failure of the peer; it is the peer successfully protecting itself and telling you
+when to come back. Modelling it as an error is a category mistake, not a detail.
+
+**Design.** A distinct `SyncClientError::RateLimited { retry_after }`; a per-address deadline on
+`SyncService`, shared across clones by `Arc` like the error counter and trust config; and
+`gossip::sync_round` skips addresses inside their window. The later of two deadlines is kept, so a
+peer shortening its window cannot be pinned to an older, longer one.
+
+`sync_with_peer` still attempts when called directly. A one-shot caller (the CLI, a test) should get
+a real answer rather than a silent skip; it is the *loop* that backs off. This also means the chaos
+test -- which drives `sync_with_peer` directly -- still exercises the limiter rather than the
+backoff, and `spec/18` says so rather than letting a reader assume otherwise.
+
+**Residual.** A 429 on `fetch_events` is both recorded as a backoff and counted as a per-event fetch
+failure, so it is double-counted. `Retry-After` is consumed by the sync client only; `oag-api`'s
+outgoing calls (gateway, crawler) do not consume it. Both are recorded rather than hidden.

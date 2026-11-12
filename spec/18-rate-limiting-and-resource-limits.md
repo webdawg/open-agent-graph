@@ -59,6 +59,21 @@ Both limiters now send `Retry-After`, computed from the window they already trac
 possible retry is stated rather than left to the client. The window is fixed, so the value is
 derivable: at most 60 seconds.
 
+### The sync client consumes it, and the gossip loop honours it
+
+`SyncClient` turns a 429 into a distinct `SyncClientError::RateLimited { retry_after }` rather than
+letting `error_for_status` flatten it into "the peer failed". That distinction matters: a 429 is
+advice about *when* to retry, and treating it as a dead peer is what produces the flood.
+
+`SyncService` records a per-address deadline from it, and `gossip::sync_round` skips any address
+still inside that window. A peer that shortens its window cannot have an older, longer deadline
+overwritten by a shorter one -- the later of the two is kept.
+
+`sync_with_peer` itself still attempts the request when called directly, so a one-shot caller (the
+CLI, a test) gets a real answer rather than a silent skip; it is the *loop* that backs off. The
+`fifty_peers_converge_after_chaos` test drives `sync_with_peer` directly and so still exercises the
+rate limiter rather than the backoff -- it is a stress test, not a model of the gossip loop.
+
 ## `oag-reticulum`'s listener had no rate limiting at all — found, fixed
 
 The Reticulum listener answers the identical calls `oag-sync`'s HTTP endpoints do but had no
