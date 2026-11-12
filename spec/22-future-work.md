@@ -59,6 +59,25 @@ DNS-record-publishing/dynamic-DNS integration (the operator publishes the record
 any wiring of DNS resolution into `oag-sync`'s automatic discovery/gossip/bootstrap path — both
 deliberately scoped out, not oversights.
 
+## NAT traversal and UDP hole punching
+
+Not implemented. Add a future peer-connectivity path for OAG nodes behind consumer or carrier-grade
+NAT, so operators are not required to expose a public listener or manually configure port
+forwarding before two peers can connect directly.
+
+The intended investigation includes external-endpoint discovery (STUN or decentralized peer
+observation), authenticated exchange of short-lived connection candidates, simultaneous UDP hole
+punching over a UDP-capable transport such as QUIC/libp2p, keepalives and NAT-rebinding handling,
+and a relay fallback when direct traversal is impossible. IPv6 direct connectivity should remain
+a first-class path rather than being forced through IPv4 NAT machinery.
+
+Transport discovery must never become identity: an observed address is only a routing hint. The
+existing peer-id/public-key and signed-message checks remain authoritative after a connection is
+established. Candidate exchange must also be designed against endpoint spoofing, reflection, and
+amplification abuse. Existing static/bootstrap addressing and manually exposed listeners must keep
+working unchanged. No transport, discovery service, relay protocol, or configuration surface is
+selected yet; this is a future TODO, not a present guarantee.
+
 ## Native IPFS integration
 
 **Phase 1 and 2 implemented** — see [29-ipfs-pinning.md](29-ipfs-pinning.md). Evidence content

@@ -306,6 +306,13 @@ remain not yet implemented and change nothing described elsewhere in this docume
   `spec/30-long-word-addressing.md`. Scoped to `PeerId` only (a `NodeId` has no network target to
   resolve to); not wired into `oag-sync`'s automatic discovery/gossip path; no automatic DNS-record
   publishing (the operator publishes it themselves).
+- NAT traversal and UDP hole punching. Not built: peers behind consumer or carrier-grade NAT still
+  need a publicly reachable/static address, manual port forwarding, or an existing overlay
+  transport. Future work should investigate authenticated endpoint discovery, simultaneous UDP
+  punching over a UDP-capable transport such as QUIC/libp2p, NAT rebinding/keepalives, IPv6 direct
+  connectivity, and relay fallback when direct traversal fails. A discovered address remains only
+  a routing hint; peer-id/public-key verification stays authoritative. See
+  `spec/22-future-work.md`.
 - Self-hosted roadmap governance: rather than a second, separate blockchain for "what should be built
   next" (`USER_INPUT_RECORD.md`, Entry 2), reuse OAG's own assertion/evidence/corroboration machinery
   pointed at itself. **Implemented** — `(proposal, instance_of, concept:oag-roadmap-proposal)` is

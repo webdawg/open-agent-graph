@@ -79,8 +79,9 @@ Also built:
 
 Captured, not yet built — see `docs/architecture.md`'s "What's deliberately not built yet" and
 [`spec/22-future-work.md`](spec/22-future-work.md): a real multi-peer trust-consensus mechanism,
-ephemeral (sub-second) micro-networks with sensor input as a graph "packet," and flood/broadcast
-propagation for traffic-analysis resistance.
+ephemeral (sub-second) micro-networks with sensor input as a graph "packet," flood/broadcast
+propagation for traffic-analysis resistance, and NAT traversal with UDP hole punching plus relay
+fallback for peers without publicly reachable listeners.
 
 **One layer up, in a separate repository**: [`oag-mesh`](https://github.com/webdawg/oag-mesh)
 bridges multiple peer clusters together and corroborates claims/content across independent
