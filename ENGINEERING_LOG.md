@@ -1492,8 +1492,8 @@ shared error counter; a backed-off one does not).
 and so still exercises the limiter rather than the backoff -- stated in `spec/18` rather than left
 for a reader to assume the loop was measured.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `5772e11`.
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** A 429 on `fetch_events` is recorded as a backoff *and* counted as a
 per-event fetch failure, so it is double-counted. `Retry-After` is honoured by the sync client only;
 `oag-api`'s own outgoing calls (the gateway, the crawler) do not consume it either.
