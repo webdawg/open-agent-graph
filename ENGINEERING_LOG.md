@@ -1101,3 +1101,35 @@ was already O(evidence items) and still is.
 **Remaining defects.** A caller can assert distinct `content_hash` values for identical content and
 regain the independence the grouping removes; `content_hash` is caller-asserted on the REST/MCP
 path. Documented in `spec/06`.
+
+---
+
+## 2026-11-09 — per-store heads in the mesh anti-entropy pull
+
+**Repository:** `oag-mesh`
+**Files modified:** `crates/oag-mesh/src/transport.rs`, `spec/10-anti-entropy.md`,
+`OPEN_QUESTIONS.md`.
+
+**Feature implemented.** `pull_and_merge` recorded a peer's `StoreHeads` only when *every*
+attempted store pull succeeded. With one persistently failing store that condition never became
+true, so no heads were ever recorded and all five stores were re-pulled in full on every tick,
+forever. Heads are now recorded per store: a failed store keeps its previous version, or
+`UNKNOWN_VERSION` (`u64::MAX`, which no monotonic sequence reports) when there is none, so it is
+retried while the healthy stores are not.
+
+**Tests executed.** `cargo test -p oag-mesh`: 190 passed, 0 failed (was 188). New tests:
+`a_failing_store_is_retried_without_re_pulling_the_healthy_ones` (integration -- the failing
+endpoint is fetched on both ticks, the healthy one on the first only),
+`merge_heads_records_each_store_independently` (unit).
+
+**Performance measurements.** Not benchmarked, but the effect is a full five-store snapshot fetch
+becoming a single failing-store fetch on each tick once one store is persistently broken. The
+healthy case is unchanged.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** The in-memory merges across a pull are still not atomic, and `save_to_dir`
+remains the embedder's call. Found while re-reading the open question: **no code in either
+repository calls `save_to_dir`/`load_from_dir`** -- `open-agent-graph` does not depend on
+`oag-mesh` yet, so the persistence layer is correct and tested but unreachable in production.
+Recorded in `oag-mesh/OPEN_QUESTIONS.md`.
