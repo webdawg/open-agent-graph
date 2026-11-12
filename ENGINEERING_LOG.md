@@ -253,6 +253,14 @@ comparison a control rather than a fitted curve.
   SimHash's per-bit vote margin scales with `sqrt(N)`, so a fixed-size edit is relatively larger
   in a smaller sample and flips more bits. The unit budget is therefore a sensitivity dial as well
   as a memory dial, and "index everything" is the wrong default.
+- `da45c8e` — re-ran the budget sweep at 800/1600/3200 tokens on a coarser budget grid. The
+  1600 peak moved from 25.1% to 49.9% — a 25-point swing from the sampling, against ~2-point
+  run-to-run reproducibility at 800 tokens. The peak is a property of the budget grid, not the
+  document. **Withdraws the previous entry's conclusion**: neither the constant-fraction nor the
+  drifting reading is supported; the three sizes read 33.1%, 49.9%, 41.6%, which is no trend.
+  The unit budget's optimum is not a stable constant fraction; a budget in the 25-50% range is
+  defensible, a specific fraction is not. Cause: detection is a single bit flip in a 200-unit
+  vote, so the rate is a step function of which units the budget includes.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
