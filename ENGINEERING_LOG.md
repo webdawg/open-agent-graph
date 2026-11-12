@@ -1071,8 +1071,8 @@ dropping the handle does not release the repo lock.
 
 **Performance measurements.** None; the change is a file read on startup.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `274ff31` (code), `9007284` (lockfile).
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** None known. The key file is a secret and is written `0o600` on Unix; on
 other platforms it relies on the containing directory's permissions, same as OAG's own
 `identity.key`.
