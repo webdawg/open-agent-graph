@@ -1389,3 +1389,40 @@ signal, not the luck. ~42,000 decisions/sec single-threaded debug build.
 a sweep is the obvious next measurement. Only the TCP carrier feeds back, because it is the only
 carrier that forwards -- a UDP-served node keeps a pad that does not learn. And the reward is binary
 and delayed by the whole downstream chain, so credit assignment across a multi-hop path is coarse.
+
+---
+
+## 2026-11-09 — one log-space step for the pad, and a measured recovery time
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/engine.rs`, `crates/oag-imagination/src/lib.rs`,
+`crates/oag-imagination/examples/convergence.rs`, `spec/02-tensor-pad-routing.md`,
+`RESEARCH_JOURNAL.md`.
+
+**Feature implemented.** `HOP_ANSWERED_GAIN` (1.05) and `HOP_FAILED_PENALTY` (0.90) -- two
+independent round numbers -- are replaced by one log-space step, `HOP_STEP = 0.1`, applied as
+`exp(+HOP_STEP)` for an answered hop and `exp(-HOP_STEP)` for a failed one. The answered/failed
+ratio per comparison is `exp(2 * HOP_STEP)` (~1.22) and the weight-ratio half-life is
+`ln 2 / HOP_STEP` (~6.9 observations). The ratio is what carries meaning, and one step makes the
+memory horizon derivable rather than tuned.
+
+`examples/convergence.rs` gained `--switch-at N`, which changes the answering neighbour mid-run and
+reports when the new neighbour's *weight* overtakes the old one's.
+
+**Tests executed.** `cargo test -p oag-imagination`: 51 passed, 0 failed.
+
+**Performance measurements.**
+- A/B, 4 neighbours, 20,000 decisions, node-0 answering and the rest unreachable: signal arm
+  99.9% on node-0, control arm (old constant reinforcement) 59.6% on an arbitrary node-2.
+- Recovery: `--switch-at 10000` -- the new neighbour's weight overtakes the old one's **1,061
+  decisions** later. That is ~150x the 6.9-observation half-life, and the gap is real: the
+  half-life describes how fast a weight *ratio* moves per observation, but a deeply locked-in
+  neighbour is selected almost every time, so its selection rate falls as its weight falls and the
+  decay slows. Recovering from a ~1000:1 lock-in takes ~1,000 decisions, not ~66.
+
+**Commit identifiers:** `00208cf` (`oag-imagination-random-data-compute`).
+**Push status:** pushed to `origin/master`.
+**Remaining defects.** Choosing `HOP_STEP` is now a stated trade with a measured number attached
+(small step = noise-stable, slow to abandon a failing path; large step = the reverse) rather than two
+unexplained constants. It is still a single global constant -- a per-neighbour or per-path step
+would be the next refinement. And only the TCP carrier feeds outcomes back.

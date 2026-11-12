@@ -287,3 +287,40 @@ multiplicative-weights/Hedge, and reinforcement of routing tables all do this. W
 is the *carrier* as the observation point: the node that routes a hop is not the node that answers,
 so the outcome has to be carried back one step by the forwarding layer. The contribution is that
 plumbing, not the weighting rule.
+
+---
+
+## The pad's step is one parameter, and recovery is much slower than its half-life
+
+**Date:** 2026-11-09. **Repository:** `oag-imagination-random-data-compute`.
+
+**What changed.** `HOP_ANSWERED_GAIN` (1.05) and `HOP_FAILED_PENALTY` (0.90) were two independent
+round numbers. They are now one log-space step, `HOP_STEP = 0.1`: answered multiplies by `exp(STEP)`
+and failed by `exp(-STEP)`, the exponential-weights form. The answered/failed ratio per comparison
+is `exp(2 * STEP)`, and the weight-ratio half-life is `ln 2 / STEP` -- about 6.9 observations.
+
+One parameter rather than two, because the ratio is what carries meaning and a single step makes
+the memory horizon derivable instead of tuned.
+
+**The measurement that complicates it.** `examples/convergence.rs --switch-at 10000` changes the
+answering neighbour mid-run and reports when the new neighbour's *weight* overtakes the old one's:
+**1,061 decisions** after the change.
+
+That is ~150x the 6.9-observation half-life, and the gap is not an error. The half-life describes how
+fast a weight *ratio* moves per observation. A deeply locked-in neighbour is selected almost every
+time, so it is penalised almost every time -- but its selection rate falls as its weight falls, so
+the ratio's decay slows as it proceeds. Recovering from a ~1000:1 lock-in takes ~1,000 decisions,
+not the ~66 a constant-rate reading would predict.
+
+**Two metric mistakes worth recording**, because both made the number look better than it was:
+
+- Comparing *selection counts* since the switch, rather than the pad's weights. The counts carry the
+  whole pre-switch history, so a neighbour that dominated for 10,000 decisions stays "ahead" on
+  counts long after the pad has flipped. That metric reported 2,114; the weight comparison reports
+  1,061.
+- Reading the cumulative share column after a switch. It includes the pre-switch period, so a pad
+  that has fully recovered can still show a large cumulative share for the old neighbour.
+
+**What it means.** A small step is stable against noise and slow to abandon a failing path; a large
+step is the reverse. Neither is wrong, and picking between them is a deployment decision -- which is
+now a stated trade with a measured number attached, rather than two unexplained constants.
