@@ -1046,8 +1046,8 @@ so the surfaces cannot drift. `ORDER BY rank` became `ORDER BY rank, nodes.node_
 **Performance measurements.** None. The cursor path adds one indexed lookup per page (resolving
 the cursor row's current rank); the offset path is unchanged.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `2d28af3`.
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** A corpus change that *reorders* rows across the cursor boundary still
 repeats or skips a row; unfixable by any pagination scheme and documented as such. The Human
 Interface keeps offset-only paging.
