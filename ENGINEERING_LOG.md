@@ -1157,8 +1157,8 @@ an exact measurement, not a sample),
 
 **Performance measurements.** None; the change is a `Vec::resize` at engine construction.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `48c619a` (`oag-imagination-random-data-compute`).
+**Push status:** pushed to `origin/master`.
 **Remaining defects.** `reinforce` only adds, so the pad cannot weaken or dissolve a pathway: a
 path that stops carrying traffic keeps its absolute weight forever. Recorded in `spec/02` and in
 `RESEARCH_JOURNAL.md` as a proposed design (decay) with the measurement that would justify it,
