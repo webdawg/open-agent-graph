@@ -1455,8 +1455,8 @@ from the limiter itself**, 1,971 SQLite lock contention (`database is locked`, c
 105 event fetch failures. So the old label was ~43% right. The count varies between runs (2,486 in
 an earlier run) because it is timing-dependent. None of it blocked convergence.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `cb3d6f4`.
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** `SQLITE_BUSY_SNAPSHOT` (517) is not helped by `busy_timeout` -- WAL mode
 returns it immediately when a read transaction cannot upgrade to a write while another connection
 holds the writer. A single-writer queue would remove it and is not built. No sync client honours
