@@ -147,3 +147,36 @@ adaptive-routing candidate and it *does* forget -- quality is re-learned, and `s
 that it is dropped on restart. It is a liveness signal over peers, not a routing weight over
 neighbours, so the two are complementary rather than competing: the pad decides *which neighbour*,
 link quality decides *which peer to ask first*. Whether they should share a mechanism is open.
+
+---
+
+## Correction: the tensor pad *can* weaken and dissolve -- relatively
+
+**Date:** 2026-11-09. **Repository:** `oag-imagination-random-data-compute`.
+
+**The previous entry over-claimed.** It said the pad "cannot weaken or dissolve" because
+`reinforce` only adds. That is true of the pad's *absolute* values and false of its behaviour.
+`route` computes `point = hash(seed) / u32::MAX * total` and walks the cumulative weights, so the
+chosen neighbour depends only on weight **ratios**. A path that stops carrying traffic therefore
+loses share as others are reinforced and can be out-competed by a newly seeded neighbour. Absolute
+weights never fall, but nothing reads them.
+
+**What the absolute scale actually cost.** The pad is published as the node's representation and
+`combine_pads` adds pads element-wise, so the scale was not free after all: a node that had forwarded
+a million requests dominated one that had forwarded ten, and two nodes' pads were not comparable.
+That is a real defect, just not the one the earlier entry named.
+
+**Consequence adopted.** Pads are normalized to a mean of 1.0 at construction and after every
+reinforcement. Routing is unchanged; the representation becomes comparable and `combine_pads`
+combines two preferences rather than two traffic counts. Verified by
+`two_nodes_with_the_same_preference_produce_the_same_pad`.
+
+**What remains, restated precisely.** The pad cannot *forget*: a path reinforced once keeps its
+weight forever, so a topology change that makes it useless dilutes it but does not remove it. That
+is the honest form of the earlier claim, and it is what a decay term would address. Still a
+proposed design, still needing the convergence measurement to justify a rate.
+
+**Method note.** Worth recording because it is the second time this session that a plausible
+reading of a mechanism was wrong in the direction of making the system look more broken than it
+is. Share-based comparisons and count-based comparisons are different things; the first question to
+ask of any weight is what actually reads it.

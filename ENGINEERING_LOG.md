@@ -1163,3 +1163,31 @@ an exact measurement, not a sample),
 path that stops carrying traffic keeps its absolute weight forever. Recorded in `spec/02` and in
 `RESEARCH_JOURNAL.md` as a proposed design (decay) with the measurement that would justify it,
 rather than implemented on speculation.
+
+---
+
+## 2026-11-09 — the tensor pad is normalized, and a zero slot is seeded
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/engine.rs`, `spec/02-tensor-pad-routing.md`,
+`RESEARCH_JOURNAL.md` (mission-wide records live in `open-agent-graph`).
+
+**Feature implemented.** Pads are normalized to a mean of `PAD_MEAN` (1.0) at construction and
+after every reinforcement. Routing is unchanged -- it reads weight ratios only -- but the pad is no
+longer traffic-volume-weighted where it is published and where `combine_pads` adds two pads
+element-wise. A slot that is missing *or zero* is seeded to the mean of the slots carrying
+information; a zero slot was the same frozen-neighbour trap as a missing one, reachable from a pad
+that came back from the layer below with never-used slots.
+
+**Tests executed.** `cargo test -p oag-imagination`: 49 passed, 0 failed (was 47). New tests:
+`two_nodes_with_the_same_preference_produce_the_same_pad`, `a_zero_slot_is_seeded_like_a_missing_one`;
+`a_neighbour_beyond_the_pad_is_explorable_not_frozen` updated for normalization.
+
+**Performance measurements.** None; the added work is one O(pad length) pass per routing decision,
+and the pad is small.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** The pad cannot forget: a path reinforced once keeps its weight forever, so a
+topology change dilutes it rather than removing it. Restated precisely in `RESEARCH_JOURNAL.md`,
+which also corrects the previous entry's over-claim.
