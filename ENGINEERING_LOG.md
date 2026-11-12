@@ -1191,3 +1191,52 @@ and the pad is small.
 **Remaining defects.** The pad cannot forget: a path reinforced once keeps its weight forever, so a
 topology change dilutes it rather than removing it. Restated precisely in `RESEARCH_JOURNAL.md`,
 which also corrects the previous entry's over-claim.
+
+---
+
+## 2026-11-09 — bound every wait on the imagination TCP carrier
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/socket.rs`, `spec/03-transports.md`.
+
+**Feature implemented.** `INBOUND_READ_TIMEOUT` (30s) closes a connection whose peer completes the
+handshake and then sends nothing; `UPSTREAM_TIMEOUT` (30s) bounds the connect to the next hop and
+the wait for its reply. Before these, a stalling client held a spawned task and a socket for as long
+as it liked, and a black-holed next hop held the task for the OS connect timeout (minutes).
+`serve_on_with_timeouts` exposes the values so a deployment can retune them and a test can make
+them short; `serve`/`serve_on` keep the defaults.
+
+**Tests executed.** `cargo test -p oag-imagination`: 50 passed, 0 failed (was 49). New test:
+`a_client_that_sends_nothing_is_dropped_at_the_inbound_timeout` (50ms timeout, 2s assertion bound).
+
+**Performance measurements.** None; a timeout wrapper per read.
+
+**Commit identifiers:** `c7f64db`.
+**Push status:** pushed to `origin/master`.
+**Remaining defects.** Nothing capped concurrent connections, so many slow clients could still
+exhaust tasks and sockets even though each was finite. Closed in `0d21ee0`; recorded in
+`spec/03-transports.md` rather than left implied.
+
+---
+
+## 2026-11-09 — cap concurrent connections on the imagination carrier
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/socket.rs`,
+`crates/oag-imagination/src/lib.rs`, `spec/03-transports.md`.
+
+**Feature implemented.** `DEFAULT_MAX_CONNECTIONS` (1024) bounds how many connections the TCP
+carrier serves at once, via a semaphore acquired *before* `accept`, so a full server stops taking
+new connections rather than queueing them. `Limits` replaces the `Timeouts` struct from the previous
+commit (the cap is not a timeout); `serve_on_with_limits` exposes it, `serve`/`serve_on` keep the
+defaults. Closes the remaining defect the previous entry named.
+
+**Tests executed.** `cargo test -p oag-imagination`: 51 passed, 0 failed (was 50). New test:
+`a_full_server_does_not_serve_a_second_connection_concurrently`.
+
+**Performance measurements.** None.
+
+**Commit identifiers:** `0d21ee0`.
+**Push status:** pushed to `origin/master`.
+**Remaining defects.** None known for this surface. The UDP carrier has no equivalent cap, and
+`serve_udp` is documented as single-datagram-in/single-datagram-out, so it is a different shape.
