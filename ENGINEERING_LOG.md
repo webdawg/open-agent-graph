@@ -1274,3 +1274,42 @@ pinning provider or a local add. Best-effort, so a pin failure costs a log line 
 **Remaining defects.** None known. The crawl's side-fetch pins are sequential with the main page's,
 so a slow pinning provider adds latency to a crawl; parallelising them would change the failure
 ordering for no correctness gain.
+
+---
+
+## 2026-11-09 — the mesh gains a connection to the layer below
+
+**Repository:** `oag-mesh`
+**Files modified:** `crates/oag-mesh/src/node.rs` (new), `crates/oag-mesh/src/lib.rs`,
+`crates/oag-mesh/Cargo.toml`, `Cargo.toml`, `Cargo.lock`, `spec/08-persistence.md`,
+`OPEN_QUESTIONS.md`.
+
+**Feature implemented.** `node::MeshNodeAdapter` builds a `MeshState` from an existing `oag`
+deployment: identity from `<data-dir>/identity.key` (generated if absent, the same file `oag`
+uses), peers from the base peer's own peer tables, mesh stores from `<data-dir>/mesh/`, and saves
+them back. Base-project addresses are scheme-less and `oag-sync` prepends `http://`; the adapter
+applies the same convention so the addresses are dialable.
+
+**Why this matters.** The mesh had no code connecting it to the layer below. `MeshState::new` takes
+an identity and a peer list, but nothing constructed them from a real deployment, and -- as found
+two invocations ago -- nothing in either repository called `save_to_dir` or `load_from_dir`. The
+commit marker and torn-set refusal had therefore never run outside a test. The adapter is the first
+real caller and makes the mesh standable up next to an existing peer with no new configuration.
+
+The identity is shared deliberately: a `BridgeDeclaration` signed by this node is then attributable
+to a peer that already exists, and the mesh's peer id matches the id the base project uses for that
+node. The adapter reads the base project's files and never writes them.
+
+**Tests executed.** `cargo test -p oag-mesh`: 193 passed, 0 failed (was 190). New tests:
+`the_adapter_loads_the_identity_and_peers_from_an_oag_data_dir`,
+`an_address_that_already_has_a_scheme_is_left_alone`,
+`save_then_load_keeps_the_mesh_state_and_leaves_the_base_files`.
+
+**Performance measurements.** None; the adapter runs at startup and on an operator-triggered save.
+
+**Commit identifiers:** `d4c52a7` (`oag-mesh`).
+**Push status:** pushed to `origin/main`.
+**Remaining defects.** `save_to_dir` still does not create its directory, so the adapter does; a
+caller using `save_to_dir` directly still has to. The base project's identity is loaded or
+generated, so a data directory without `identity.key` gets a fresh mesh identity -- correct for a
+first run, but it means the mesh node and a later-created base peer would not share one.
