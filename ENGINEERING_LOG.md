@@ -246,6 +246,13 @@ comparison a control rather than a fitted curve.
   almost never flips a bit. The decisive quantity is therefore the fraction of *sampled* units that
   changed, not the fraction of positions covered. The absorption floor was inferred from the
   saturation residual, not measured directly.
+- `8ddc2fa` — measured that floor by fixing the edit and sweeping the unit budget (window 3,
+  800 tokens, 8 seeds). The rate is **not monotone**: 0.5%, 2.5%, 5%, 10%, 25%, 48.9%, **86.5%
+  at budget 200**, then 56.2% and 44.9% at budgets 400 and 800. **Hashing every window is worse
+  than sampling 25% of them.** Below the peak the limit is coverage; above it, absorption --
+  SimHash's per-bit vote margin scales with `sqrt(N)`, so a fixed-size edit is relatively larger
+  in a smaller sample and flips more bits. The unit budget is therefore a sensitivity dial as well
+  as a memory dial, and "index everything" is the wrong default.
 **Remaining defects.** SimHash is a majority vote over bit positions, so with very short inputs
 (2–4 tokens) it is decided by noise; the tests were corrected to use realistic-length texts rather
 than asserting on a property the mechanism does not have at that scale. ~~The collision index has no
