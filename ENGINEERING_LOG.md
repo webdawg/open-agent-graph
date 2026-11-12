@@ -1269,8 +1269,8 @@ and exactly four bodies are pinned (the page plus three side-fetches).
 **Performance measurements.** Up to three extra pins per crawled page, each an HTTP call to the
 pinning provider or a local add. Best-effort, so a pin failure costs a log line and nothing else.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `b8e1f71`.
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** None known. The crawl's side-fetch pins are sequential with the main page's,
 so a slow pinning provider adds latency to a crawl; parallelising them would change the failure
 ordering for no correctness gain.
