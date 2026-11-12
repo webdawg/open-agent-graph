@@ -516,3 +516,33 @@ relative order while every one of their ranks moved (`-2.0000e-6` became `-1.965
   pagination contracts agree on where a page boundary falls inside a run of tied rows.
 
 **Status.** Accepted.
+
+---
+
+## ADR-013 — The embedded IPFS node keeps a persistent libp2p identity
+
+**Decision.** `EmbeddedIpfsProvider` loads its libp2p secret key from `<repo>/libp2p.key` --
+32 raw ed25519 bytes, generated with `OsRng` on first run, written `0o600` on Unix -- and passes
+it to `DefaultIpfsBuilder::with_keypair` instead of `new()`.
+
+**Context.** `IpfsBuilder::new()` generates a fresh keypair on every call. The node's dial address
+is `<multiaddr>/p2p/<peer-id>`, so every `oag serve` start advertised a new address, and a browser
+holding the previous `/ipfs-site/{cid}` bootstrap page could not reach the node until it
+reloaded. The original rationale for leaving it was that bitswap addresses content by CID rather
+than by peer identity -- true of content *routing*, but the bootstrap page's entire job is to hand
+the browser a dial address, and that address is the peer identity.
+
+**Consequences.**
+- A restart keeps the same dial address, which is the same posture as OAG's own peer identity: a
+  process restart is not an identity change.
+- A wrong-length key file is a hard error, not a silent regeneration. Losing the key changes the
+  node's address -- the one thing persistence exists to keep stable -- so quietly replacing it
+  would hide exactly the failure an operator needs to see. The file is left in place for the
+  operator to fix.
+- The key is separate from OAG's peer identity. Sharing one key across the two roles would make
+  the dial address an identity assertion about the OAG peer, collapsing two distinct
+  responsibilities.
+- Existing deployments without the file generate one on first start, so the change is not a
+  migration.
+
+**Status.** Accepted.

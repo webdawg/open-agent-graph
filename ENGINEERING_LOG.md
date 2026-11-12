@@ -1051,3 +1051,28 @@ the cursor row's current rank); the offset path is unchanged.
 **Remaining defects.** A corpus change that *reorders* rows across the cursor boundary still
 repeats or skips a row; unfixable by any pagination scheme and documented as such. The Human
 Interface keeps offset-only paging.
+
+---
+
+## 2026-11-09 — the embedded IPFS node keeps a stable dial identity
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-ipfs/src/embedded.rs`, `crates/oag-ipfs/Cargo.toml`,
+`spec/29-ipfs-pinning.md`, `ARCHITECTURE_DECISIONS.md`.
+
+**Feature implemented.** `EmbeddedIpfsProvider::new` loads or creates `<repo>/libp2p.key` and
+builds with `DefaultIpfsBuilder::with_keypair` instead of `new()`, which generated a fresh
+keypair per call. Added `peer_id()` and `shutdown()` accessors; `shutdown()` is needed because
+dropping the handle does not release the repo lock.
+
+**Tests executed.** `cargo test -p oag-ipfs`: 14 passed, 0 failed (was 11). New tests:
+`the_libp2p_identity_survives_a_restart`, `a_corrupt_identity_file_is_refused_rather_than_regenerated`,
+`the_persisted_identity_is_owner_only`.
+
+**Performance measurements.** None; the change is a file read on startup.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** None known. The key file is a secret and is written `0o600` on Unix; on
+other platforms it relies on the containing directory's permissions, same as OAG's own
+`identity.key`.

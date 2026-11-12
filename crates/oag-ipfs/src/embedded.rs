@@ -1,13 +1,66 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
 use futures::StreamExt;
 use rust_ipfs::builder::DefaultIpfsBuilder;
 use rust_ipfs::unixfs::ll::dir::builder::{BufferingTreeBuilder, TreeOptions};
-use rust_ipfs::{Block, Ipfs, IpfsPath, Multiaddr};
+use rust_ipfs::{Block, Ipfs, IpfsPath, Multiaddr, PeerId};
 
 use crate::error::IpfsError;
 use crate::provider::PinningProvider;
+
+/// Name of the file under the IPFS repo directory holding this node's libp2p secret key.
+const KEY_FILE: &str = "libp2p.key";
+
+/// Load this node's libp2p secret key from `repo_path`, generating and persisting one on first
+/// run.
+///
+/// `rust-ipfs`'s own builder has `with_keychain_identity`, which would do this against its
+/// keystore; this keeps the key in the same directory as the rest of the node's state and in
+/// the same 32-byte raw-secret form `oag_crypto::PeerIdentity` already uses
+/// (`crates/oag-crypto/src/identity.rs`), so one convention covers both. Deliberately *not*
+/// the OAG peer identity: those are two different roles, and sharing a key across them would
+/// make the node's dial address an identity assertion about its OAG peer.
+///
+/// A file of the wrong length is an error rather than a silent regeneration. Losing the key
+/// changes the node's dial address, which is the one thing this function exists to keep
+/// stable; replacing it quietly would hide exactly the failure the operator needs to see.
+fn load_or_create_keypair(repo_path: &Path) -> Result<Vec<u8>, IpfsError> {
+    let key_path = repo_path.join(KEY_FILE);
+    match std::fs::read(&key_path) {
+        Ok(bytes) if bytes.len() == 32 => Ok(bytes),
+        Ok(bytes) => Err(IpfsError::Embedded(format!(
+            "{} must be 32 bytes, got {}; refusing to start with a different libp2p identity",
+            key_path.display(),
+            bytes.len()
+        ))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            use rand::rngs::OsRng;
+            use rand::RngCore;
+            let mut bytes = [0u8; 32];
+            OsRng.fill_bytes(&mut bytes);
+            std::fs::write(&key_path, bytes).map_err(|e| {
+                IpfsError::Embedded(format!("failed to persist {}: {e}", key_path.display()))
+            })?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600))
+                    .map_err(|e| {
+                        IpfsError::Embedded(format!(
+                            "failed to restrict {} to owner-only: {e}",
+                            key_path.display()
+                        ))
+                    })?;
+            }
+            Ok(bytes.to_vec())
+        }
+        Err(e) => Err(IpfsError::Embedded(format!(
+            "failed to read {}: {e}",
+            key_path.display()
+        ))),
+    }
+}
 
 /// A real IPFS node embedded directly in this process -- no separate daemon,
 /// matching this project's "single self-contained binary" posture (unlike
@@ -33,8 +86,13 @@ impl EmbeddedIpfsProvider {
     /// `/ip4/0.0.0.0/tcp/<port-or-0>/ws` entry, the only transport a browser
     /// can dial directly.
     pub async fn new(repo_path: PathBuf, listen_addrs: Vec<Multiaddr>) -> Result<Self, IpfsError> {
-        let ipfs = DefaultIpfsBuilder::new()
-            .set_path(repo_path)
+        let keypair = load_or_create_keypair(&repo_path)?;
+        // Not `DefaultIpfsBuilder::new()`: that generates a fresh keypair on every call, so
+        // this node's dial address would change on each `oag serve` start and a browser
+        // holding the old bootstrap page could not reach it until it reloaded.
+        let ipfs = DefaultIpfsBuilder::with_keypair(keypair)
+            .map_err(|e| IpfsError::Embedded(e.to_string()))?
+            .set_path(&repo_path)
             .with_default()
             .enable_tcp()
             .enable_websocket()
@@ -44,6 +102,21 @@ impl EmbeddedIpfsProvider {
             .await
             .map_err(|e| IpfsError::Embedded(e.to_string()))?;
         Ok(Self { ipfs })
+    }
+
+    /// This node's libp2p [`PeerId`] -- the identity half of every dial address it advertises.
+    pub fn peer_id(&self) -> PeerId {
+        self.ipfs.keypair().public().to_peer_id()
+    }
+
+    /// Shut the node down and release its repository lock.
+    ///
+    /// Dropping the handle is not enough: `rust-ipfs` keeps the repo in the struct, so a
+    /// second provider on the same directory fails with "already being used by an IPFS
+    /// instance" until the process exits. Needed for a clean in-process restart and for any
+    /// test that starts two nodes against one directory.
+    pub async fn shutdown(self) {
+        self.ipfs.exit_daemon().await;
     }
 
     /// This node's own real, bound dial addresses (resolved only after
@@ -228,6 +301,59 @@ mod tests {
 
         let css = provider.fetch(&format!("{root_cid}/css/style.css")).await.unwrap();
         assert_eq!(css, b"body { color: red; }");
+    }
+
+    #[tokio::test]
+    async fn the_libp2p_identity_survives_a_restart() {
+        // `IpfsBuilder::new()` generates a fresh keypair every call, so before this the
+        // node's dial address changed on every `oag serve` start and a browser holding the
+        // old bootstrap page could not reach it until it reloaded.
+        let repo = temp_repo_path("identity");
+        let first = EmbeddedIpfsProvider::new(repo.clone(), vec![]).await.unwrap();
+        let first_id = first.peer_id();
+        assert!(repo.join("libp2p.key").exists(), "the key must be persisted");
+        first.shutdown().await;
+
+        let second = EmbeddedIpfsProvider::new(repo.clone(), vec![]).await.unwrap();
+        assert_eq!(
+            second.peer_id(),
+            first_id,
+            "a restart must not change the node's dial identity"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_corrupt_identity_file_is_refused_rather_than_regenerated() {
+        // Losing the key changes the node's address, which is the one thing persistence
+        // exists to keep stable. Regenerating quietly would hide exactly that failure.
+        let repo = temp_repo_path("identity-corrupt");
+        std::fs::create_dir_all(&repo).unwrap();
+        std::fs::write(repo.join("libp2p.key"), b"too short").unwrap();
+
+        // Matched rather than `unwrap_err`, which would require `EmbeddedIpfsProvider: Debug`.
+        let error = match EmbeddedIpfsProvider::new(repo.clone(), vec![]).await {
+            Ok(_) => panic!("a corrupt key file must not start"),
+            Err(error) => error,
+        };
+        let message = error.to_string();
+        assert!(message.contains("must be 32 bytes"), "unexpected error: {message}");
+
+        // The file is left for the operator to fix; the node does not overwrite it.
+        assert_eq!(std::fs::read(repo.join("libp2p.key")).unwrap(), b"too short");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn the_persisted_identity_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let repo = temp_repo_path("identity-permissions");
+        let _provider = EmbeddedIpfsProvider::new(repo.clone(), vec![]).await.unwrap();
+        let mode = std::fs::metadata(repo.join("libp2p.key")).unwrap().permissions().mode();
+        assert_eq!(
+            mode & 0o077,
+            0,
+            "the libp2p secret must not be group- or world-readable, got {mode:o}"
+        );
     }
 
     #[tokio::test]

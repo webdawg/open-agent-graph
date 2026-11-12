@@ -136,6 +136,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 - **`blob_store_size` metric is unbuilt** because no blob store exists (`spec/29`'s `blobs/<hash>`
   is itself unimplemented).
 
+## Completed recently
+
+- **Keyset pagination** (`cursor` / `--cursor`) on REST, MCP, and CLI. The cursor names the last
+  row's `node_id`, not its rank, because FTS5's bm25 rank moves with the corpus.
+- **The embedded IPFS node's libp2p identity is persisted** (`<repo>/libp2p.key`), so a restart
+  keeps the same dial address. ADR-013.
+
 ## Next priorities
 
 1. **rust-ai static page hosting follow-ups** — crawler side-fetch pinning, scheduled backup

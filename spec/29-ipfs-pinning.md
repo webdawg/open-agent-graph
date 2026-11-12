@@ -233,7 +233,29 @@ tested.
   support `wasm32`, confirmed via its own `wasm-example`) instead of the JS/Helia bundle — a
   genuinely interesting "one codebase instead of two" direction, not pursued here since it would
   mean replacing already-working, already-tested JS with a from-scratch port for no immediate gain.
-- `EmbeddedIpfsProvider`'s own libp2p keypair is not persisted across restarts (a fresh identity,
-  and so a fresh dial address, every `oag serve` start) — fine for content delivery (bitswap
-  addresses by CID, not by peer identity), but means a browser must reload the bootstrap page
-  after a restart to get the new dial address; not solved with new persistence machinery here.
+
+## Resolved later: the embedded node's libp2p identity
+
+This was on the deferred list above: `EmbeddedIpfsProvider`'s libp2p keypair was not persisted,
+so every `oag serve` start produced a fresh identity and a fresh dial address, and a browser
+holding the previous bootstrap page could not reach the node until it reloaded.
+
+The rationale recorded at the time -- "fine for content delivery (bitswap addresses by CID, not
+by peer identity)" -- was wrong in a way that mattered. The dial address *is* the peer identity,
+and the bootstrap page's whole job is to hand that address to the browser. An ephemeral identity
+also runs against this project's standing posture that a peer's identity is stable and
+cryptographic.
+
+`IpfsBuilder::new()` generates a fresh keypair on every call, which was the cause. The key is now
+loaded from `<repo>/libp2p.key` -- 32 raw ed25519 bytes, generated with `OsRng` on first run,
+written `0o600` on Unix, matching the convention `oag_crypto::PeerIdentity` already uses. A file
+of the wrong length is a hard error rather than a silent regeneration: losing the key changes the
+node's address, which is the one thing persistence exists to keep stable, and quietly replacing
+it would hide exactly the failure an operator needs to see.
+
+The key is deliberately **not** OAG's own peer identity. Those are two roles, and sharing a key
+would make the dial address an identity assertion about the OAG peer.
+
+Also added: `shutdown()`, because dropping the handle does not release the repo lock
+(`rust-ipfs` keeps the repo in the struct), so an in-process restart or a test starting two
+nodes against one directory would otherwise fail with "already being used by an IPFS instance".
