@@ -74,6 +74,21 @@ impl CrawlerService {
         }
     }
 
+    /// Pin `content` best-effort and return its CID.
+    ///
+    /// A pin failure is logged and skipped rather than propagated: the evidence is recorded
+    /// either way, because pinning is enrichment on top of an assertion that is already worth
+    /// making. Same posture as the main page's pin.
+    async fn pin_best_effort(&self, content: &[u8], what: &str) -> Option<String> {
+        match self.pinning_provider.pin(content).await {
+            Ok(cid) => Some(cid),
+            Err(err) => {
+                tracing::warn!(error = %err, what, "IPFS pin failed, continuing without a CID");
+                None
+            }
+        }
+    }
+
     pub fn crawls_total(&self) -> u64 {
         self.crawls_total.load(Ordering::Relaxed)
     }
@@ -169,13 +184,7 @@ impl CrawlerService {
         // primary page is pinned in Phase 1 (spec/29-ipfs-pinning.md) —
         // the llms.txt/ARD/agent-card side-fetches below are metadata-
         // discovery mechanisms, not primary content, and are left unpinned.
-        let pinned_cid = match self.pinning_provider.pin(&page.body).await {
-            Ok(cid) => Some(cid),
-            Err(err) => {
-                tracing::warn!(error = %err, "IPFS pin failed for crawled page, continuing without a CID");
-                None
-            }
-        };
+        let pinned_cid = self.pin_best_effort(&page.body, "crawled page").await;
 
         let page_evidence = EvidenceInput {
             evidence_type: Some("web_page".to_string()),
@@ -273,11 +282,17 @@ impl CrawlerService {
         if let Ok(llms_url) = url.join("/llms.txt") {
             if let Ok(llms_page) = safe_fetch(&llms_url, &self.config).await {
                 let extracted = extract::llms_txt::parse(&String::from_utf8_lossy(&llms_page.body), &llms_url);
+                // The side-fetches are the evidence for everything extracted from them, so they
+                // are pinned too: an assertion whose backing content is cited by URI but not
+                // retrievable cannot be checked by a third party, which is the whole point of
+                // recording it.
+                let pinned_cid = self.pin_best_effort(&llms_page.body, "llms.txt").await;
                 let evidence = EvidenceInput {
                     evidence_type: Some("documentation".to_string()),
                     uri: Some(llms_url.to_string()),
                     content_hash: Some(llms_page.content_hash.clone()),
                     retrieved_at: Some(now_ts()),
+                    pinned_cid,
                     ..Default::default()
                 };
                 // spec section 79: inclusion in llms.txt does not itself
@@ -290,11 +305,13 @@ impl CrawlerService {
         if let Ok(ard_url) = url.join("/.well-known/ard.json") {
             if let Ok(ard_page) = safe_fetch(&ard_url, &self.config).await {
                 let extracted = extract::ard::parse(&String::from_utf8_lossy(&ard_page.body), &site_origin);
+                let pinned_cid = self.pin_best_effort(&ard_page.body, "ARD").await;
                 let evidence = EvidenceInput {
                     evidence_type: Some("api_response".to_string()),
                     uri: Some(ard_url.to_string()),
                     content_hash: Some(ard_page.content_hash.clone()),
                     retrieved_at: Some(now_ts()),
+                    pinned_cid,
                     ..Default::default()
                 };
                 self.assert_extracted(&auth, &extracted, evidence, 0.7, &mut summary).await;
@@ -305,11 +322,13 @@ impl CrawlerService {
         if let Ok(a2a_url) = url.join("/.well-known/agent-card.json") {
             if let Ok(a2a_page) = safe_fetch(&a2a_url, &self.config).await {
                 let extracted = extract::a2a::parse(&String::from_utf8_lossy(&a2a_page.body), &final_url);
+                let pinned_cid = self.pin_best_effort(&a2a_page.body, "agent card").await;
                 let evidence = EvidenceInput {
                     evidence_type: Some("api_response".to_string()),
                     uri: Some(a2a_url.to_string()),
                     content_hash: Some(a2a_page.content_hash.clone()),
                     retrieved_at: Some(now_ts()),
+                    pinned_cid,
                     ..Default::default()
                 };
                 self.assert_extracted(&auth, &extracted, evidence, 0.7, &mut summary).await;

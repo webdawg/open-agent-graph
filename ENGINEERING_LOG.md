@@ -1240,3 +1240,37 @@ defaults. Closes the remaining defect the previous entry named.
 **Push status:** pushed to `origin/master`.
 **Remaining defects.** None known for this surface. The UDP carrier has no equivalent cap, and
 `serve_udp` is documented as single-datagram-in/single-datagram-out, so it is a different shape.
+
+---
+
+## 2026-11-09 — the crawler pins its side-fetches too
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-crawler/src/crawler.rs`, `crates/oag-crawler/src/tests.rs`,
+`spec/29-ipfs-pinning.md`, `OPEN_QUESTIONS.md`.
+
+**Feature implemented.** The `llms.txt`, ARD, and agent-card bodies are now pinned and their
+`pinned_cid` recorded on the evidence they back, best-effort exactly like the main page's. Extracted
+assertions clone that evidence, so they inherit the CID. The pin block was factored into
+`pin_best_effort` so all four call sites share one failure posture.
+
+**Why the deferred decision was reversed.** The recorded reasoning was that the side-fetches are
+metadata-discovery mechanisms rather than primary content. But they are the *evidence* for every
+relationship extracted from them, and the evidence row carries their URI and content hash. Citing
+an assertion's backing content by URI while leaving the bytes unretrievable makes it unverifiable by
+a third party -- the reason to record the evidence at all. The decision was right about the trade
+and wrong about which side of it those files were on.
+
+**Tests executed.** `cargo test -p oag-crawler`: 75 passed, 0 failed (was 74). The test that
+encoded the old behaviour was rewritten as
+`pinning_provider_cid_lands_on_the_page_and_every_side_fetch`: every evidence item carries the CID
+and exactly four bodies are pinned (the page plus three side-fetches).
+
+**Performance measurements.** Up to three extra pins per crawled page, each an HTTP call to the
+pinning provider or a local add. Best-effort, so a pin failure costs a log line and nothing else.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** None known. The crawl's side-fetch pins are sequential with the main page's,
+so a slow pinning provider adds latency to a crawl; parallelising them would change the failure
+ordering for no correctness gain.

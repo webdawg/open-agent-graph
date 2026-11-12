@@ -144,11 +144,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   keeps the same dial address. ADR-013.
 - **Source independence accounts for mirrored content** -- one article on several domains is one
   source, not several. ADR-014.
+- **The crawler pins its side-fetches** (`llms.txt`, ARD, agent card), so the evidence backing
+  extracted assertions is retrievable rather than cited by URI alone.
 
 ## Next priorities
 
-1. **rust-ai static page hosting follow-ups** — crawler side-fetch pinning, scheduled backup
-   pinning, evidence-body inlining (see `spec/29` "Explicitly deferred").
+1. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
+   inlining remain (see `spec/29` "Explicitly deferred"); crawler side-fetch pinning is done.
 2. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
    proposed, not implemented; both are large and need a design pass before code.
 3. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;

@@ -50,6 +50,10 @@ this phase, it only ever hands the browser a CID and the bundle.
 - **Only the crawler's main page gets auto-pinned.** The `llms.txt`/ARD/agent-card side-fetches a
   crawl also makes are metadata-discovery mechanisms, not primary content a human would want
   independently retrievable, so they're left unpinned in this phase.
+  **Superseded** -- see "Resolved later: the crawler's side-fetches are pinned too" below. The
+  side-fetches are the evidence for what is extracted from them, so leaving them unretrievable
+  made those assertions unverifiable. The decision as written was right about the trade and wrong
+  about which side of it those files were on.
 - **A pin failure never fails the crawl.** Same best-effort-enrichment posture already established
   for malformed LLM-extraction responses (`docs/architecture.md`) — a failed `pin()` call logs a
   warning and the crawl proceeds with `pinned_cid: None`.
@@ -214,7 +218,6 @@ tested.
 
 ## Explicitly deferred
 
-- Pinning the crawler's `llms.txt`/ARD/agent-card side-fetches.
 - Any REST/MCP endpoint for pin/fetch (the new `/ipfs-site/*` routes are GET-only and don't pin
   anything; that stays CLI-only).
 - Automatic/scheduled pinning of backups — `--pin` remains exactly as operator-triggered as
@@ -233,6 +236,24 @@ tested.
   support `wasm32`, confirmed via its own `wasm-example`) instead of the JS/Helia bundle — a
   genuinely interesting "one codebase instead of two" direction, not pursued here since it would
   mean replacing already-working, already-tested JS with a from-scratch port for no immediate gain.
+
+## Resolved later: the crawler's side-fetches are pinned too
+
+This was on the deferred list above: only the main page was pinned, on the reasoning that
+`llms.txt`, ARD, and agent-card are "metadata-discovery mechanisms, not primary content a human
+would want independently retrievable".
+
+That reasoning did not hold up. Those three responses are the **evidence** for every relationship
+extracted from them, and the evidence row carries their URI and content hash. Citing an assertion's
+backing content by URI while leaving the bytes unretrievable means a third party cannot check the
+assertion -- which is the entire reason to record the evidence in the first place. The main page
+got a CID and the side-fetches did not, so the graph was consistent about the page and silent about
+the metadata it was built from.
+
+The side-fetch bodies are now pinned and their `pinned_cid` recorded, best-effort exactly like the
+main page's: a pin failure logs and continues, because the assertion is worth making either way.
+The crawl does up to three more pins per page; `pinning_provider_cid_lands_on_the_page_and_every_side_fetch`
+asserts four pins and a CID on every evidence item.
 
 ## Resolved later: the embedded node's libp2p identity
 

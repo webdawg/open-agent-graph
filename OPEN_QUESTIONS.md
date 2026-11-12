@@ -13,10 +13,12 @@ Format: question, assumption I'm running with, status.
   thin wrapper over the same calls this makes directly. Assumption: same "small hand-rolled
   implementation over a heavyweight crate" posture already used for the Prometheus metrics
   endpoint and `oag-embeddings::OpenAiCompatibleProvider`. Status: resolved.
-- **Only the crawler's main page gets auto-pinned**, not the `llms.txt`/ARD/agent-card side-fetches.
-  Assumption: those are metadata-discovery mechanisms, not primary content a human would want
-  independently retrievable via IPFS, and skipping them keeps Phase 1 scope tight. Status: open
-  (revisit if a real need for pinning the side-fetches shows up).
+- **The crawler's main page *and* its side-fetches are auto-pinned.** This used to pin only the main
+  page, on the reasoning that `llms.txt`/ARD/agent-card are metadata-discovery mechanisms rather
+  than primary content. Revisited, and the reasoning did not hold: those responses are the evidence
+  for every relationship extracted from them, so citing them by URI while leaving the bytes
+  unretrievable makes those assertions unverifiable by a third party. Both are now pinned,
+  best-effort. Status: resolved (`spec/29`).
 - **`pinned_cid` lands in `Evidence.metadata` as `{"ipfs_cid": ...}`, not a new typed column.**
   `metadata: JsonValue` already existed on every evidence row (unused until this feature) — reusing
   it needed zero schema migration, consistent with "don't build for hypothetical future

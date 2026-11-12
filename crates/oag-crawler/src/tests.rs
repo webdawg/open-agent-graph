@@ -382,12 +382,14 @@ impl PinningProvider for FailingPinningProvider {
     }
 }
 
-/// spec/29-ipfs-pinning.md's scoping decision: only the main page's content
-/// gets pinned, not the llms.txt/ARD/agent-card side-fetches -- and every
-/// evidence item built for that page (via `page_evidence.clone()`) inherits
-/// the same CID for free.
+/// The main page *and* the llms.txt/ARD/agent-card side-fetches are pinned.
+///
+/// This used to be the opposite: only the main page was pinned, on the reasoning that the
+/// side-fetches were discovery metadata rather than primary content. But they are the evidence for
+/// everything extracted from them, so citing them by URI while leaving the bytes unretrievable
+/// makes those assertions unverifiable by a third party -- which is the point of recording them.
 #[tokio::test]
-async fn pinning_provider_cid_lands_only_on_the_main_page_evidence() {
+async fn pinning_provider_cid_lands_on_the_page_and_every_side_fetch() {
     let base = spawn_fixture(fixture_router()).await;
     let url = Url::parse(&base).unwrap();
 
@@ -402,29 +404,28 @@ async fn pinning_provider_cid_lands_only_on_the_main_page_evidence() {
     };
     let assertions = graph.list_assertions_for_node(page_node.id).await.unwrap();
 
-    let mut saw_pinned_web_page = false;
-    let mut saw_unpinned_documentation = false;
+    // Every evidence item on the page carries the CID, whatever it was extracted from. The
+    // extracted assertions clone the side-fetch evidence, so they inherit its CID for free.
+    let mut evidence_items = 0;
     for assertion in &assertions {
         for evidence in graph.list_evidence(assertion.id).await.unwrap() {
-            match evidence.evidence_type {
-                oag_core::EvidenceType::WebPage => {
-                    assert_eq!(evidence.metadata, serde_json::json!({ "ipfs_cid": "QmFakeCid" }));
-                    saw_pinned_web_page = true;
-                }
-                oag_core::EvidenceType::Documentation => {
-                    assert_eq!(evidence.metadata, serde_json::json!({}));
-                    saw_unpinned_documentation = true;
-                }
-                _ => {}
-            }
+            assert_eq!(
+                evidence.metadata,
+                serde_json::json!({ "ipfs_cid": "QmFakeCid" }),
+                "{:?} evidence should carry a CID",
+                evidence.evidence_type
+            );
+            evidence_items += 1;
         }
     }
-    assert!(saw_pinned_web_page, "expected the main page's web_page evidence to carry a CID");
-    assert!(saw_unpinned_documentation, "expected llms.txt's documentation evidence to stay unpinned");
+    assert!(
+        evidence_items >= 4,
+        "expected the page and three side-fetches to be recorded, got {evidence_items} evidence items"
+    );
     assert_eq!(
         pinner.pin_calls.load(std::sync::atomic::Ordering::Relaxed),
-        1,
-        "only the main page body should be pinned, not the auxiliary llms.txt/ARD/agent-card fetches"
+        4,
+        "the page body and each of the three side-fetch bodies should be pinned exactly once"
     );
 }
 
