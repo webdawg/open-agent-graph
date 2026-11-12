@@ -1126,8 +1126,8 @@ endpoint is fetched on both ticks, the healthy one on the first only),
 becoming a single failing-store fetch on each tick once one store is persistently broken. The
 healthy case is unchanged.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `04869e5` (`oag-mesh`).
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** The in-memory merges across a pull are still not atomic, and `save_to_dir`
 remains the embedder's call. Found while re-reading the open question: **no code in either
 repository calls `save_to_dir`/`load_from_dir`** -- `open-agent-graph` does not depend on
