@@ -1076,3 +1076,28 @@ dropping the handle does not release the repo lock.
 **Remaining defects.** None known. The key file is a secret and is written `0o600` on Unix; on
 other platforms it relies on the containing directory's permissions, same as OAG's own
 `identity.key`.
+
+---
+
+## 2026-11-09 — source independence accounts for mirrored content
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-graph/src/corroboration.rs`, `crates/oag-graph/src/tests.rs`,
+`spec/06-corroboration-and-authority.md`, `ARCHITECTURE_DECISIONS.md`.
+
+**Feature implemented.** `source_independence` now groups evidence by the connected components of
+two relations -- same control group, or same `content_hash` -- instead of the control group alone.
+One article syndicated to several domains was previously scored as several independent sources.
+
+**Tests executed.** `cargo test -p oag-graph`: 101 passed, 0 failed (was 98). New tests:
+`identical_content_on_two_domains_is_one_source_not_two`,
+`distinct_content_on_one_domain_is_still_one_source`, `union_find_joins_transitively_and_is_deterministic`.
+
+**Performance measurements.** None; the extra work is one hash map per corroboration query, which
+was already O(evidence items) and still is.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** A caller can assert distinct `content_hash` values for identical content and
+regain the independence the grouping removes; `content_hash` is caller-asserted on the REST/MCP
+path. Documented in `spec/06`.

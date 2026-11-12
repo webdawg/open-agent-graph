@@ -75,6 +75,38 @@ pub(crate) fn control_group_for_uri(uri: &str) -> Option<String> {
 /// specification or the source code itself is much harder to fake than a
 /// web page. Deliberately kept separate from `source_independence` (spec
 /// section 65: don't collapse signals) — this is about quality, not breadth.
+/// Minimal union-find, used to group evidence items into sources by connected components.
+struct UnionFind {
+    parent: Vec<usize>,
+}
+
+impl UnionFind {
+    fn new(n: usize) -> Self {
+        Self { parent: (0..n).collect() }
+    }
+
+    fn find(&mut self, i: usize) -> usize {
+        let mut root = i;
+        while self.parent[root] != root {
+            root = self.parent[root];
+        }
+        let mut cur = i;
+        while self.parent[cur] != cur {
+            let next = self.parent[cur];
+            self.parent[cur] = root;
+            cur = next;
+        }
+        root
+    }
+
+    fn union(&mut self, a: usize, b: usize) {
+        let (ra, rb) = (self.find(a), self.find(b));
+        if ra != rb {
+            self.parent[rb] = ra;
+        }
+    }
+}
+
 fn evidence_type_weight(t: EvidenceType) -> f32 {
     match t {
         EvidenceType::Specification => 1.0,
@@ -198,29 +230,33 @@ impl GraphService {
 
         let distinct_actors: BTreeSet<_> = active.iter().copied().map(|a| a.actor_id).collect();
 
-        // Control-group key -> the strongest evidence weight seen for that
-        // group (0.0 for a bare claim with no URI-bearing evidence).
-        let mut group_weights: HashMap<String, f32> = HashMap::new();
+        // One entry per evidence item, carrying *both* identities it can be grouped by -- the
+        // content it carries and the source it came from -- plus the weight it contributes. A
+        // bare claim with no evidence has only a source key, at weight 0.0.
+        let mut items: Vec<(Option<String>, String, f32)> = Vec::new();
         let mut observation_scores: Vec<f32> = Vec::new();
 
         for assertion in active.iter().copied() {
             let evidence = assertions_repo::list_evidence(&mut conn, assertion.id).await?;
             if evidence.is_empty() {
-                group_weights
-                    .entry(format!("actor:{}", assertion.actor_id.to_hex()))
-                    .or_insert(0.0);
+                items.push((None, format!("actor:{}", assertion.actor_id.to_hex()), 0.0));
             } else {
                 for item in &evidence {
-                    let group = item
+                    // `content_hash` is computed from the fetched body by the crawler, so two
+                    // URIs carrying the same hash are the same article -- and one article
+                    // syndicated to several domains is one source, the same failure spec
+                    // section 62 warns about with a different surface.
+                    let content_key = item
+                        .content_hash
+                        .as_deref()
+                        .filter(|hash| !hash.is_empty())
+                        .map(|hash| format!("content:{hash}"));
+                    let source_key = item
                         .uri
                         .as_deref()
                         .and_then(control_group_for_uri)
                         .unwrap_or_else(|| format!("actor:{}", assertion.actor_id.to_hex()));
-                    let weight = evidence_type_weight(item.evidence_type);
-                    let entry = group_weights.entry(group).or_insert(0.0);
-                    if weight > *entry {
-                        *entry = weight;
-                    }
+                    items.push((content_key, source_key, evidence_type_weight(item.evidence_type)));
                 }
             }
 
@@ -228,7 +264,52 @@ impl GraphService {
             observation_scores.extend(observations.iter().map(|o| verify_result_weight(&o.result)));
         }
 
-        let mut source_groups: Vec<String> = group_weights.keys().cloned().collect();
+        // Grouping is the *union* of the two relations, not either one alone: one organization
+        // is one source even when it publishes many distinct articles, and one article is one
+        // source even when many organizations carry it. Neither relation implies the other --
+        // two distinct domains can carry identical text, and one domain can carry distinct
+        // text -- so the grouping is the connected components of the graph that has an edge
+        // for each relation.
+        let mut uf = UnionFind::new(items.len());
+        let mut first_with_key: HashMap<&str, usize> = HashMap::new();
+        for (i, (content_key, source_key, _)) in items.iter().enumerate() {
+            for key in content_key.iter().chain(std::iter::once(source_key)) {
+                match first_with_key.get(key.as_str()) {
+                    Some(&first) => uf.union(first, i),
+                    None => {
+                        first_with_key.insert(key, i);
+                    }
+                }
+            }
+        }
+
+        // Per component: the strongest weight, and how many members carry each key. The
+        // reported label is the key the members actually share -- the reason they are one
+        // source -- falling back to the smallest key when the component is a singleton.
+        let mut weights: HashMap<usize, f32> = HashMap::new();
+        let mut keys_per_component: HashMap<usize, HashMap<String, usize>> = HashMap::new();
+        for (i, (content_key, source_key, weight)) in items.iter().enumerate() {
+            let root = uf.find(i);
+            weights.insert(root, weights.get(&root).copied().unwrap_or(0.0).max(*weight));
+            let keys = keys_per_component.entry(root).or_default();
+            if let Some(content_key) = content_key {
+                *keys.entry(content_key.clone()).or_insert(0) += 1;
+            }
+            *keys.entry(source_key.clone()).or_insert(0) += 1;
+        }
+
+        let mut source_groups: Vec<String> = keys_per_component
+            .values()
+            .map(|keys| {
+                keys.iter()
+                    .filter(|(_, &count)| count > 1)
+                    .map(|(key, _)| key)
+                    .min()
+                    .or_else(|| keys.keys().min())
+                    .cloned()
+                    .unwrap_or_default()
+            })
+            .collect();
         source_groups.sort();
         let distinct_source_groups = source_groups.len();
 
@@ -238,10 +319,10 @@ impl GraphService {
         let source_independence =
             ((distinct_source_groups.saturating_sub(1)) as f32 / 2.0).clamp(0.0, 1.0);
 
-        let evidence_strength = if group_weights.is_empty() {
+        let evidence_strength = if weights.is_empty() {
             0.0
         } else {
-            group_weights.values().sum::<f32>() / group_weights.len() as f32
+            weights.values().sum::<f32>() / weights.len() as f32
         };
 
         // Retracted/superseded assertions are lifecycle, not disagreement
@@ -337,6 +418,23 @@ mod tests {
         assert_eq!(identity_assurance_score(&actor_with(None, Some("https://example.com/me"))), 0.3);
         assert_eq!(identity_assurance_score(&actor_with(Some([1u8; 32]), None)), 0.7);
         assert_eq!(identity_assurance_score(&actor_with(Some([1u8; 32]), Some("https://example.com/me"))), 1.0);
+    }
+
+    #[test]
+    fn union_find_joins_transitively_and_is_deterministic() {
+        // The grouping question is connectivity, not pairwise equality: A shares a content
+        // hash with B, and B shares a domain with C, so all three are one source even though
+        // A and C share nothing directly.
+        let mut uf = UnionFind::new(4);
+        uf.union(0, 1);
+        uf.union(1, 2);
+        let (a, b, c, d) = (uf.find(0), uf.find(1), uf.find(2), uf.find(3));
+        assert_eq!(a, b);
+        assert_eq!(b, c, "connectivity must be transitive");
+        assert_ne!(a, d, "an item sharing no key stays its own source");
+
+        // Path compression must not change the answer.
+        assert_eq!(uf.find(2), uf.find(0));
     }
 
     #[test]

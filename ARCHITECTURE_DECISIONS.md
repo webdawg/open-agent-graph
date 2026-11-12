@@ -546,3 +546,39 @@ the browser a dial address, and that address is the peer identity.
   migration.
 
 **Status.** Accepted.
+
+---
+
+## ADR-014 — Source independence is the union of two relations
+
+**Decision.** `source_independence` groups evidence by the connected components of two relations
+together: same control group (registrable domain, with the multi-tenant-host exception) **or** same
+`content_hash`. A component's label is the key its members share, or the smallest key for a
+singleton.
+
+**Context.** The grouping was by registrable domain alone. That covers spec section 62's case --
+ten sources under one organization are not ten confirmations -- but misses the mirror case: one
+article syndicated to several domains is one source, not several, and it scored as independent
+corroboration. `content_hash` is computed from the fetched body by the crawler, so equal hashes mean
+equal bytes.
+
+Neither relation implies the other, which is why the grouping is their union rather than either one
+alone:
+
+- Two distinct domains *can* carry identical text, so content must be able to join across domains.
+- One domain *can* carry distinct text, so the domain must still join across articles -- otherwise
+  the fix would silently split every multi-article organization into one source per article and
+  inflate `source_independence` for exactly the case section 62 was written about.
+
+**Consequences.**
+- A mirrored article collapses to one source, labelled `content:<hash>` -- the label names the
+  reason for the collapse.
+- A multi-article organization stays one source, labelled by its domain, exactly as before.
+- `evidence_strength` averages per component as before, so merging components changes the mean
+  only where a merge actually occurred.
+- `content_hash` is caller-asserted on the REST/MCP path, so a caller can assert distinct hashes for
+  identical content and evade the collapse. This is the same posture OAG already takes with
+  `content_hash` and `uri`: caller-asserted fields are assertions, not verified facts. Recorded in
+  `spec/06` rather than implied away.
+
+**Status.** Accepted.

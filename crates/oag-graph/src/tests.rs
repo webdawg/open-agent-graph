@@ -492,6 +492,74 @@ async fn common_control_evidence_collapses_source_independence() {
 }
 
 #[tokio::test]
+async fn identical_content_on_two_domains_is_one_source_not_two() {
+    // The mirror case: one article syndicated to two domains. Spec section 62's warning is
+    // about control -- ten sources under one organization are not ten confirmations -- and
+    // this is the same failure with a different surface. `content_hash` is the signal that
+    // the two items are the same article; without it the domains differ and the edge would
+    // score as two independent sources.
+    let (service, auth_a) = service_with_admin("corroboration-mirror").await;
+    let auth_b = declare_actor_with_perms(&service, "actor-b", vec![Permission::GraphAssert]).await;
+
+    let mut first =
+        evidenced_input("https://example.com/mirror", "https://mirror-a.example/article", "web_page");
+    first.evidence[0].content_hash = Some("blake3:same-article".to_string());
+    let a1 = service.assert(&auth_a, first).await.unwrap();
+
+    let mut second =
+        evidenced_input("https://example.com/mirror", "https://mirror-b.example/article", "web_page");
+    second.evidence[0].content_hash = Some("blake3:same-article".to_string());
+    service.assert(&auth_b, second).await.unwrap();
+
+    let edge_id = edge_id_of(&service, a1).await;
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(c.distinct_actors, 2);
+    assert_eq!(
+        c.source_groups,
+        vec!["content:blake3:same-article".to_string()],
+        "the two mirrors must collapse into one source, labelled by what they share"
+    );
+    assert_eq!(
+        c.source_independence, 0.0,
+        "one article on two domains is not independent corroboration"
+    );
+}
+
+#[tokio::test]
+async fn distinct_content_on_one_domain_is_still_one_source() {
+    // The other half of the union: the content relation must not *split* a control group that
+    // the domain relation joins. Two different articles from one organization are still one
+    // source, exactly as before.
+    let (service, auth_a) = service_with_admin("corroboration-same-domain").await;
+    let auth_b = declare_actor_with_perms(&service, "actor-b", vec![Permission::GraphAssert]).await;
+
+    let mut first = evidenced_input(
+        "https://example.com/same-domain",
+        "https://github.com/owner/repo-a",
+        "repository",
+    );
+    first.evidence[0].content_hash = Some("blake3:article-one".to_string());
+    let a1 = service.assert(&auth_a, first).await.unwrap();
+
+    let mut second = evidenced_input(
+        "https://example.com/same-domain",
+        "https://github.com/owner/repo-b",
+        "repository",
+    );
+    second.evidence[0].content_hash = Some("blake3:article-two".to_string());
+    service.assert(&auth_b, second).await.unwrap();
+
+    let edge_id = edge_id_of(&service, a1).await;
+    let c = service.get_edge_corroboration(edge_id).await.unwrap();
+    assert_eq!(
+        c.source_groups,
+        vec!["github.com/owner".to_string()],
+        "one organization is one source even when it publishes distinct articles"
+    );
+    assert_eq!(c.source_independence, 0.0);
+}
+
+#[tokio::test]
 async fn independent_evidence_domains_raise_source_independence() {
     let (service, auth_a) = service_with_admin("corroboration-independent").await;
     let auth_b = declare_actor_with_perms(&service, "actor-b", vec![Permission::GraphAssert]).await;

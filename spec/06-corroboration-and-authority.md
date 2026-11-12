@@ -13,13 +13,44 @@ returns every signal separately, so a caller decides how to weigh them.
 |---|---|
 | `agreement` | Fraction of active assertions on this edge that agree, vs. dispute it |
 | `evidence_strength` | How substantial the attached evidence is (type-weighted, averaged per independent source group, not just counted) |
-| `source_independence` | How many genuinely distinct sources back this — grouped by registrable domain, with an explicit multi-tenant-host exception (ten GitHub repos under different orgs are independent; ten repos under one org are not) |
+| `source_independence` | How many genuinely distinct sources back this. Sources are grouped by two relations taken together: registrable domain (with an explicit multi-tenant-host exception -- ten GitHub repos under different orgs are independent; ten repos under one org are not) *and* content identity (the same `content_hash` on two domains is one syndicated article, not two sources). Either relation alone can join two items, so the grouping is the connected components of the union of both. |
 | `freshness` | Exponential recency decay (6-month half-life) from the most recent active assertion's observed/asserted time |
 | `identity_assurance` | Mean, across the edge's distinct actors, of each actor's identity strength: 1.0 (verified key + identity URI), 0.7 (key only), 0.3 (identity URI only), 0.0 (neither) |
 
 Also reported: `total_assertions`, `active_assertions`, `disputed_assertions`, `distinct_actors`,
 and `source_groups` (sorted, deduplicated control-group keys backing the active assertions, for
 explainability — not just a count).
+
+### Why the grouping is a union of two relations
+
+Spec section 62's warning is about control: ten sources under one organization are not ten
+independent confirmations. That is implemented as grouping by registrable domain (with the
+multi-tenant-host exception above).
+
+The mirror case is the same failure with a different surface and was not covered: **one article
+syndicated to several domains is one source, not several.** `content_hash` is computed from the
+fetched body by the crawler, so two URIs carrying the same hash carry the same bytes. Before this
+was added, two domains serving identical text scored as two independent sources.
+
+Neither relation implies the other, so the grouping is their union, computed as connected
+components:
+
+- Two distinct domains *can* carry identical text (so content must be able to join across
+  domains).
+- One domain *can* carry distinct text (so the domain must still join across articles, as it did
+  before -- two reports from one organization are not two independent confirmations).
+
+A component's reported label is the key its members actually share -- the reason they are one
+source -- falling back to the smallest key for a singleton. So an edge backed by two mirrors
+reports `content:blake3:...`, and an edge backed by two articles from one org reports the org's
+domain.
+
+**Honest limits.** `content_hash` is computed by the crawler, but the REST/MCP evidence path
+accepts it caller-asserted, exactly like `uri`. So a caller can assert distinct hashes for
+identical content and regain the independence the grouping would otherwise remove. That is the
+same posture OAG already takes with `content_hash` elsewhere: caller-asserted fields are
+assertions, not verified facts. The grouping raises the bar for the mirror case; it does not make
+corroboration tamper-proof, and no such claim is made.
 
 ### Freshness and timestamp manipulation
 

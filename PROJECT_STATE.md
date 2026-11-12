@@ -142,6 +142,8 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   row's `node_id`, not its rank, because FTS5's bm25 rank moves with the corpus.
 - **The embedded IPFS node's libp2p identity is persisted** (`<repo>/libp2p.key`), so a restart
   keeps the same dial address. ADR-013.
+- **Source independence accounts for mirrored content** -- one article on several domains is one
+  source, not several. ADR-014.
 
 ## Next priorities
 
