@@ -1353,3 +1353,39 @@ debug build.
 **Push status:** pushed to `origin/master`.
 **Remaining defects.** The pad has no utility signal, so its documented "adaptation" is lock-in
 rather than learning. Recorded as a proposed design in `RESEARCH_JOURNAL.md`, not implemented.
+
+---
+
+## 2026-11-09 — the pad learns from observed utility
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/engine.rs`,
+`crates/oag-imagination/src/socket.rs`, `crates/oag-imagination/src/lib.rs`,
+`crates/oag-imagination/examples/convergence.rs`, `spec/02-tensor-pad-routing.md`,
+`RESEARCH_JOURNAL.md`.
+
+**Feature implemented.** `Engine::handle` no longer reinforces the hop it chose. The TCP carrier
+forwards the request, observes the outcome, and calls the new `Engine::observe_hop(neighbour,
+HopOutcome)`: `Answered` multiplies the neighbour's weight by `1.05`, `Failed` by `0.90`, and
+`Forwarded` leaves it alone, followed by normalization. Multiplicative rather than additive so a
+penalty can never make the sum negative and invert the ordering.
+
+**Why.** The convergence measurement showed the pad locking onto an arbitrary neighbour at ~96%
+with the winner decided by the source offset: the constant reinforcement carried no information
+about hop quality. The carrier is the only place that knows the outcome, and it was discarding it.
+
+**Tests executed.** `cargo test -p oag-imagination`: 51 passed, 0 failed. The test that asserted
+"the pad strengthened for the chosen hop" now asserts the opposite -- routing alone leaves the pad
+untouched -- and that only `observe_hop` moves it. Workspace including Reticulum: 54 passed.
+
+**Performance measurements.** `examples/convergence.rs`, 4 neighbours, 20,000 decisions: signal arm
+converges to the answering neighbour at 99.8%, control arm (old constant reinforcement) to an
+arbitrary one at 59.6%. Both arms share their first few hundred draws, so the difference is the
+signal, not the luck. ~42,000 decisions/sec single-threaded debug build.
+
+**Commit identifiers:** `d862492` (`oag-imagination-random-data-compute`).
+**Push status:** pushed to `origin/master`.
+**Remaining defects.** The gain and penalty constants (`1.05`, `0.90`) are round numbers, not tuned;
+a sweep is the obvious next measurement. Only the TCP carrier feeds back, because it is the only
+carrier that forwards -- a UDP-served node keeps a pad that does not learn. And the reward is binary
+and delayed by the whole downstream chain, so credit assignment across a multi-hop path is coarse.

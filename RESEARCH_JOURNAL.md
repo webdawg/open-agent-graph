@@ -233,3 +233,57 @@ reads the upstream response, so the node that routed a hop already observes whet
 `Engine::handle` returns `RouteTo(next)` and discards that observation. Plumbing it back in means
 the engine learning a reward rather than a constant -- a new input to `handle`, and a design change
 rather than a parameter. **Status: proposed design, not implemented.**
+
+---
+
+## The pad now learns from observed utility: design and A/B result
+
+**Date:** 2026-11-09. **Repository:** `oag-imagination-random-data-compute`.
+
+**The problem, restated from the previous entry.** `reinforce` added a constant `1.0` to whichever
+hop was taken. The reinforcement carried no information about whether the hop was any good, so the
+pad was a rich-get-richer random walk that locked onto an arbitrary neighbour -- measured, with the
+winner changing under a shifted source offset while the ~96% share did not.
+
+**Design.** The signal exists and the carrier already has it: the TCP serving loop forwards a request
+and then reads the upstream reply, so the node that routed a hop sees whether the chain was answered.
+The change is that the engine no longer learns at routing time:
+
+- `handle` routes and changes nothing. Whether the hop was any good is unknowable at that moment.
+- The carrier calls `Engine::observe_hop(neighbour, outcome)` once it knows.
+- `HopOutcome::{Answered, Forwarded, Failed}` multiply the neighbour's weight by `1.05`, leave it
+  alone, or multiply by `0.90`, followed by the existing normalization.
+
+Two deliberate details. Updates are **multiplicative**, not additive: an additive penalty could
+drive a slot negative, and `normalize` divides by the sum, so a negative total would *invert* the
+ordering instead of merely shrinking it. And `Forwarded` is **neutral** -- the hop passed the request
+on and nothing is known against it, so it must not be punished for not being the answerer.
+
+**A/B result.** `examples/convergence.rs --no-signal` runs both arms over the same deterministic
+source, with node-0 answering and the other three unreachable:
+
+| arm | leader | share |
+|---|---|---|
+| signal | `node-0` -- the one that answers | 99.8% |
+| control (old constant reinforcement) | `node-2` -- arbitrary | 59.6% |
+
+Both arms share their first few hundred draws, so the divergence is not luck: one arm has a utility
+difference to learn and the other does not. The signal arm reaches 0.979 by 2,000 decisions.
+
+**What this does and does not establish.** It establishes that the pad can now follow observed
+utility, which it could not before. It does not establish that the gain and penalty constants are
+well chosen -- `1.05` and `0.90` are round numbers, and a sweep of them is the obvious next
+measurement. It also does not make the pad a good *bandit*: the reward is binary and delayed by the
+whole downstream chain, so credit assignment across a multi-hop path is coarse. Stated plainly: this
+is a utility-driven lock-in, not proven optimal routing.
+
+**Relationship to the earlier entries.** This supersedes the "proposed design, not implemented"
+note in the convergence entry. The decay proposal from two entries earlier is now clearly not the
+point: the previous entry showed decay would add forgetting without signal, and this entry supplies
+the signal instead.
+
+**Novelty assessment.** Utility-driven link weighting is well-trodden -- ant-colony stigmergy,
+multiplicative-weights/Hedge, and reinforcement of routing tables all do this. What is specific here
+is the *carrier* as the observation point: the node that routes a hop is not the node that answers,
+so the outcome has to be carried back one step by the forwarding layer. The contribution is that
+plumbing, not the weighting rule.
