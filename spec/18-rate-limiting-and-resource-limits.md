@@ -42,6 +42,23 @@ unauthenticated surface) fixed-window counter, 600 requests/60s (`SyncRateLimite
 relative to legitimate traffic (default gossip interval is 30s per peer), sized to bound a genuine
 flood rather than fingerprint normal usage.
 
+### A 429 now says when to retry
+
+Both limiters (this one and REST/MCP's per-key one) returned a bare `429 Too Many Requests`. A
+client given no `Retry-After` has to guess how long to back off, and a guessing client keeps
+hammering the limiter -- which is how a full-mesh sync flood shows up as *thousands* of 429s.
+
+That number is measured, not imagined: `oag-sync`'s chaos test (`tests/distributed_convergence.rs`)
+spins up 50 real peers and forces three full-mesh healing sweeps, and in one run **2,594 of the
+4,565 recoverable errors were 429s**, 1,971 were SQLite lock contention, and none blocked final
+convergence. The test now classifies its errors rather than labelling them, because it previously
+printed "transient SQLite-contention errors" for a number it never inspected -- and SQLite
+contention was only about 43% of it.
+
+Both limiters now send `Retry-After`, computed from the window they already track, so the earliest
+possible retry is stated rather than left to the client. The window is fixed, so the value is
+derivable: at most 60 seconds.
+
 ## `oag-reticulum`'s listener had no rate limiting at all — found, fixed
 
 The Reticulum listener answers the identical calls `oag-sync`'s HTTP endpoints do but had no

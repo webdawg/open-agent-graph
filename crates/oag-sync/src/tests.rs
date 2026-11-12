@@ -390,15 +390,34 @@ async fn rate_limiter_rejects_after_threshold() {
     let client = reqwest::Client::new();
     let url = format!("{}/oag/sync/v1/hello", peer.addr);
 
-    let mut saw_429 = false;
+    let mut rejected: Option<reqwest::Response> = None;
     for _ in 0..650 {
         let resp = client.get(&url).send().await.unwrap();
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            saw_429 = true;
+            rejected = Some(resp);
             break;
         }
     }
-    assert!(saw_429, "expected a 429 within 650 requests against a 600/window limit");
+    let rejected =
+        rejected.expect("expected a 429 within 650 requests against a 600/window limit");
+
+    // The 429 must say when to retry. Without it a client has to guess, and a guessing client
+    // keeps hammering the limiter -- which is how a full-mesh sync flood shows up as thousands of
+    // 429s (measured in `tests/distributed_convergence.rs`).
+    let retry_after = rejected
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)
+        .expect("a 429 must carry Retry-After")
+        .to_str()
+        .unwrap()
+        .to_string();
+    let seconds: u64 = retry_after
+        .parse()
+        .expect("Retry-After must be valid delta-seconds");
+    assert!(
+        (1..=60).contains(&seconds),
+        "Retry-After must be within the 60s window, got {seconds}"
+    );
 }
 
 /// Spec section 61 ("event flooding" / "signature spam"): a push batch over

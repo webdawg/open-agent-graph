@@ -324,3 +324,45 @@ not the ~66 a constant-rate reading would predict.
 **What it means.** A small step is stable against noise and slow to abandon a failing path; a large
 step is the reverse. Neither is wrong, and picking between them is a deployment decision -- which is
 now a stated trade with a measured number attached, rather than two unexplained constants.
+
+---
+
+## Convergence under a rate-limited full mesh: 43% of "SQLite contention" was the limiter
+
+**Date:** 2026-11-09. **Repository:** `open-agent-graph`.
+
+**Why this measurement.** `oag-sync`'s `fifty_peers_converge_after_chaos` is `#[ignore]`d as slow,
+so the mission's core convergence claim had no recent run behind it. It passes: 50 real peers, 40
+chaos rounds, 5 kills, 3 restarts, 5 partitions, 5 heals, 64 events converged, 0 timeouts, ~70s.
+
+**The finding.** The test printed "N transient SQLite-contention errors" for a number it never
+inspected -- the messages were discarded. After making it keep and classify them, one run gave
+4,565 recoverable errors:
+
+| category | count |
+|---|---|
+| `429 Too Many Requests` from this project's own limiter | 2,594 |
+| SQLite `database is locked` (codes 5 and 517) | 1,971 |
+| event fetch failures | 105 |
+
+So the assumed label was right for only ~43% of the errors, and the single largest cause was the
+rate limiter doing its job against a 50-peer full-mesh healing sweep. The total varies between runs
+(2,486 in an earlier run) because it is timing-dependent, which is itself worth knowing: this is not
+a stable number to quote.
+
+**What it means for the convergence claim.** The test's bar is "all *healthy* peers converge once
+communication stabilizes". In the healing phase communication never stabilizes -- every peer pulls
+from every other, and the limiter rejects a third of the attempts. Convergence holds anyway, which
+is a *stronger* result than the comment claims, achieved through the retry path rather than the
+happy path. That should be stated rather than glossed as "healthy".
+
+**The protocol gap.** A `429` without `Retry-After` forces the client to guess how long to back off,
+and a guessing client keeps hammering the limiter -- which is how a flood becomes thousands of
+429s. Both limiters now compute and send `Retry-After` from the window they already track. No client
+honours it yet.
+
+**Method note.** This is the third time this session that a printed label outran what was measured
+(the pad's "96% arbitrary lock-in" before its control, the "cannot weaken or dissolve" over-claim,
+and now "SQLite contention"). The pattern is consistent: a summary line that is never re-derived
+from the raw data decays into an assumption. Classifying at the point of measurement is cheap;
+auditing a printed claim later is not.

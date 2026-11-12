@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 
 use crate::service::SyncService;
 
@@ -52,6 +52,13 @@ impl SyncRateLimiter {
         window.1 += 1;
         window.1 <= MAX_REQUESTS_PER_WINDOW
     }
+
+    /// Seconds until the current window rolls over -- the earliest a retry could succeed.
+    pub fn retry_after_secs(&self) -> u64 {
+        let window = self.window.lock().unwrap();
+        let remaining = WINDOW.saturating_sub(window.0.elapsed()).as_secs();
+        remaining.max(1)
+    }
 }
 
 pub async fn rate_limit_middleware(
@@ -60,7 +67,17 @@ pub async fn rate_limit_middleware(
     next: Next,
 ) -> Result<Response, StatusCode> {
     if !service.rate_limiter().check() {
-        return Err(StatusCode::TOO_MANY_REQUESTS);
+        // The window is fixed and global, so the earliest a retry can succeed is its rollover.
+        // Saying so is the difference between a client that backs off and one that guesses -- and
+        // a guessing client keeps hammering the limiter, which is exactly how a full-mesh sync
+        // flood shows up as thousands of 429s (measured in
+        // `tests/distributed_convergence.rs`: 2,594 of them in one run).
+        let retry_after = service.rate_limiter().retry_after_secs();
+        return Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            [(axum::http::header::RETRY_AFTER, retry_after.to_string())],
+        )
+            .into_response());
     }
     Ok(next.run(request).await)
 }

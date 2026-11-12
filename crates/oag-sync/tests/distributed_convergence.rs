@@ -164,12 +164,42 @@ async fn do_sync_round(
 struct SweepStats {
     transient_errors: usize,
     timeouts: usize,
+    /// Error messages tallied by a coarse category. The count alone does not say what failed,
+    /// and an earlier version of this test printed "SQLite-contention errors" for a number it
+    /// never inspected -- an assumption, not a measurement.
+    kinds: std::collections::HashMap<&'static str, (usize, String)>,
 }
 
 enum SyncOutcome {
-    Completed(usize),
-    SyncErr,
+    Completed(Vec<String>),
+    /// `sync_with_peer` bailed before producing a summary -- today that is a failed `hello`
+    /// handshake. The message matters: without it these were 40% of all errors and no category.
+    SyncErr(String),
     TimedOut,
+}
+
+/// Adds one error to the tally, keeping the first message seen for its category as a sample.
+fn tally(kinds: &mut std::collections::HashMap<&'static str, (usize, String)>, message: &str) {
+    let kind = classify_error(message);
+    let entry = kinds.entry(kind).or_insert_with(|| (0, message.to_string()));
+    entry.0 += 1;
+}
+
+/// Groups a sync error by its leading cause, so the run can report what actually failed.
+fn classify_error(message: &str) -> &'static str {
+    if message.contains("database is locked") || message.contains("busy") {
+        "sqlite locked"
+    } else if message.contains("http request to peer failed") {
+        "hello http failure"
+    } else if message.contains("fetch failed") {
+        "event fetch failed"
+    } else if message.contains("timeout") || message.contains("timed out") {
+        "timeout"
+    } else if message.contains("verify") || message.contains("signature") {
+        "verification"
+    } else {
+        "other ingest"
+    }
 }
 
 async fn full_mesh_sync_sweep(peers: &[ChaosPeer], alive: &[bool]) -> SweepStats {
@@ -188,8 +218,8 @@ async fn full_mesh_sync_sweep(peers: &[ChaosPeer], alive: &[bool]) -> SweepStats
             set.spawn(async move {
                 let _permit = semaphore.acquire_owned().await.unwrap();
                 match tokio::time::timeout(Duration::from_secs(10), sync.sync_with_peer(&addr)).await {
-                    Ok(Ok(summary)) => SyncOutcome::Completed(summary.errors.len()),
-                    Ok(Err(_)) => SyncOutcome::SyncErr,
+                    Ok(Ok(summary)) => SyncOutcome::Completed(summary.errors),
+                    Ok(Err(e)) => SyncOutcome::SyncErr(e.to_string()),
                     Err(_) => SyncOutcome::TimedOut,
                 }
             });
@@ -198,8 +228,16 @@ async fn full_mesh_sync_sweep(peers: &[ChaosPeer], alive: &[bool]) -> SweepStats
     let mut stats = SweepStats::default();
     while let Some(result) = set.join_next().await {
         match result.expect("sync task panicked") {
-            SyncOutcome::Completed(n) => stats.transient_errors += n,
-            SyncOutcome::SyncErr => stats.transient_errors += 1,
+            SyncOutcome::Completed(errors) => {
+                stats.transient_errors += errors.len();
+                for message in errors {
+                    tally(&mut stats.kinds, &message);
+                }
+            }
+            SyncOutcome::SyncErr(message) => {
+                stats.transient_errors += 1;
+                tally(&mut stats.kinds, &message);
+            }
             SyncOutcome::TimedOut => stats.timeouts += 1,
         }
     }
@@ -326,10 +364,16 @@ async fn fifty_peers_converge_after_chaos() {
 
     let mut healing_transient_errors = 0usize;
     let mut healing_timeouts = 0usize;
+    let mut healing_kinds: std::collections::HashMap<&'static str, (usize, String)> =
+        std::collections::HashMap::new();
     for _ in 0..HEALING_SWEEPS {
         let stats = full_mesh_sync_sweep(&peers, &alive).await;
         healing_transient_errors += stats.transient_errors;
         healing_timeouts += stats.timeouts;
+        for (kind, (count, sample)) in stats.kinds {
+            let entry = healing_kinds.entry(kind).or_insert((0, sample));
+            entry.0 += count;
+        }
     }
 
     // --- Convergence assertions ---
@@ -388,13 +432,26 @@ async fn fifty_peers_converge_after_chaos() {
     write_network_trace("fifty_peers_converge_after_chaos", &labeled_peers).await;
 
     let total_events: u64 = reference_heads.values().sum();
+    // Sort the categories by count so the largest cause reads first.
+    let mut kinds: Vec<(&&str, &(usize, String))> = healing_kinds.iter().collect();
+    kinds.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+    let breakdown = kinds
+        .iter()
+        .map(|(kind, (count, _))| format!("{kind} {count}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+
     println!(
         "chaos convergence: {NUM_PEERS} peers, {CHAOS_ROUNDS} chaos rounds + {HEALING_SWEEPS} full-mesh healing sweeps, \
          {created} assertions created, {kills} kills, {restarts} restarts, {partitions} partitions, {heals} heals, \
          {total_events} total events converged, ledger checked on {} peers, \
-         {healing_transient_errors} transient SQLite-contention errors and {healing_timeouts} timeouts during \
-         healing (all recovered by a later sweep — none blocked final convergence), elapsed {:?}",
+         {healing_transient_errors} recoverable sync errors and {healing_timeouts} timeouts during \
+         healing (none blocked final convergence), elapsed {:?}",
         sample_peer_indices.len(),
         start.elapsed()
     );
+    println!("  error breakdown: {breakdown}");
+    for (kind, (_, sample)) in &kinds {
+        println!("    {kind:>18}: {sample}");
+    }
 }

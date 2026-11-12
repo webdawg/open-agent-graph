@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 
 use crate::state::AppState;
 
@@ -73,6 +73,18 @@ impl RateLimiter {
         entry.1 <= self.max_requests_per_window
     }
 
+    /// Seconds until this key's window rolls over -- the earliest a retry could succeed. Says so
+    /// rather than leaving the client to guess, which is what makes a rate limit a backoff signal
+    /// instead of a guessing game.
+    pub fn retry_after_secs(&self, key: &str) -> u64 {
+        let windows = self.windows.lock().unwrap();
+        let remaining = windows
+            .get(key)
+            .map(|(started, _)| self.window.saturating_sub(started.elapsed()).as_secs())
+            .unwrap_or(0);
+        remaining.max(1)
+    }
+
     #[cfg(test)]
     fn tracked_key_count(&self) -> usize {
         self.windows.lock().unwrap().len()
@@ -92,7 +104,12 @@ pub async fn rate_limit_middleware(
         .to_string();
 
     if !state.rate_limiter.check(&key) {
-        return Err(StatusCode::TOO_MANY_REQUESTS);
+        let retry_after = state.rate_limiter.retry_after_secs(&key);
+        return Ok((
+            StatusCode::TOO_MANY_REQUESTS,
+            [(axum::http::header::RETRY_AFTER, retry_after.to_string())],
+        )
+            .into_response());
     }
 
     Ok(next.run(request).await)
@@ -101,6 +118,26 @@ pub async fn rate_limit_middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rejected_key_is_told_when_to_retry() {
+        // A 429 without Retry-After forces the client to guess, and a guessing client keeps
+        // hammering the limiter. The window is a fixed 60s, so the answer is derivable.
+        let limiter = RateLimiter::new(std::time::Duration::from_secs(60), 2, 10_000);
+        assert!(limiter.check("k"));
+        assert!(limiter.check("k"));
+        assert!(!limiter.check("k"), "the third request is over the limit");
+
+        let retry_after = limiter.retry_after_secs("k");
+        assert!(
+            (1..=60).contains(&retry_after),
+            "Retry-After must be within the window, got {retry_after}"
+        );
+
+        // A key that has never been seen has no window to wait out; it is still told at least one
+        // second rather than the useless "0".
+        assert_eq!(limiter.retry_after_secs("unseen"), 1);
+    }
 
     #[test]
     fn requests_within_the_limit_are_allowed_and_over_the_limit_are_rejected() {

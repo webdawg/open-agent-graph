@@ -1426,3 +1426,39 @@ reports when the new neighbour's *weight* overtakes the old one's.
 (small step = noise-stable, slow to abandon a failing path; large step = the reverse) rather than two
 unexplained constants. It is still a single global constant -- a per-neighbour or per-path step
 would be the next refinement. And only the TCP carrier feeds outcomes back.
+
+---
+
+## 2026-11-09 — the chaos test measures its errors, and 429s say when to retry
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-sync/tests/distributed_convergence.rs`,
+`crates/oag-sync/src/rate_limit.rs`, `crates/oag-sync/src/tests.rs`,
+`crates/oag-api/src/rate_limit.rs`, `spec/18-rate-limiting-and-resource-limits.md`,
+`RESEARCH_JOURNAL.md`.
+
+**What the ignored test surfaced.** `fifty_peers_converge_after_chaos` is `#[ignore]`d as slow and
+had never been run in this session. It passes: 50 peers, 40 chaos rounds, 5 kills, 3 restarts, 5
+partitions, 5 heals, 64 events converged, 0 timeouts. Its printed label for the error count --
+"transient SQLite-contention errors" -- was an assumption: the test discarded the messages.
+
+**Feature implemented.** The test now keeps the error strings, classifies them, and prints a
+breakdown with a sample per category. Both rate limiters (sync's global and REST/MCP's per-key) now
+send `Retry-After`, computed from the window they already track.
+
+**Tests executed.** `cargo test -p oag-sync --test distributed_convergence -- --ignored`:
+1 passed (50 peers, 77s). `cargo test -p oag-api --lib`: 64 passed (was 63; new
+`a_rejected_key_is_told_when_to_retry`). `cargo test -p oag-sync --lib`: 41 passed.
+
+**Performance measurements.** One chaos run: 4,565 recoverable errors, of which **2,594 were 429s
+from the limiter itself**, 1,971 SQLite lock contention (`database is locked`, codes 5 and 517),
+105 event fetch failures. So the old label was ~43% right. The count varies between runs (2,486 in
+an earlier run) because it is timing-dependent. None of it blocked convergence.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** `SQLITE_BUSY_SNAPSHOT` (517) is not helped by `busy_timeout` -- WAL mode
+returns it immediately when a read transaction cannot upgrade to a write while another connection
+holds the writer. A single-writer queue would remove it and is not built. No sync client honours
+`Retry-After` yet either; the limiter now states it and the client still treats a 429 as a generic
+failure retried on the next cycle.
