@@ -1857,6 +1857,116 @@ async fn search_pages_through_results_over_rest_and_the_human_interface() {
     );
 }
 
+/// Keyset pagination (spec/07-search.md). `offset` counts rows from the start, so a document
+/// arriving that outranks the current page shifts every later offset and the walk repeats a
+/// row -- the sibling test above only passes because its result set never moves. The
+/// `cursor` contract names the last row the caller saw, so the boundary moves with the data.
+#[tokio::test]
+async fn search_cursor_walk_does_not_repeat_a_row_when_a_match_arrives_mid_walk() {
+    let (app, key) = test_app("search-cursor-http").await;
+    let auth_header = format!("Bearer {key}");
+
+    // Longer than the late arrival, so the arrival outranks all of these and lands inside
+    // the first page -- the position that shifts an offset walk's later pages.
+    for i in 0..9 {
+        let body = json!({
+            "subject": format!("https://example.com/cursor-item-{i:02}"),
+            "predicate": "instance_of",
+            "object": format!("concept:cursor-item-{i:02}"),
+            "evidence": [{ "content": format!("cursor item {i:02} with some extra length") }],
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/v1/assertions")
+                    .header("authorization", &auth_header)
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "seed {i} failed");
+    }
+
+    let search = |app: axum::Router, cursor: Option<String>| {
+        let auth_header = auth_header.clone();
+        async move {
+            let query = match cursor {
+                Some(cursor) => format!("/api/v1/search?q=cursor-item&limit=4&cursor={cursor}"),
+                None => "/api/v1/search?q=cursor-item&limit=4".to_string(),
+            };
+            let response = app
+                .oneshot(
+                    Request::get(query)
+                        .header("authorization", &auth_header)
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let json: Value = serde_json::from_str(&body_text(response).await).unwrap();
+            let results = json["results"].as_array().expect("results array").clone();
+            let next = json["next_cursor"].as_str().map(str::to_string);
+            (results, next)
+        }
+    };
+
+    let (first, cursor) = search(app.clone(), None).await;
+    assert_eq!(first.len(), 4, "first page should be full");
+    let cursor = cursor.expect("a full page must offer a cursor");
+
+    // A new match arrives that outranks everything already indexed.
+    let body = json!({
+        "subject": "https://example.com/cursor-item-newest",
+        "predicate": "instance_of",
+        "object": "concept:cursor-item-newest",
+        "evidence": [{ "content": "cursor item newest" }],
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/assertions")
+                .header("authorization", &auth_header)
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Walk by cursor. Nothing already seen may appear again.
+    let mut seen: std::collections::HashSet<String> = first
+        .iter()
+        .map(|item| item["canonical_identifier"].as_str().unwrap().to_string())
+        .collect();
+    let mut cursor = Some(cursor);
+    let mut pages = 1;
+    while let Some(at) = cursor {
+        assert!(pages < 20, "cursor walk did not terminate");
+        let (results, next) = search(app.clone(), Some(at)).await;
+        pages += 1;
+        if results.is_empty() {
+            break;
+        }
+        for item in &results {
+            let id = item["canonical_identifier"].as_str().unwrap().to_string();
+            assert!(
+                seen.insert(id.clone()),
+                "{id} appeared on more than one page after a new match arrived"
+            );
+        }
+        cursor = next;
+    }
+    // Each assertion yields a subject node and an object node, and both carry the match
+    // term, so nine seeds are eighteen nodes. The late arrival adds two more; whether the
+    // walk sees them depends on where they land relative to the boundary, so the assertion
+    // is that nothing already visible is lost and nothing is repeated.
+    assert!(seen.len() >= 18, "the walk lost {} of the seeds it started with", 18 - seen.len());
+}
+
 /// `GET /api/v1/pins` is the discovery query's surface: a caller can ask a peer whether it holds a
 /// CID rather than being told which peer to ask. This test proves the wiring against a real router
 /// -- an empty list on a fresh peer, `holds: false` for a CID nobody has recorded, and the

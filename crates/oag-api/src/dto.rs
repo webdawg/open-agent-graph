@@ -143,6 +143,15 @@ pub struct SearchQuery {
     /// a large result set, which is why the Human Interface's search page
     /// capped at 50 with no way forward.
     pub offset: Option<i64>,
+    /// Keyset pagination cursor, as returned in `next_cursor` by the previous call. Passing
+    /// one takes precedence over `offset`: the two are different pagination contracts, and
+    /// applying both would produce a page neither describes.
+    ///
+    /// Prefer this over `offset` for any walk over a result set that may change between
+    /// requests. `offset` counts rows from the start, so a document arriving that outranks
+    /// the current page shifts every later offset and the walk repeats a row; a cursor names
+    /// the last row seen, so the boundary moves with the data.
+    pub cursor: Option<String>,
     /// Rank by embedding cosine similarity (spec section 64) instead of
     /// keyword FTS. Requires this peer to have a real embedding provider
     /// configured -- errors clearly rather than silently falling back if

@@ -71,12 +71,45 @@ into HTML. Only the offset is caller-controlled. "Next" is offered whenever the 
 full, which is the cheapest available signal short of fetching `limit+1` rows; "Previous" is
 offered whenever the offset is greater than zero.
 
-**Stable ordering matters.** Pagination is only meaningful if the order does not change between
-pages. Results are ordered by FTS5 `rank`, which is deterministic for a given index, so a page
-fetched twice returns the same rows. A newly inserted node can still shift subsequent pages (a
-node inserted mid-iteration may appear on a later page or be skipped), which is the standard
-cursor-free pagination trade-off; a keyset cursor on `(rank, node_id)` would fix it and is
-recorded in `OPEN_QUESTIONS.md` as a possible follow-up if any caller needs strict consistency.
+**Stable ordering is not what `offset` needs.** Pagination is only meaningful if the order does
+not change between pages, and the order does not: FTS5 `rank` is a function of the *corpus*, not
+just the row, so inserting a document moves every existing row's score even when their relative
+order is preserved. Measured: after one insertion the eleven seeded matches kept their exact
+relative order while every one of their ranks moved (for example `-2.0000e-6` became `-1.9650e-6`).
+
+That distinction is the whole reason `offset` cannot be made safe. `OFFSET` counts rows from the
+start, so a document arriving that outranks the current page shifts every later offset and a walk
+repeats a row -- asserted by `search_cursor_walk_covers_every_match_once_across_an_insertion` at
+the service layer and `search_cursor_walk_does_not_repeat_a_row_when_a_match_arrives_mid_walk`
+over REST. Making the order total (`ORDER BY rank, node_id`, both paths) removes the tie-breaking
+ambiguity but not the shift.
+
+### The `cursor` parameter — keyset pagination
+
+`cursor` is the contract for walking a result set that may change between requests. It is
+exposed on REST (`cursor=`), MCP (`cursor`), and the CLI (`--cursor`); the Human Interface keeps
+`offset` alone, being a browsing surface with a fixed page size. It takes the
+`next_cursor` value from the previous response, or is omitted for the first page, and returns the
+rows that follow the last row the caller actually saw. When both `cursor` and `offset` are sent
+the cursor wins: they are different contracts and applying both would describe a page neither
+promises.
+
+**The cursor names a row, not a rank.** An earlier version stored the last row's `rank` and
+compared it against the next page's ranks. That is wrong for the reason above -- the stored score
+was computed under the old corpus and the next page's scores under the new one, so the boundary
+row repeated. The cursor is now the last row's `node_id`, and the query re-resolves that row's
+*current* rank before applying the boundary, which makes it exact under any absolute shift.
+
+**What it still cannot do.** If a corpus change *reorders* rows across the boundary -- rather
+than moving all their scores together -- a row can still repeat or skip. No pagination scheme
+survives that, because the ordering itself changed. What the cursor does guarantee is that a
+walk never repeats a row it has already seen, which `offset` does not.
+
+**A stale cursor starts over.** If the cursor's node no longer matches the query (removed, or its
+text edited), the boundary cannot be resolved and the walk restarts from the beginning rather than
+erroring -- a caller cannot recover from a 500 mid-walk, and the alternative is a silent wrong
+page. A cursor from a different query is not detected: FTS5 computes `rank` per query, so such a
+row may not match at all, and the result is the same restart.
 
 ### Recomputing embeddings
 

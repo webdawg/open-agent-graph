@@ -374,12 +374,25 @@ Format: question, assumption I'm running with, status.
   into HTML. "Next" is drawn whenever the page came back full, which is the cheapest available
   signal short of fetching `limit+1` rows.
 
-  **Not solved, and worth stating plainly:** ordering is FTS5 `rank`, which is deterministic for a
-  given index but is not a stable keyset. A node inserted between two page fetches can shift later
-  pages, so a caller doing a strict full scan can see a duplicate or a skip. A keyset cursor on
-  `(rank, node_id)` would fix it. Not built, because no current caller needs strict consistency
-  and the fix costs an extra column in the `ORDER BY` that every other caller pays for. Recorded
-  rather than hidden.
+  **Solved, and the premise was wrong.** This entry used to read "FTS5 `rank` is deterministic for
+  a given index", and concluded that a keyset cursor was unnecessary. `rank` is *not* deterministic
+  for a given index: it is bm25, whose idf and length-normalisation terms read the corpus, so
+  inserting a document moves every existing row's score. Measured directly -- after one insertion
+  the eleven seeded matches kept their exact relative order while every one of their ranks moved
+  (`-2.0000e-6` became `-1.9650e-6`).
+
+  That distinction is what makes `offset` unfixable rather than merely unfashionable: `OFFSET`
+  counts rows from the start, so a document arriving that outranks the current page shifts every
+  later offset and a walked set of pages repeats a row. Asserted by
+  `search_cursor_walk_covers_every_match_once_across_an_insertion` (service) and
+  `search_cursor_walk_does_not_repeat_a_row_when_a_match_arrives_mid_walk` (REST).
+
+  **`cursor` is now built**, on REST/MCP/CLI. The first attempt stored the last row's `rank` and
+  compared it against the next page's ranks; that repeats the boundary row for exactly the reason
+  above, because the stored score was computed under the old corpus. The cursor now names the last
+  row's `node_id` and the query re-resolves that row's *current* rank, which is exact under any
+  absolute shift. What it still cannot survive is a *reordering* across the boundary -- no
+  pagination scheme can, because the ordering itself changed. Status: resolved.
 - **`askama` is now a dependency** (compile-time HTML templates, autoescaped by default) -- the
   first HTML anywhere in this codebase, and the reason: several rendered fields (crawled page
   titles, evidence excerpts, actor names) are attacker/crawler-controlled text, and hand-rolled

@@ -18,16 +18,18 @@ pub async fn search(
     Query(q): Query<SearchQuery>,
 ) -> ApiResult<Json<serde_json::Value>> {
     authenticate_read(&headers, &state.graph).await?;
-    let results = if q.semantic.unwrap_or(false) {
+    if q.semantic.unwrap_or(false) {
         let ranked = state
             .graph
             .semantic_search(state.embedding_provider.as_ref(), &q.q, q.limit.unwrap_or(20))
             .await?;
-        json!(ranked)
-    } else {
-        json!(state.graph.search(&q.q, q.limit.unwrap_or(20), q.offset.unwrap_or(0)).await?)
-    };
-    Ok(Json(json!({ "results": results })))
+        return Ok(Json(json!({ "results": ranked })));
+    }
+    let page = state
+        .graph
+        .search_page(&q.q, q.limit.unwrap_or(20), q.offset.unwrap_or(0), q.cursor.as_deref())
+        .await?;
+    Ok(Json(json!({ "results": page.results, "next_cursor": page.next_cursor })))
 }
 
 pub async fn get_actor(

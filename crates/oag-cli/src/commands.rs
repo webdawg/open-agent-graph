@@ -316,6 +316,7 @@ pub async fn search(
     query: &str,
     limit: i64,
     offset: i64,
+    cursor: Option<String>,
     semantic: bool,
     config_path: Option<std::path::PathBuf>,
 ) -> anyhow::Result<()> {
@@ -328,8 +329,16 @@ pub async fn search(
         let results = graph.semantic_search(provider.as_ref(), query, limit).await?;
         println!("{}", serde_json::to_string_pretty(&results)?);
     } else {
-        let results = graph.search(query, limit, offset).await?;
-        println!("{}", serde_json::to_string_pretty(&results)?);
+        let page = graph
+            .search_page(query, limit, offset, cursor.as_deref())
+            .await?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "results": page.results,
+                "next_cursor": page.next_cursor,
+            }))?
+        );
     }
     Ok(())
 }

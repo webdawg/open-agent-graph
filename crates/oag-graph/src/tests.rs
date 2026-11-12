@@ -1194,6 +1194,101 @@ async fn search_pages_through_results_with_an_offset() {
 }
 
 #[tokio::test]
+async fn search_cursor_walk_covers_every_match_once_across_an_insertion() {
+    // `OFFSET` paging cannot guarantee a walked set of pages covers each match once: a
+    // document arriving that outranks the current page shifts every later offset, and the
+    // walk repeats a row. This is the property a caller actually needs, asserted with a
+    // cursor walk across exactly such an arrival.
+    let (service, auth) = service_with_admin("search-cursor-walk").await;
+
+    // Existing matches, all longer than the late arrival so the arrival ranks above them
+    // and lands inside the first page.
+    for i in 0..11 {
+        let filler = "pad ".repeat(5 + i);
+        service
+            .assert(&auth, sample_input(&format!("Walking Probe {i:02} {filler}")))
+            .await
+            .unwrap();
+    }
+    let page_size = 5;
+    let mut seen = std::collections::HashSet::new();
+    let mut cursor = None;
+
+    let first = service.search_after("Walking Probe", page_size, None).await.unwrap();
+    assert_eq!(first.results.len(), page_size as usize, "first page should be full");
+    assert!(first.next_cursor.is_some(), "11 matches at 5 per page need a second page");
+    for node in &first.results {
+        assert!(seen.insert(node.id), "duplicate within the first page");
+    }
+    cursor = first.next_cursor;
+
+    // A new document arrives that outranks everything already indexed.
+    service
+        .assert(&auth, sample_input("Walking Probe newest"))
+        .await
+        .unwrap();
+
+    // Continue the walk from the cursor, bounded so a cursor that never advances fails
+    // the test rather than hanging it.
+    let mut duplicates = Vec::new();
+    let mut pages = 1;
+    while let Some(at) = cursor {
+        assert!(pages < 20, "cursor walk did not terminate");
+        let page = service.search_after("Walking Probe", page_size, Some(&at)).await.unwrap();
+        pages += 1;
+        if page.results.is_empty() {
+            break;
+        }
+        for node in &page.results {
+            if !seen.insert(node.id) {
+                duplicates.push(node.id);
+            }
+        }
+        cursor = page.next_cursor;
+    }
+    assert!(
+        duplicates.is_empty(),
+        "cursor walk repeated {duplicates:?} after a new match arrived; that is the \
+         offset-paging failure this path exists to prevent"
+    );
+    // Every match the walk could have seen when it started is covered exactly once. The
+    // late arrival ranked above the first page's boundary, so it is legitimately absent:
+    // keyset pagination promises each row once, not every row. Offset paging promises the
+    // opposite -- it would have shown the arrival, and repeated a row to do it.
+    assert_eq!(seen.len(), 11, "the walk must cover every match visible when it started");
+    assert!(pages >= 2, "11 matches at 5 per page need at least 3 pages, walked {pages}");
+}
+
+#[tokio::test]
+async fn search_cursor_rejects_a_malformed_token_by_starting_over() {
+    let (service, auth) = service_with_admin("search-cursor-malformed").await;
+    for i in 0..3 {
+        service
+            .assert(&auth, sample_input(&format!("Malformed Probe {i:02}")))
+            .await
+            .unwrap();
+    }
+    // A truncated or hand-edited token is a caller bug, not a server fault. Degrading to a
+    // fresh search keeps a walk recoverable; erroring would 500 a caller that cannot fix
+    // the token mid-walk.
+    let page = service
+        .search_after("Malformed Probe", 2, Some("not-a-cursor"))
+        .await
+        .unwrap();
+    assert_eq!(page.results.len(), 2, "a malformed cursor should start from the beginning");
+    assert!(page.next_cursor.is_some());
+
+    // And a well-formed cursor still works after the malformed one, proving the fallback
+    // did not consume or disturb the result set.
+    let resumed = service
+        .search_after("Malformed Probe", 2, page.next_cursor.as_deref())
+        .await
+        .unwrap();
+    assert_eq!(resumed.results.len(), 1, "the last page should hold the remainder");
+    assert!(resumed.next_cursor.is_none(), "the walk should be exhausted");
+}
+
+#[tokio::test]
 async fn semantic_search_ranks_topically_similar_nodes_above_unrelated_ones() {
     let (service, auth) = service_with_admin("semantic-search-ranking").await;
 

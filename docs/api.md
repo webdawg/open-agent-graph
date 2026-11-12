@@ -12,7 +12,7 @@ Base URL: `http://<listen-address>/api/v1`. Auth: `Authorization: Bearer <api-ke
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | GET | `/pins?cid=&limit=` | `graph:read` | Ask which IPFS CIDs this peer has recorded holding -- the discovery query a relay uses |
-| GET | `/search?q=&limit=&offset=&semantic=` | `graph:read` | Keyword (or `semantic=true` embedding-ranked) node search; `offset` pages through the result set |
+| GET | `/search?q=&limit=&offset=&cursor=&semantic=` | `graph:read` | Keyword (or `semantic=true` embedding-ranked) node search; `cursor` (from the previous response's `next_cursor`) pages through a result set that may change between calls, and takes precedence over `offset` when both are sent |
 | POST | `/resolve` | `graph:read` | Resolve an identifier string to its node, if one exists |
 | GET | `/nodes/{id}` | `graph:read` | Get a node by id |
 | GET | `/actors/{id}` | `graph:read` | Get an actor by id |
@@ -132,7 +132,7 @@ tool per `GraphService` capability:
 
 | Tool | Equivalent to |
 |---|---|
-| `graph_search` | `GET /search` (`limit` + `offset`) |
+| `graph_search` | `GET /search` (`limit` + `offset` or `cursor`) |
 | `graph_pins` | `GET /pins` (`cid` or `limit`) |
 | `graph_resolve` | `POST /resolve` |
 | `graph_get_node` | `GET /nodes/{id}` |
@@ -168,7 +168,7 @@ Every subcommand accepts `--data-dir` (default `./data`); network-facing ones al
 |---|---|
 | `oag serve` | Start this peer's REST + MCP + sync server |
 | `oag status` | This peer's identity and basic status |
-| `oag search` | Search the local graph (`--semantic` to rank by embedding similarity, `--offset` to page) |
+| `oag search` | Search the local graph (`--semantic` to rank by embedding similarity, `--offset` or `--cursor` to page) |
 | `oag node get <id>` | Get a node |
 | `oag actor get <id>` | Get an actor |
 | `oag assertion get <id>` | Get an assertion with its evidence |

@@ -485,3 +485,34 @@ reasoning stays in each repo's `OPEN_QUESTIONS.md` and `spec/`.
 - Historical entries are append-only; they are never rewritten to flatter progress.
 
 **Status.** Accepted (2026-11-09).
+
+---
+
+## ADR-012 — A pagination cursor names a row, never a rank
+
+**Decision.** Search pagination cursors carry the last row's `node_id`. The query re-resolves that
+row's *current* FTS5 `rank` and selects the rows that follow `(rank, node_id)`. The rank value at
+capture time is deliberately not stored.
+
+**Context.** The first implementation stored `(rank, node_id)`. It repeated the boundary row. The
+cause is not a coding error but a property of the rank function: FTS5's `rank` is bm25, whose idf
+and length-normalisation terms read the corpus, so the same row scores differently before and
+after an insertion. A cursor that stores a score compares a value computed under the old corpus
+against values computed under the new one.
+
+Measured, not inferred: after inserting one document, eleven seeded matches kept their exact
+relative order while every one of their ranks moved (`-2.0000e-6` became `-1.9650e-6`).
+
+**Consequences.**
+- The cursor is exact under any *absolute* rank shift, which is the case that occurs in practice.
+- It is still not exact under a *reordering*: if a corpus change moves a row across the boundary
+  relative to its neighbours, that row repeats or skips. No pagination scheme survives that,
+  because the ordering itself changed. This is documented in `spec/07-search.md` rather than
+  papered over.
+- A cursor whose node no longer matches the query (removed, or its text edited) cannot be
+  resolved. The walk restarts from the beginning rather than erroring, because a caller cannot
+  recover from a failure mid-walk and the alternative is a silently wrong page.
+- `ORDER BY rank` became `ORDER BY rank, nodes.node_id` on the offset path too, so the two
+  pagination contracts agree on where a page boundary falls inside a run of tied rows.
+
+**Status.** Accepted.

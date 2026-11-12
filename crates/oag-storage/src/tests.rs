@@ -484,3 +484,4 @@ async fn tensor_pad_upsert_overwrites_existing_row_for_same_peer() {
     let fetched = repo::tensor_pads::get(&mut conn, &peer_id).await.unwrap().unwrap();
     assert_eq!(fetched, vec![2.0; 32]);
 }
+

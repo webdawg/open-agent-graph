@@ -138,15 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **rust-ai keyset pagination** — search now pages by `offset`, but the order is FTS5 `rank`,
-   which is not a stable keyset: a node inserted between page fetches can shift later pages. A
-   `(rank, node_id)` cursor would fix it. No current caller needs strict consistency, so it is
-   recorded rather than built.
-3. **rust-ai static page hosting follow-ups** — crawler side-fetch pinning, scheduled backup
+1. **rust-ai static page hosting follow-ups** — crawler side-fetch pinning, scheduled backup
    pinning, evidence-body inlining (see `spec/29` "Explicitly deferred").
-4. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
+2. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
    proposed, not implemented; both are large and need a design pass before code.
-5. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
+3. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Judged the smaller of the two
    gaps now that the read side is closed.
 

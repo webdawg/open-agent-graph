@@ -9,6 +9,12 @@ pub struct SearchParams {
     /// service layer, so omitting it and passing a negative value both mean
     /// "from the start".
     pub offset: Option<i64>,
+    /// Keyset pagination cursor from the previous response's `next_cursor`. Takes
+    /// precedence over `offset` when both are sent. Prefer it over `offset` for any walk
+    /// over a result set that may change between calls: `offset` counts rows from the
+    /// start, so a document arriving that outranks the current page shifts later offsets
+    /// and the walk repeats a row.
+    pub cursor: Option<String>,
     /// Rank by embedding cosine similarity (spec section 64) instead of
     /// keyword FTS. Requires the peer to have a real embedding provider
     /// configured -- errors clearly rather than silently falling back if

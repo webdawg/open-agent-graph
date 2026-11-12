@@ -140,22 +140,27 @@ impl OagMcpServer {
     ) -> Result<Json<serde_json::Value>, ErrorData> {
         self.traced("graph_search", async {
             self.authenticate_read(&parts).await?;
-            let results = if p.semantic.unwrap_or(false) {
+            let payload = if p.semantic.unwrap_or(false) {
                 let ranked = self
                     .graph
                     .semantic_search(self.embedding_provider.as_ref(), &p.query, p.limit.unwrap_or(20))
                     .await
                     .map_err(map_err)?;
-                json!(ranked)
+                json!({ "results": ranked })
             } else {
-                let results = self
+                let page = self
                     .graph
-                    .search(&p.query, p.limit.unwrap_or(20), p.offset.unwrap_or(0))
+                    .search_page(
+                        &p.query,
+                        p.limit.unwrap_or(20),
+                        p.offset.unwrap_or(0),
+                        p.cursor.as_deref(),
+                    )
                     .await
                     .map_err(map_err)?;
-                json!(results)
+                json!({ "results": page.results, "next_cursor": page.next_cursor })
             };
-            Ok(Json(json!({ "results": results })))
+            Ok(Json(payload))
         })
         .await
     }

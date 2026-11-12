@@ -9,7 +9,7 @@ subcommand accepts `--data-dir` (default `./data`); network-facing ones also acc
 |---|---|
 | `oag serve` | Start this peer's REST + MCP + sync server |
 | `oag status` | This peer's identity and basic status |
-| `oag search` | Search the local graph (`--semantic` to rank by embedding similarity, `--offset` to page through results) |
+| `oag search` | Search the local graph (`--semantic` to rank by embedding similarity, `--offset` or `--cursor` to page through results) |
 | `oag node get <id>` | Get a node |
 | `oag actor get <id>` | Get an actor |
 | `oag assertion get <id>` | Get an assertion with its evidence |

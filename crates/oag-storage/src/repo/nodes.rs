@@ -1,6 +1,7 @@
 use oag_core::{NodeAlias, NodeId};
 use serde_json::Value as JsonValue;
-use sqlx::SqliteConnection;
+use sqlx::{FromRow, SqliteConnection};
+use std::str::FromStr;
 
 use crate::error::{bytes_to_array, StorageError};
 use crate::models::{NodeAliasRow, NodeRow};
@@ -176,7 +177,7 @@ pub async fn search(
          JOIN nodes ON nodes.rowid = nodes_fts.rowid \
          WHERE nodes_fts MATCH ? \
          AND nodes.node_id NOT IN (SELECT node_id FROM search_suppressions) \
-         ORDER BY rank LIMIT ? OFFSET ?",
+         ORDER BY rank, nodes.node_id LIMIT ? OFFSET ?",
     )
     .bind(query)
     .bind(limit)
@@ -184,6 +185,146 @@ pub async fn search(
     .fetch_all(&mut *conn)
     .await?;
     rows.into_iter().map(row_to_node).collect()
+}
+
+/// Where a keyset-paginated search resumes: the node the caller last saw.
+///
+/// Deliberately *not* the last row's rank. FTS5's bm25 rank is a function of the corpus --
+/// its idf and length-normalisation terms read the document count and average length -- so
+/// the same row scores differently before and after an insertion. A cursor that stored the
+/// rank would compare a score computed under the old corpus against scores computed under
+/// the new one, and would repeat the boundary row. Naming the row instead lets the query
+/// resolve that row's *current* rank, which makes the boundary exact under any absolute
+/// shift. Measured: inserting a document preserved the relative order of the existing
+/// matches but moved every one of their ranks.
+///
+/// What this still cannot survive is a *reordering* -- if the corpus change moves a row
+/// across the boundary relative to the rows around it, that row repeats or skips. That is
+/// not fixable by any pagination scheme, because the ordering itself changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SearchCursor {
+    pub node_id: NodeId,
+}
+
+impl SearchCursor {
+    /// Opaque wire form: the node id's 64 hex digits. Callers must treat it as an opaque
+    /// token; it is a row identity, not a position, and a cursor from another query names
+    /// a row that query may not even match.
+    pub fn encode(&self) -> String {
+        self.node_id.to_hex()
+    }
+
+    pub fn decode(encoded: &str) -> Option<Self> {
+        Some(Self { node_id: NodeId::from_str(encoded).ok()? })
+    }
+}
+
+/// The rank FTS5 assigns `node_id` for `query` right now, or `None` if that node no longer
+/// matches -- it was removed, or its text changed so the query no longer hits it.
+async fn current_rank(
+    conn: &mut SqliteConnection,
+    query: &str,
+    node_id: NodeId,
+) -> Result<Option<f64>, StorageError> {
+    sqlx::query_scalar(
+        "SELECT nodes_fts.rank FROM nodes_fts \
+         JOIN nodes ON nodes.rowid = nodes_fts.rowid \
+         WHERE nodes_fts MATCH ? AND nodes.node_id = ?",
+    )
+    .bind(query)
+    .bind(node_id.as_hash().as_bytes().as_slice())
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(StorageError::from)
+}
+
+/// Keyset-paginated search: the `limit` rows that follow `cursor` in `(rank, node_id)` order.
+///
+/// Unlike [`search`]'s `OFFSET`, the boundary is the last row the caller actually saw, so a
+/// document arriving that outranks the current page does not shift it --
+/// `search_cursor_walk_covers_every_match_once_across_an_insertion` asserts exactly that.
+///
+/// A cursor whose node no longer matches starts the walk over. That is a stale cursor, and
+/// the alternative -- refusing it -- would 500 a caller that cannot recover mid-walk.
+///
+/// Returns `(node, rank)` pairs so the caller can build the next cursor without a second
+/// query for the row it already has.
+pub async fn search_after(
+    conn: &mut SqliteConnection,
+    query: &str,
+    limit: i64,
+    cursor: Option<SearchCursor>,
+) -> Result<Vec<(oag_core::Node, f64)>, StorageError> {
+    let boundary = match cursor {
+        None => None,
+        Some(cursor) => current_rank(conn, query, cursor.node_id).await?,
+    };
+    // Only consulted when `boundary` is non-NULL, so a stale cursor's id is irrelevant.
+    let boundary_id: Option<Vec<u8>> =
+        cursor.map(|c| c.node_id.as_hash().as_bytes().to_vec());
+    // `rank` is FTS5's bm25 and is only computed for the query being run, which is why a
+    // cursor is only meaningful against the same query. The subquery materialises it so the
+    // outer filter can compare it -- FTS5 does not accept `rank` in a `WHERE` directly.
+    //
+    // A `NULL` boundary means "no cursor, or a stale one": every row sorts after it, which
+    // is the same as starting over.
+    let rows: Vec<RankedNodeRow> = sqlx::query_as(
+        "SELECT node_id, node_type, canonical_identifier, canonical_uri, name, description, \
+         metadata, created_at, schema_version, search_rank \
+         FROM ( \
+             SELECT nodes.*, nodes_fts.rank AS search_rank \
+             FROM nodes_fts \
+             JOIN nodes ON nodes.rowid = nodes_fts.rowid \
+             WHERE nodes_fts MATCH ? \
+             AND nodes.node_id NOT IN (SELECT node_id FROM search_suppressions) \
+         ) \
+         WHERE ? IS NULL OR search_rank > ? OR (search_rank = ? AND node_id > ?) \
+         ORDER BY search_rank, node_id \
+         LIMIT ?",
+    )
+    .bind(query)
+    .bind(boundary)
+    .bind(boundary)
+    .bind(boundary)
+    .bind(boundary_id)
+    .bind(limit)
+    .fetch_all(&mut *conn)
+    .await?;
+
+    rows.into_iter()
+        .map(|row| {
+            let rank = row.search_rank;
+            let row = NodeRow {
+                node_id: row.node_id,
+                node_type: row.node_type,
+                canonical_identifier: row.canonical_identifier,
+                canonical_uri: row.canonical_uri,
+                name: row.name,
+                description: row.description,
+                metadata: row.metadata,
+                created_at: row.created_at,
+                schema_version: row.schema_version,
+            };
+            row_to_node(row).map(|node| (node, rank))
+        })
+        .collect()
+}
+
+/// [`NodeRow`] plus the FTS5 `rank` the row was sorted by, so a page can be resumed from its
+/// last row. Separate from [`NodeRow`] because sqlx maps structs by column name and would
+/// otherwise have to treat `search_rank` as a node field.
+#[derive(Debug, FromRow)]
+struct RankedNodeRow {
+    node_id: Vec<u8>,
+    node_type: String,
+    canonical_identifier: String,
+    canonical_uri: Option<String>,
+    name: Option<String>,
+    description: Option<String>,
+    metadata: String,
+    created_at: i64,
+    schema_version: i64,
+    search_rank: f64,
 }
 
 /// Every node in the local graph — used by embeddings recomputation (spec

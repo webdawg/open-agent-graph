@@ -1021,3 +1021,33 @@ request during a context-clearing exchange. The records were recreated on the ne
 because PART XV requires them and they must live inside the authorized repositories.
 
 **Remaining defects.** None. These files are living documents and will be appended, not rewritten.
+
+---
+
+## 2026-11-09 — keyset pagination for search
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-storage/src/repo/nodes.rs`, `crates/oag-graph/src/search.rs`,
+`crates/oag-graph/src/tests.rs`, `crates/oag-api/src/dto.rs`, `crates/oag-api/src/handlers.rs`,
+`crates/oag-api/src/tests.rs`, `crates/oag-mcp/src/params.rs`, `crates/oag-mcp/src/server.rs`,
+`crates/oag-mcp/src/tests.rs`, `crates/oag-cli/src/main.rs`, `crates/oag-cli/src/commands.rs`,
+`spec/07-search.md`, `spec/12-cli.md`, `docs/api.md`, `OPEN_QUESTIONS.md`,
+`PROJECT_STATE.md`, `ARCHITECTURE_DECISIONS.md`.
+
+**Feature implemented.** `cursor` / `--cursor` on REST, MCP, and CLI, backed by
+`CollisionIndex`-free keyset search in the storage layer and a single `GraphService::search_page`
+so the surfaces cannot drift. `ORDER BY rank` became `ORDER BY rank, nodes.node_id`.
+
+**Tests executed.** `cargo test --workspace -j 2`: 398 passed, 0 failed (was 393). New tests:
+`search_cursor_walk_covers_every_match_once_across_an_insertion` (service),
+`search_cursor_rejects_a_malformed_token_by_starting_over` (service),
+`search_cursor_walk_does_not_repeat_a_row_when_a_match_arrives_mid_walk` (REST).
+
+**Performance measurements.** None. The cursor path adds one indexed lookup per page (resolving
+the cursor row's current rank); the offset path is unchanged.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** A corpus change that *reorders* rows across the cursor boundary still
+repeats or skips a row; unfixable by any pagination scheme and documented as such. The Human
+Interface keeps offset-only paging.

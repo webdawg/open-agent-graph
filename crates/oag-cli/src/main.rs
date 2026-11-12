@@ -44,6 +44,13 @@ enum Command {
         /// it only the first page is reachable.
         #[arg(long, default_value_t = 0)]
         offset: i64,
+        /// Keyset pagination cursor from the previous call's `next_cursor`. Takes
+        /// precedence over --offset when both are given, and is the contract to
+        /// prefer when paging a result set that may change between calls: --offset
+        /// counts rows from the start, so a document arriving that outranks the
+        /// current page shifts later offsets and the walk repeats a row.
+        #[arg(long)]
+        cursor: Option<String>,
         /// Rank by embedding cosine similarity (spec section 64) instead of
         /// keyword FTS. Requires `[search]` in config.toml to have a real
         /// embedding provider configured -- errors clearly rather than
@@ -613,8 +620,8 @@ async fn main() -> anyhow::Result<()> {
             serve::run(resolved).await
         }
         Command::Status { data_dir } => commands::status(&data_dir).await,
-        Command::Search { query, data_dir, limit, offset, semantic, config } => {
-            commands::search(&data_dir, &query, limit, offset, semantic, config).await
+        Command::Search { query, data_dir, limit, offset, cursor, semantic, config } => {
+            commands::search(&data_dir, &query, limit, offset, cursor, semantic, config).await
         }
         Command::Node { command: NodeCommand::Get { id, data_dir } } => {
             commands::node_get(&data_dir, &id).await
