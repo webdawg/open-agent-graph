@@ -1186,8 +1186,8 @@ that came back from the layer below with never-used slots.
 **Performance measurements.** None; the added work is one O(pad length) pass per routing decision,
 and the pad is small.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `239b49c` (`oag-imagination-random-data-compute`).
+**Push status:** pushed to `origin/master`.
 **Remaining defects.** The pad cannot forget: a path reinforced once keeps its weight forever, so a
 topology change dilutes it rather than removing it. Restated precisely in `RESEARCH_JOURNAL.md`,
 which also corrects the previous entry's over-claim.
