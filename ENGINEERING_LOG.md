@@ -1133,3 +1133,33 @@ remains the embedder's call. Found while re-reading the open question: **no code
 repository calls `save_to_dir`/`load_from_dir`** -- `open-agent-graph` does not depend on
 `oag-mesh` yet, so the persistence layer is correct and tested but unreachable in production.
 Recorded in `oag-mesh/OPEN_QUESTIONS.md`.
+
+---
+
+## 2026-11-09 — the tensor pad can form pathways, and its adaptation is measured
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/engine.rs`, `spec/02-tensor-pad-routing.md`,
+`RESEARCH_JOURNAL.md` (mission-wide records live in `open-agent-graph`).
+
+**Feature implemented.** `Engine::with_source` seeds the pad to one slot per neighbour, filling
+missing slots with the mean of the existing ones. The pad and the neighbour list come from different
+layers and nothing reconciled them, so a neighbour past the end of the pad could be routed to (the
+`1e-6` floor keeps it reachable) but never reinforced, because `reinforce` had no slot to add to.
+That deadlock meant the pad could strengthen a path and let others lose share but could never *form*
+one.
+
+**Tests executed.** `cargo test -p oag-imagination`: 47 passed, 0 failed (was 45). New tests:
+`reinforcing_a_neighbour_shifts_routing_toward_it` (the pad's central claim, measured as a
+distribution over 256 fixed seeds -- `route` is deterministic given pad/neighbours/seed, so it is
+an exact measurement, not a sample),
+`a_neighbour_beyond_the_pad_is_explorable_not_frozen`.
+
+**Performance measurements.** None; the change is a `Vec::resize` at engine construction.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** `reinforce` only adds, so the pad cannot weaken or dissolve a pathway: a
+path that stops carrying traffic keeps its absolute weight forever. Recorded in `spec/02` and in
+`RESEARCH_JOURNAL.md` as a proposed design (decay) with the measurement that would justify it,
+rather than implemented on speculation.

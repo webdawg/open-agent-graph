@@ -109,3 +109,41 @@ and cost. This is consistent with "degrade, don't drop."
 - **Distributed memory consolidation.** Pads are per-node today; nothing consolidates a useful
   fact across peers into a shared structure. Corroboration is the closest existing mechanism and
   it does not store, it only scores.
+
+---
+
+## The tensor pad is a multi-armed bandit with no exploration term
+
+**Date:** 2026-11-09. **Repository:** `oag-imagination-random-data-compute`. Recorded here because
+the mission-wide records live in this repository.
+
+**Observation.** `oag-imagination`'s tensor pad is a weight vector over a node's neighbours, and
+`route` draws a neighbour with probability proportional to its weight. `reinforce` adds a constant
+to the chosen neighbour after every hop. That is a multi-armed bandit: neighbours are arms, the
+weights are the belief, and routing is the draw. The reward is always 1 for the arm taken, so the
+weights grow without bound and the draw converges on whichever arm was reinforced first.
+
+**What this explains.** The open-hypothesis entry above says "no mechanism exists" for adaptive
+routing. That is not right -- the pad is one, and it is the only adaptive-routing mechanism in the
+project. What it lacked was the other half of the bandit formulation: an exploration term. With no
+exploration, an arm that is never drawn is never reinforced, so it is never drawn. The pad could
+strengthen a path and let others lose share, but could not *form* one. `Engine::with_source` now
+seeds a neighbour the pad does not cover with the mean weight -- optimistic initialisation, the
+standard fix -- which makes "form" real. Measured over 256 fixed seeds: equal pads split about
+evenly, a pad reinforced 100x carries nearly all the traffic.
+
+**What remains.** The pad still cannot *weaken* or *dissolve*: `reinforce` only adds, so a path
+that stops carrying traffic keeps its absolute weight forever and can never be retired. In bandit
+terms this is a purely exploitative strategy with no forgetting -- it converges and then cannot
+respond to topology change. A decay term (multiply the whole pad by a factor below 1 on each
+routing decision, then reinforce) would bound the weights and make reinforcement take share *from*
+the others, which is the weaken/dissolve half. It needs a rate, and the rate needs a measurement:
+too fast and the pad cannot stabilise, too slow and it cannot adapt. **Status: proposed design, not
+implemented.** The measurement that would justify it is a convergence test -- how many routing
+decisions until the pad's chosen-neighbour distribution stops moving, with and without decay.
+
+**Relationship to other components.** `oag-mesh`'s `link_quality` (`spec/13`) is the other
+adaptive-routing candidate and it *does* forget -- quality is re-learned, and `spec/13` records
+that it is dropped on restart. It is a liveness signal over peers, not a routing weight over
+neighbours, so the two are complementary rather than competing: the pad decides *which neighbour*,
+link quality decides *which peer to ask first*. Whether they should share a mechanism is open.
