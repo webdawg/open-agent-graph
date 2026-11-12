@@ -180,3 +180,56 @@ proposed design, still needing the convergence measurement to justify a rate.
 reading of a mechanism was wrong in the direction of making the system look more broken than it
 is. Share-based comparisons and count-based comparisons are different things; the first question to
 ask of any weight is what actually reads it.
+
+---
+
+## The tensor pad converges to an arbitrary neighbour: measured
+
+**Date:** 2026-11-09. **Repository:** `oag-imagination-random-data-compute`.
+**Artifact:** `crates/oag-imagination/examples/convergence.rs`.
+
+**The claim under test.** `spec/02` says "more traffic through a path strengthens the pad along that path, so repeated requests for the same thing tend to reuse it". That is a
+convergence claim, and it had only ever been asserted -- first as prose, then as a static
+distribution over 256 fixed seeds. Neither says anything about what the pad converges *to*.
+
+**Method.** Run the real engine over a deterministic source (`BLAKE3(counter)`), with a resolver
+that answers nothing so every request is routed and the pad is exercised on its own. 20,000
+decisions, 4 neighbours, share recorded every 1,000.
+
+**Result.** The pad converges to one neighbour at about 96% of all routing:
+
+| decisions | share of the eventual leader |
+|---|---|
+| 1,000 | 0.568 |
+| 3,000 | 0.777 |
+| 5,000 | 0.866 |
+| 10,000 | 0.933 |
+| 20,000 | 0.966 |
+
+The pad mean stayed at exactly 1.0000 throughout, which independently confirms the normalization
+added earlier is stable under the reinforce-then-renormalize loop.
+
+**The control that decides it.** `--offset` shifts the source's starting point. Offsets 0-3 crown
+`node-2`; offsets 4-5 crown `node-3`, at the same ~96%. The winner is therefore decided by the early
+random draws, not by any property of the neighbours. Repeated runs at the same offset reproduce
+exactly.
+
+**What this means.** `reinforce` adds a constant `1.0` to whichever hop was taken, regardless of
+whether that hop answered, forwarded, or failed. The reinforcement carries **no information about
+the hop's quality**, so the pad is not learning which neighbour is better -- it is a
+rich-get-richer random walk that locks onto whichever neighbour the first few hundred decisions
+happened to favour. The earlier entry in this journal called it "a bandit with no exploration
+term"; that was too generous. A bandit's reward varies with the arm's outcome; here it does not
+vary at all.
+
+**Consequence for the decay question.** The previous entry proposed decay as the missing
+weaken/dissolve half. This measurement shows decay would add *forgetting* but still no *signal*:
+a pad that forgets an arbitrary lock-in only drifts to another arbitrary lock-in. **The missing
+piece is a utility signal -- feedback from a hop's outcome into the pad -- not a decay rate.** That
+reframes the open design question, and it is now the honest one.
+
+**Is a signal available?** Yes, in the carrier. The TCP serving loop forwards a request and then
+reads the upstream response, so the node that routed a hop already observes whether it answered.
+`Engine::handle` returns `RouteTo(next)` and discards that observation. Plumbing it back in means
+the engine learning a reward rather than a constant -- a new input to `handle`, and a design change
+rather than a parameter. **Status: proposed design, not implemented.**

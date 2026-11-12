@@ -1313,3 +1313,43 @@ node. The adapter reads the base project's files and never writes them.
 caller using `save_to_dir` directly still has to. The base project's identity is loaded or
 generated, so a data directory without `identity.key` gets a fresh mesh identity -- correct for a
 first run, but it means the mesh node and a later-created base peer would not share one.
+
+---
+
+## 2026-11-09 — measured what the tensor pad converges to
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/examples/convergence.rs` (new),
+`spec/02-tensor-pad-routing.md`, `RESEARCH_JOURNAL.md`.
+
+**Artifact.** `cargo run --example convergence [-- neighbours N] [-- decisions N] [--offset N]`
+runs the real engine over a deterministic source (`BLAKE3(counter)`) with a resolver that never
+answers, and prints the chosen-neighbour share at checkpoints. Deterministic, so a run is
+reproducible and comparable.
+
+**Result.** With 4 neighbours and 20,000 decisions, one neighbour takes ~96% of routing (0.568 at
+1,000; 0.866 at 5,000; 0.933 at 10,000; 0.966 at 20,000). The pad mean stays exactly 1.0000, which
+also confirms the normalization added earlier is stable under reinforce-then-renormalize.
+
+**The control.** `--offset` shifts the source's start: offsets 0-3 crown `node-2`, offsets 4-5 crown
+`node-3`, at the same ~96%. So the winner is decided by the early random draws, not by any property
+of the neighbours.
+
+**What it establishes.** `reinforce` adds a constant 1.0 to whichever hop was taken, regardless of
+outcome, so the reinforcement carries no information about hop quality. The pad is a rich-get-richer
+random walk that locks onto an arbitrary neighbour -- not learning. This corrects the previous
+research entry's "bandit with no exploration term": a bandit's reward varies with the outcome, and
+here it does not vary at all. It also reframe the decay question: decay would add forgetting without
+adding signal, so the missing piece is a utility signal from the hop's outcome, which the TCP carrier
+already observes and `Engine::handle` currently discards.
+
+**Tests executed.** No test added; the artifact is the example, run by hand. `cargo test -p
+oag-imagination` remains 51 passed, 0 failed.
+
+**Performance measurements.** 20,000 decisions in ~0.47s (~42,000 decisions/sec), single-threaded,
+debug build.
+
+**Commit identifiers:** `f7ea069` (`oag-imagination-random-data-compute`).
+**Push status:** pushed to `origin/master`.
+**Remaining defects.** The pad has no utility signal, so its documented "adaptation" is lock-in
+rather than learning. Recorded as a proposed design in `RESEARCH_JOURNAL.md`, not implemented.
