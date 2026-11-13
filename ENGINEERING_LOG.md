@@ -1596,8 +1596,8 @@ serialisation is the database's, not the application's). Both must succeed. `oag
 
 **Performance measurements.** None; the change is which statement acquires the write lock.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `2bc1537` (code and test), `d791a84` (ADR addendum).
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** The new test asserts the property, not the overlap: the rebuild may finish
 before the commits start. It would not have caught the original deferred-begin bug either, because
 that bug needed a read *before* the first write -- which is exactly the ordering the change removes.
