@@ -398,3 +398,41 @@ backoff, and `spec/18` says so rather than letting a reader assume otherwise.
 **Residual.** A 429 on `fetch_events` is both recorded as a backoff and counted as a per-event fetch
 failure, so it is double-counted. `Retry-After` is consumed by the sync client only; `oag-api`'s
 outgoing calls (gateway, crawler) do not consume it. Both are recorded rather than hidden.
+
+---
+
+## SQLITE_BUSY_SNAPSHOT: the workaround was hiding the cause
+
+**Date:** 2026-11-09. **Repository:** `open-agent-graph`.
+
+**The question.** The 50-peer chaos test reported 1,971 `database is locked` errors at SQLite codes
+5 and 517. `busy_timeout(5s)` was set, which should absorb code 5 -- so why thousands of failures?
+The previous entry recorded this as an open question after checking that the storage layer opened no
+explicit transactions.
+
+**The answer, and how it was missed.** The transactions are not in the storage layer. Four
+read-then-write sites in `oag-events` and `oag-graph` call `pool.begin()`, which issues a *deferred*
+`BEGIN`: the write lock is taken at the first write, not the first read. When another connection
+commits between a transaction's read and its write, SQLite cannot upgrade the reader's snapshot and
+returns 517 immediately. No timeout helps -- the read-then-write must restart, which is why
+`busy_timeout` and 1,971 errors coexisted.
+
+The earlier check searched the wrong crates. That is the second time this session a negative result
+came from an incomplete search rather than an absent cause.
+
+**Measurement.** Reproduced in isolation at 96 concurrent writers: a deferred begin produced 35
+code-5 and 32 code-517 failures; `BEGIN IMMEDIATE` produced 96 successes and none. End-to-end, the
+chaos run's `sqlite locked` count went from **1,971 to 0** and its total recoverable errors from
+4,565 to 635, all of the remainder being the rate limiter rejecting a full-mesh flood.
+
+**The finding underneath the fix.** `GraphService` carries a `commit_lock` whose doc comment names
+this exact hazard: it exists to stop concurrent same-peer commits hitting 517. With the cause fixed,
+that lock is no longer load-bearing. A test asserting the commits *must* race now asserts the
+opposite -- 20 concurrent commits succeed with contiguous sequences. So a workaround added for a
+real problem had been silently carrying it for long enough that a test encoded the failure as
+expected behaviour.
+
+**Method note.** Two distinct lessons. First: when a defensive mechanism exists, re-derive its
+necessity after fixing the thing it defended against -- otherwise the workaround outlives its reason
+and starts to look like a property of the system. Second: a negative search result is only as good
+as its scope, and "the transactions aren't in the storage layer" was true and irrelevant.

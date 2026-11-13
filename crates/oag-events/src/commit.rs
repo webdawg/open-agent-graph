@@ -30,7 +30,13 @@ pub async fn commit_local_event(
     payload: EventPayload,
     created_at: i64,
 ) -> Result<(EventId, ProjectionOutcome), EventsError> {
-    let mut tx = pool.begin().await.map_err(oag_storage::StorageError::from)?;
+    // `BEGIN IMMEDIATE`: this reads `get_origin` and then writes. A deferred transaction would
+    // take its write lock only at the write, and fail with `SQLITE_BUSY_SNAPSHOT` (517) if another
+    // connection committed in between -- not something `busy_timeout` covers.
+    let mut tx = pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(oag_storage::StorageError::from)?;
 
     let peer_id_bytes = *identity.peer_id().as_bytes();
     let origin = events_repo::get_origin(&mut tx, &peer_id_bytes).await?;

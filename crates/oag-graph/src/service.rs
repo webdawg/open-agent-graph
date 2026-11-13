@@ -85,6 +85,14 @@ pub struct GraphService {
     /// no reason local commits should ever race at the SQLite level at
     /// all, so this makes that true in-process rather than hoping the
     /// database's own locking happens to cover it.
+    ///
+    /// **The hazard this guarded is now fixed at its cause**, not worked around:
+    /// `commit_local_event` opens `BEGIN IMMEDIATE`, which takes the write lock up front so there
+    /// is no read snapshot to upgrade. Measured: 20 concurrent same-peer commits went from racing
+    /// (that behaviour is now asserted *against* in `oag-events`) to all succeeding with contiguous
+    /// sequences, and the 50-peer chaos run's SQLite lock contention went from 1,971 errors to
+    /// **zero**. So this lock is no longer load-bearing for `SQLITE_BUSY_SNAPSHOT`; it stays as
+    /// defence in depth for any future read-then-write path that opens its own transaction.
     commit_lock: tokio::sync::Mutex<()>,
     /// Process-lifetime verification counters (spec section 86's
     /// `verification_jobs`/`verification_failures`). Separate `Arc`s, same

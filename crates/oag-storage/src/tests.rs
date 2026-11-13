@@ -18,6 +18,153 @@ fn temp_db_path(name: &str) -> std::path::PathBuf {
     dir.join("oag.sqlite")
 }
 
+/// Reproduces the `database is locked` errors the 50-peer chaos test reports, in isolation: one
+/// pool at the production 8-connection default, and many concurrent writers issuing the same
+/// upsert.
+///
+/// The point is the SQLite result *code*, because the remedy depends on it. Code 5
+/// (`SQLITE_BUSY`) is what `busy_timeout` is supposed to absorb. Code 517
+/// (`SQLITE_BUSY_SNAPSHOT`) is returned immediately by WAL when a connection holding a read
+/// snapshot tries to upgrade to a writer, and no timeout helps -- the usual fix there is a
+/// single-writer queue, which would serialise every write in the process. So the code decides
+/// whether the remedy is a retry or an architecture change, and the chaos test never reported it.
+#[tokio::test]
+async fn concurrent_upserts_report_which_sqlite_busy_code() {
+    let path = temp_db_path("busy-code");
+    let pool = open_pool(&path).await.unwrap();
+    // One row already present, so the upsert takes its UPDATE branch as well as the INSERT.
+    {
+        let mut conn = pool.acquire().await.unwrap();
+        repo::peers::upsert_peer(&mut conn, &[0u8; 32], &[7u8; 32], None, 0).await.unwrap();
+    }
+
+    let writers = 96;
+    let mut set = tokio::task::JoinSet::new();
+    for i in 0..writers {
+        let pool = pool.clone();
+        set.spawn(async move {
+            let mut conn = pool.acquire().await.unwrap();
+            repo::peers::upsert_peer(&mut conn, &[i as u8; 32], &[7u8; 32], None, 0).await
+        });
+    }
+
+    let mut ok = 0usize;
+    // SQLite code -> count, plus a counter for failures that carry no code at all. That last
+    // counter is the real assertion: an unattributable storage failure cannot be reasoned about,
+    // and "which code" is the whole question here.
+    let mut by_code: std::collections::BTreeMap<i64, usize> = Default::default();
+    let mut uncoded = 0usize;
+    while let Some(result) = set.join_next().await {
+        match result.unwrap() {
+            Ok(()) => ok += 1,
+            Err(error) => match &error {
+                crate::StorageError::Sqlx(sqlx::Error::Database(database)) => {
+                    match database.code().as_deref().and_then(|code| code.parse::<i64>().ok()) {
+                        Some(code) => *by_code.entry(code).or_insert(0) += 1,
+                        None => uncoded += 1,
+                    }
+                }
+                _ => uncoded += 1,
+            },
+        }
+    }
+
+    println!(
+        "concurrent upserts: {writers} writers on an 8-connection pool -> {ok} ok,          failures by SQLite code {by_code:?}, uncoded {uncoded}"
+    );
+    assert_eq!(ok + by_code.values().sum::<usize>() + uncoded, writers, "every writer must be accounted for");
+    assert_eq!(uncoded, 0, "every storage failure must carry a SQLite code so its cause is reachable");
+
+    std::fs::remove_file(&path).ok();
+}
+
+/// Runs `writers` concurrent read-then-write transactions and tallies how they failed.
+///
+/// This is the shape `oag-events`' `ingest_remote_event` and three other sites use: begin, read,
+/// then write. With a deferred `BEGIN` the write lock is only taken at the first write, so a
+/// connection that commits in between leaves this one unable to upgrade its read snapshot, and
+/// SQLite returns `SQLITE_BUSY_SNAPSHOT` (517) *immediately* -- `busy_timeout` does not apply,
+/// which is why a 5s timeout coexists with thousands of these in a 50-peer run.
+async fn read_then_write_tx(pool: &crate::SqlitePool, writers: usize, immediate: bool) -> (usize, std::collections::BTreeMap<i64, usize>, usize) {
+    let mut set = tokio::task::JoinSet::new();
+    for i in 0..writers {
+        let pool = pool.clone();
+        set.spawn(async move {
+            let mut tx = if immediate {
+                pool.begin_with("BEGIN IMMEDIATE").await.map_err(crate::StorageError::from)?
+            } else {
+                pool.begin().await.map_err(crate::StorageError::from)?
+            };
+            let _: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM peers")
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(crate::StorageError::from)?;
+            repo::peers::upsert_peer(&mut tx, &[i as u8; 32], &[7u8; 32], None, 0).await?;
+            tx.commit().await.map_err(crate::StorageError::from)?;
+            Ok::<(), crate::StorageError>(())
+        });
+    }
+
+    let mut ok = 0usize;
+    let mut by_code: std::collections::BTreeMap<i64, usize> = Default::default();
+    let mut uncoded = 0usize;
+    while let Some(result) = set.join_next().await {
+        match result.unwrap() {
+            Ok(()) => ok += 1,
+            Err(error) => match &error {
+                crate::StorageError::Sqlx(sqlx::Error::Database(database)) => {
+                    match database.code().as_deref().and_then(|code| code.parse::<i64>().ok()) {
+                        Some(code) => *by_code.entry(code).or_insert(0) += 1,
+                        None => uncoded += 1,
+                    }
+                }
+                _ => uncoded += 1,
+            },
+        }
+    }
+    (ok, by_code, uncoded)
+}
+
+/// Deferred versus immediate, same 96-writer load. The deferred arm reproduces exactly the two
+/// codes the 50-peer chaos test reports (5 and 517); the immediate arm, which is what the four
+/// read-then-write sites now use, should not fail at all.
+#[tokio::test]
+async fn begin_immediate_removes_the_busy_snapshot_failures_a_deferred_begin_causes() {
+    let writers = 96;
+
+    let path = temp_db_path("busy-snapshot-deferred");
+    let pool = open_pool(&path).await.unwrap();
+    {
+        let mut conn = pool.acquire().await.unwrap();
+        repo::peers::upsert_peer(&mut conn, &[0u8; 32], &[7u8; 32], None, 0).await.unwrap();
+    }
+    let (ok, by_code, uncoded) = read_then_write_tx(&pool, writers, false).await;
+    println!("deferred BEGIN:  {writers} writers -> {ok} ok, codes {by_code:?}, uncoded {uncoded}");
+    assert_eq!(ok + by_code.values().sum::<usize>() + uncoded, writers);
+    assert_eq!(uncoded, 0, "every failure must carry a SQLite code");
+    assert!(
+        by_code.contains_key(&517),
+        "the deferred arm must reproduce SQLITE_BUSY_SNAPSHOT for this test to mean anything, got {by_code:?}"
+    );
+    std::fs::remove_file(&path).ok();
+
+    let path = temp_db_path("busy-snapshot-immediate");
+    let pool = open_pool(&path).await.unwrap();
+    {
+        let mut conn = pool.acquire().await.unwrap();
+        repo::peers::upsert_peer(&mut conn, &[0u8; 32], &[7u8; 32], None, 0).await.unwrap();
+    }
+    let (ok, by_code, uncoded) = read_then_write_tx(&pool, writers, true).await;
+    println!("immediate BEGIN: {writers} writers -> {ok} ok, codes {by_code:?}, uncoded {uncoded}");
+    assert_eq!(ok + by_code.values().sum::<usize>() + uncoded, writers);
+    assert_eq!(uncoded, 0);
+    assert!(
+        by_code.is_empty(),
+        "BEGIN IMMEDIATE must take the write lock up front and so not fail to upgrade, got {by_code:?}"
+    );
+    std::fs::remove_file(&path).ok();
+}
+
 #[tokio::test]
 async fn migrations_create_expected_tables() {
     let path = temp_db_path("migrations");

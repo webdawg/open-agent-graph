@@ -582,3 +582,37 @@ alone:
   `spec/06` rather than implied away.
 
 **Status.** Accepted.
+
+---
+
+## ADR-015 — Read-then-write transactions take `BEGIN IMMEDIATE`
+
+**Decision.** Every transaction that reads and then writes opens with `pool.begin_with("BEGIN
+IMMEDIATE")`, not `pool.begin()`. Four sites: `oag-events`' `ingest_remote_event` and
+`commit_local_event`, and `oag-graph`'s two redaction paths. `oag-graph`'s `rebuild` keeps a
+deferred begin because its first statement is a write, so it never upgrades a read snapshot -- and
+holding the write lock for a whole rebuild would be worse.
+
+**Context.** `pool.begin()` issues a *deferred* `BEGIN`: the write lock is taken at the first write,
+not at the first read. If another connection commits between a transaction's read and its write,
+SQLite cannot upgrade this connection's read snapshot and returns `SQLITE_BUSY_SNAPSHOT` (517)
+immediately. `busy_timeout(5s)` does not cover it, because no amount of waiting makes a stale
+snapshot valid -- the whole read-then-write has to restart.
+
+This was the largest single error class in a 50-peer chaos run: 1,971 `database is locked` errors,
+codes 5 and 517, all recovered by retry.
+
+**Consequences.**
+- Reproduced in isolation at 96 concurrent writers: deferred begin gave 35 code-5 and 32 code-517
+  failures; `BEGIN IMMEDIATE` gave 96 successes and zero failures.
+- End-to-end, the chaos run's `sqlite locked` count went from **1,971 to 0**, and total recoverable
+  errors from 4,565 to 635 -- the remainder being the rate limiter doing its job against a full-mesh
+  flood. The 429 count also fell (2,594 to 635) because transactions complete instead of retrying.
+- **A workaround became redundant.** `GraphService`'s `commit_lock` existed specifically to stop
+  concurrent same-peer commits hitting 517. With the cause fixed, a test that asserted those
+  commits *must* race now asserts the opposite: 20 concurrent commits all succeed with contiguous
+  sequences. The lock stays as defence in depth, and its doc comment says so.
+- `BEGIN IMMEDIATE` serialises writers at the database rather than the application, so it also
+  covers multiple processes sharing a database -- which a process-local mutex never could.
+
+**Status.** Accepted.

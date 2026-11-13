@@ -187,7 +187,11 @@ fn tally(kinds: &mut std::collections::HashMap<&'static str, (usize, String)>, m
 
 /// Groups a sync error by its leading cause, so the run can report what actually failed.
 fn classify_error(message: &str) -> &'static str {
-    if message.contains("database is locked") || message.contains("busy") {
+    if message.contains("rate limited") {
+        // The client surfaces a 429 distinctly now, so this wording replaced the old
+        // "HTTP status client error (429 ...)".
+        "rate limited (429)"
+    } else if message.contains("database is locked") || message.contains("busy") {
         "sqlite locked"
     } else if message.contains("http request to peer failed") {
         "hello http failure"

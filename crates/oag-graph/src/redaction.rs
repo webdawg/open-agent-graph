@@ -55,7 +55,13 @@ impl GraphService {
         auth.require(Permission::Admin)?;
         check_opt_len("reason", &reason, MAX_REASON_LEN)?;
 
-        let mut tx = self.pool().begin().await.map_err(oag_storage::StorageError::from)?;
+        // `BEGIN IMMEDIATE`: reads then writes, and a deferred transaction would fail with
+        // `SQLITE_BUSY_SNAPSHOT` (517) if another connection committed between the two.
+        let mut tx = self
+            .pool()
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(oag_storage::StorageError::from)?;
 
         if redactions_repo::exists(&mut tx, evidence_id).await? {
             return Err(GraphError::AlreadyRedacted(evidence_id));
@@ -109,7 +115,13 @@ impl GraphService {
         auth.require(Permission::Admin)?;
         check_opt_len("reason", &reason, MAX_REASON_LEN)?;
 
-        let mut tx = self.pool().begin().await.map_err(oag_storage::StorageError::from)?;
+        // `BEGIN IMMEDIATE`: reads then writes, and a deferred transaction would fail with
+        // `SQLITE_BUSY_SNAPSHOT` (517) if another connection committed between the two.
+        let mut tx = self
+            .pool()
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(oag_storage::StorageError::from)?;
 
         if actor_redactions_repo::exists(&mut tx, actor_id).await? {
             return Err(GraphError::ActorAlreadyRedacted(actor_id));

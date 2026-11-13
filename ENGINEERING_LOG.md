@@ -1529,3 +1529,47 @@ interaction of 50 peers' worth of concurrent writers) are untested. **Status: op
 fix.** A single-writer queue is the standard remedy for 517 but would serialise every write in the
 process; committing to it without knowing the cause and without measuring the write-throughput cost
 would be exactly the kind of uninformed change this session has been correcting.
+
+---
+
+## 2026-11-09 — BEGIN IMMEDIATE: the SQLite lock contention goes to zero
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-events/src/ingest.rs`, `crates/oag-events/src/commit.rs`,
+`crates/oag-graph/src/redaction.rs` (two sites), `crates/oag-graph/src/service.rs`,
+`crates/oag-storage/src/tests.rs`, `crates/oag-events/src/tests.rs`,
+`crates/oag-sync/tests/distributed_convergence.rs`, `ARCHITECTURE_DECISIONS.md`,
+`RESEARCH_JOURNAL.md`.
+
+**Root cause found, not guessed.** The previous entry recorded `SQLITE_BUSY_SNAPSHOT` as an open
+question because the usual cause -- a deferred transaction reading then writing -- appeared absent.
+It was present; the earlier grep searched `oag-storage` and `oag-sync` and the transactions live in
+`oag-events` and `oag-graph`. Four read-then-write sites used `pool.begin()`, which takes the write
+lock only at the first write, so a concurrent commit left the reader unable to upgrade.
+
+**Feature implemented.** All four use `pool.begin_with("BEGIN IMMEDIATE")`. `rebuild` keeps a
+deferred begin: its first statement is a write, so it never upgrades, and holding the write lock
+across a whole rebuild would cost more.
+
+**Tests executed.**
+- `cargo test -p oag-storage`: 36 passed (was 35). New
+  `begin_immediate_removes_the_busy_snapshot_failures_a_deferred_begin_causes` -- an A/B at 96
+  concurrent writers: deferred 35x code-5 + 32x code-517, immediate 0 failures.
+- `cargo test -p oag-events --lib`: 22 passed. `commit_local_event_itself_is_not_safe_for_concurrent_same_peer_calls`
+  **reversed**: it asserted the commits must race, and its own message said to rerun before
+  concluding if that changed. Reran three times, then reversed -- it now asserts 0 errors and
+  contiguous sequences 1..=20.
+- `cargo test -p oag-graph`, `-p oag-sync`: 101 and 43 passed.
+- `cargo test -p oag-sync --test distributed_convergence -- --ignored`: 1 passed.
+
+**Performance measurements.** The chaos run before this change: 4,565 recoverable errors (2,594
+rate-limit 429s, 1,971 SQLite locked, 105 fetch failures). After: **635 errors, all of them the rate
+limiter; `sqlite locked` 0** (was 1,971). Counts are timing-dependent between runs, so the
+comparison is the same test on the same seed before and after, not two runs after.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** `GraphService::commit_lock` is no longer load-bearing for 517; kept as
+defence in depth and documented as such. `rebuild`'s deferred begin is correct only because its
+first statement writes -- a reorder would reintroduce the hazard, and there is no test pinning that
+ordering.

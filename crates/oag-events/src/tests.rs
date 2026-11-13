@@ -671,10 +671,24 @@ async fn commit_local_event_itself_is_not_safe_for_concurrent_same_peer_calls() 
             errors += 1;
         }
     }
-    assert!(
-        errors > 0,
-        "expected at least some of these 20 unserialized concurrent calls to race and fail -- if this \
-         now passes, something about SQLite's own locking behavior changed, and GraphService::commit_event's \
-         serialization lock may no longer be load-bearing (or this test got lucky; rerun before concluding that)"
+
+    // This used to assert `errors > 0`: concurrent same-peer commits were expected to race, because
+    // the transaction read the origin and then wrote under a *deferred* `BEGIN`, so two commits
+    // could compute the same next sequence. `BEGIN IMMEDIATE` takes the write lock up front, so the
+    // second waits and re-reads -- the race is gone, and `GraphService::commit_event`'s app-level
+    // serialization lock is no longer what prevents it. Verified stable across repeated runs before
+    // this assertion was reversed.
+    assert_eq!(errors, 0, "BEGIN IMMEDIATE must serialise concurrent same-peer commits");
+
+    // And they must not have forked: one origin row, contiguous sequences 1..=20.
+    let mut conn = pool.acquire().await.unwrap();
+    let origin = oag_storage::repo::events::get_origin(&mut conn, identity.peer_id().as_bytes())
+        .await
+        .unwrap()
+        .expect("the origin row must exist after 20 commits");
+    assert_eq!(
+        origin.highest_contiguous_sequence, 20,
+        "the 20 commits must be contiguous, so the sequence allocation did not race"
     );
+    assert!(origin.head_event_id.is_some(), "the origin must have a head");
 }

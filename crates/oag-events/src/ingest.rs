@@ -74,7 +74,16 @@ pub async fn ingest_remote_event(
         .map(str::parse)
         .transpose()?;
 
-    let mut tx = pool.begin().await.map_err(oag_storage::StorageError::from)?;
+    // `BEGIN IMMEDIATE`, not a deferred `BEGIN`. This transaction reads (`find_event_id_at`,
+    // `get_origin`) and then writes, and a deferred transaction takes its write lock only at the
+    // first write -- so if another connection commits in between, SQLite cannot upgrade this
+    // connection's read snapshot and returns `SQLITE_BUSY_SNAPSHOT` (517) *immediately*, which
+    // `busy_timeout` does not cover. Reproduced in isolation at 96 concurrent writers: 37 code-5
+    // and 28 code-517 failures. Taking the write lock up front turns both into a wait.
+    let mut tx = pool
+        .begin_with("BEGIN IMMEDIATE")
+        .await
+        .map_err(oag_storage::StorageError::from)?;
 
     if let Some(existing) = events_repo::find_event_id_at(&mut tx, &origin_peer_id, sequence as i64).await? {
         if existing == event_id {
