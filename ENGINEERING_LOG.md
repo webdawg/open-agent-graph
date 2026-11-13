@@ -1573,3 +1573,31 @@ comparison is the same test on the same seed before and after, not two runs afte
 defence in depth and documented as such. `rebuild`'s deferred begin is correct only because its
 first statement writes -- a reorder would reintroduce the hazard, and there is no test pinning that
 ordering.
+
+---
+
+## 2026-11-09 — rebuild takes BEGIN IMMEDIATE too, and every transaction is now uniform
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-graph/src/rebuild.rs`, `crates/oag-graph/src/tests.rs`,
+`ARCHITECTURE_DECISIONS.md`.
+
+**Feature implemented.** `rebuild_projection` opens `BEGIN IMMEDIATE`. ADR-015 exempted it on the
+reasoning that its first statement writes, so the write lock was taken immediately anyway and the
+exemption cost nothing -- which was right about the cost and wrong about the risk: correctness
+rested on `clear_projection_tables` staying first, and nothing tested that. A deferred transaction
+that writes holds the lock until commit regardless, so taking it up front costs nothing here either.
+
+**Tests executed.** `cargo test -p oag-graph`: 102 passed, 0 failed (was 101). New
+`a_rebuild_concurrent_with_local_commits_produces_no_locking_error`: 200 seeded events, a rebuild
+running concurrently with 32 commits through a *second* service handle (its own commit lock, so the
+serialisation is the database's, not the application's). Both must succeed. `oag-events` 22,
+`oag-storage` 36.
+
+**Performance measurements.** None; the change is which statement acquires the write lock.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** The new test asserts the property, not the overlap: the rebuild may finish
+before the commits start. It would not have caught the original deferred-begin bug either, because
+that bug needed a read *before* the first write -- which is exactly the ordering the change removes.

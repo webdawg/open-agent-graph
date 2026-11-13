@@ -1002,6 +1002,54 @@ async fn subgraph_keeps_the_shortest_distance_when_a_node_is_reachable_two_ways(
     assert_eq!(c_distance, 1, "the direct edge's distance must win over the longer detour");
 }
 
+/// A rebuild runs as one long transaction while local commits keep arriving. Neither may fail
+/// with a database locking error.
+///
+/// The rebuild used a deferred `BEGIN`, which was safe only because `clear_projection_tables` is
+/// its first statement and writes -- an ordering dependency nothing tested, and one that would
+/// have reintroduced `SQLITE_BUSY_SNAPSHOT` if the order ever changed. It now opens
+/// `BEGIN IMMEDIATE` like every other multi-statement transaction, so this test pins the behaviour
+/// rather than the ordering.
+#[tokio::test]
+async fn a_rebuild_concurrent_with_local_commits_produces_no_locking_error() {
+    let (service, auth) = service_with_admin("rebuild-concurrent").await;
+
+    // Enough events that the rebuild takes real time, so the commits below actually overlap it
+    // rather than running after it finished.
+    for i in 0..200 {
+        service
+            .assert(&auth, sample_input(&format!("https://example.com/rebuild-concurrent/{i}")))
+            .await
+            .unwrap();
+    }
+
+    // A second handle on the same pool, with its own commit lock, so these commits are serialised
+    // by the database rather than by the first service's in-process lock -- which is the case the
+    // deferred begin used to lose.
+    let rebuilder_service = GraphService::new(service.pool().clone(), service.identity().clone());
+    let rebuilder = tokio::spawn(async move { rebuilder_service.rebuild_projection().await });
+
+    let mut committed = 0;
+    for i in 0..32 {
+        service
+            .assert(&auth, sample_input(&format!("https://example.com/rebuild-concurrent/late/{i}")))
+            .await
+            .expect("a commit racing a rebuild must not fail with a database error");
+        committed += 1;
+    }
+
+    let summary = rebuilder
+        .await
+        .expect("rebuild task panicked")
+        .expect("a rebuild racing local commits must not fail with a database error");
+    assert_eq!(committed, 32);
+    assert!(
+        summary.events_replayed >= 200,
+        "the rebuild must have replayed the seeded events, got {}",
+        summary.events_replayed
+    );
+}
+
 #[tokio::test]
 async fn rebuild_projection_reproduces_identical_graph_state() {
     let (service, auth) = service_with_admin("rebuild-projection").await;

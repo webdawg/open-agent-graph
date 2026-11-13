@@ -39,7 +39,16 @@ impl GraphService {
     /// concurrent writers rather than corrupt anything), but a live server
     /// would see a long stall for the duration — best run with it stopped.
     pub async fn rebuild_projection(&self) -> Result<RebuildSummary, GraphError> {
-        let mut tx = self.pool().begin().await.map_err(oag_storage::StorageError::from)?;
+        // `BEGIN IMMEDIATE`, matching every other multi-statement transaction in this project. The
+        // deferred begin this used to use was safe *only because* `clear_projection_tables` is the
+        // first statement and writes, so the write lock was taken immediately anyway -- an ordering
+        // dependency nothing tested. Taking the lock up front costs nothing here (a deferred
+        // transaction that writes holds it until commit regardless) and removes the dependency.
+        let mut tx = self
+            .pool()
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(oag_storage::StorageError::from)?;
 
         rebuild_repo::clear_projection_tables(&mut tx).await?;
 
