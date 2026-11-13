@@ -248,8 +248,17 @@ new transport wiring either.
    server can relay to another server, chained arbitrarily deep. Today's only notion of "relay" is
    `oag-sync`'s transitive event propagation (I learned about peer C's events through peer B,
    `crates/oag-sync/src/service.rs`) — a byproduct of pull-based gossip, not a modeled, signed
-   chain-of-custody for one specific payload. No `hop_count`/`via_peer` field or multi-hop
-   relay-with-witness structure exists anywhere today.
+   chain-of-custody for one specific payload.
+
+   **Corrected.** The "no `hop_count`/`via_peer` field" sentence that used to follow is wrong, and
+   was wrong in both directions: `UnsignedTransferRequest` carries `relay_hops_remaining` and
+   `relay_path`, `UnsignedGatewayRequest` carries `hops_remaining` and `path`, each hop appends its
+   own peer id and refuses to forward to a peer already in the chain, and the server records
+   `relayed_via` on its evidence. `a_relay_refuses_to_forward_to_a_peer_already_in_the_chain`
+   asserts the refusal with no network involved. What is genuinely still absent is the *witness*
+   half: each hop is an independent, ordinary pairwise event rather than one signed multi-party
+   structure, so no single record attests the whole chain. And `relay_path` is a requester claim
+   that each relay re-derives for itself, not signatures over the chain.
 2. **Witness-based supply-chain audit.** A trusted node can sit in a position to independently
    observe a transfer and emit a record if the serving node lied about what it actually sent — "man
    in the middle" in the auditing sense, not the attack sense. The closest existing primitive is

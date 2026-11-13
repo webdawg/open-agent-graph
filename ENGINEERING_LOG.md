@@ -1601,3 +1601,32 @@ serialisation is the database's, not the application's). Both must succeed. `oag
 **Remaining defects.** The new test asserts the property, not the overlap: the rebuild may finish
 before the commits start. It would not have caught the original deferred-begin bug either, because
 that bug needed a read *before* the first write -- which is exactly the ordering the change removes.
+
+---
+
+## 2026-11-09 — the relay chain of custody exists and is now tested; spec/22 corrected
+
+**Repository:** `open-agent-graph` (`rust-ai`)
+**Files modified:** `crates/oag-api/src/transfer.rs`, `spec/22-future-work.md`,
+`RESEARCH_JOURNAL.md`.
+
+**Finding.** `spec/22-future-work.md` claimed "No `hop_count`/`via_peer` field or multi-hop
+relay-with-witness structure exists anywhere today." That is stale twice over:
+`UnsignedTransferRequest` has `relay_hops_remaining` and `relay_path`, `UnsignedGatewayRequest` has
+`hops_remaining` and `path`, each hop appends itself and refuses to forward to a peer already in the
+chain, and the server records `relayed_via` on its evidence. The existing relay test exercises the
+chain but never asserts the path.
+
+**Feature implemented.** `a_relay_refuses_to_forward_to_a_peer_already_in_the_chain` -- a unit test
+of `relay_fetch` with a dead relay address, so a `None` can only come from the path check. No network,
+no timing.
+
+**Tests executed.** `cargo test -p oag-api`: 65 passed, 0 failed (was 64).
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** An attempt to write an *integration* test for a cyclic relay configuration
+(two peers relaying to each other, neither holding the content) hung past a 20s bound. The path check
+is not the cause -- the unit test above proves it refuses. The hang is undiagnosed and is recorded
+here rather than claimed as a defect; the prime suspect is `EmbeddedIpfsProvider::fetch`, which has
+no timeout and may block on a CID nobody can serve. That is a separate question and is not asserted.

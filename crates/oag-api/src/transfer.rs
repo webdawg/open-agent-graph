@@ -632,6 +632,46 @@ async fn fetch_with_receipt_inner(state: AppState, req: TransferRequest) -> Resu
 mod tests {
     use super::*;
 
+    /// A relay must refuse to forward to a peer already in the recorded chain -- that refusal is
+    /// what makes a cyclic relay configuration terminate rather than loop.
+    ///
+    /// This is asserted without any network: the peer's address is a dead port, so a `None` here can
+    /// only come from the path check refusing it.
+    #[tokio::test]
+    async fn a_relay_refuses_to_forward_to_a_peer_already_in_the_chain() {
+        let dir = std::env::temp_dir().join(format!(
+            "oag-api-relay-path-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pool = oag_storage::open_pool(&dir.join("oag.sqlite")).await.unwrap();
+        let identity_b = PeerIdentity::generate();
+        let identity_c = PeerIdentity::generate();
+        let state = AppState::new(std::sync::Arc::new(GraphService::new(pool, identity_b.clone())))
+            .with_relay_peers(vec![RelayPeer {
+                address: "http://127.0.0.1:1".to_string(),
+                peer_id: identity_c.peer_id(),
+            }]);
+
+        // The chain already contains both B and C, so B must not forward to C even though C is its
+        // only configured relay and the hop budget is untouched.
+        let nonce = oag_crypto::random_bytes_32();
+        let req = build_and_sign_request(
+            &identity_b,
+            "bafytestcid",
+            &nonce,
+            1_000,
+            8,
+            &[identity_b.peer_id().to_string(), identity_c.peer_id().to_string()],
+        );
+        assert!(
+            relay_fetch(&state, &identity_b, &req).await.is_none(),
+            "a relay must refuse to forward to a peer already in the recorded chain"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn request_sign_and_verify_round_trip() {
         let identity = PeerIdentity::generate();
