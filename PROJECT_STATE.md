@@ -142,6 +142,8 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   row's `node_id`, not its rank, because FTS5's bm25 rank moves with the corpus.
 - **The embedded IPFS node's libp2p identity is persisted** (`<repo>/libp2p.key`), so a restart
   keeps the same dial address. ADR-013.
+- **Every multi-statement transaction takes `BEGIN IMMEDIATE`.** The deferred begin was the cause
+  of 1,971 `SQLITE_BUSY_SNAPSHOT` errors in the 50-peer chaos run; that count is now **0**. ADR-015.
 - **Source independence accounts for mirrored content** -- one article on several domains is one
   source, not several. ADR-014.
 - **The crawler pins its side-fetches** (`llms.txt`, ARD, agent card), so the evidence backing
@@ -159,9 +161,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Verification
 
-Last full pass across all three repositories: `open-agent-graph` 445 passed, `oag-mesh` 193,
+Last full pass across all three repositories: `open-agent-graph` 448 passed, `oag-mesh` 193,
 `oag-imagination-random-data-compute` 54 (including the Reticulum carrier), `oag-collisions` 29 --
-0 failed anywhere.
+724 in total, 0 failed anywhere.
 
 ## How to work here
 
