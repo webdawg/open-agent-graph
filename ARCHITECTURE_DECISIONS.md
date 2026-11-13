@@ -616,3 +616,9 @@ codes 5 and 517, all recovered by retry.
   covers multiple processes sharing a database -- which a process-local mutex never could.
 
 **Status.** Accepted.
+
+**Addendum.** The `rebuild` clause above is superseded: it now opens `BEGIN IMMEDIATE` too. The
+reasoning that exempted it was wrong -- a deferred transaction that writes holds the write lock
+until commit either way, so taking it up front costs nothing there, and the exemption rested on
+`clear_projection_tables` being the first statement, an ordering nothing tested. Every
+multi-statement transaction in the project is now immediate, with no exception.
