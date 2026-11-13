@@ -1497,3 +1497,35 @@ for a reader to assume the loop was measured.
 **Remaining defects.** A 429 on `fetch_events` is recorded as a backoff *and* counted as a
 per-event fetch failure, so it is double-counted. `Retry-After` is honoured by the sync client only;
 `oag-api`'s own outgoing calls (the gateway, the crawler) do not consume it either.
+
+---
+
+## 2026-11-09 — full verification pass, and the SQLITE_BUSY_SNAPSHOT question recorded not guessed
+
+**Repositories:** all three.
+
+**Tests executed.**
+- `cargo test --workspace -j 2` in `open-agent-graph`: **445 passed, 0 failed**.
+- `cargo test -j 2` in `oag-mesh`: **193 passed, 0 failed**.
+- `cargo test --workspace -j 2` in `oag-imagination-random-data-compute`: **54 passed, 0 failed**
+  (includes the Reticulum carrier).
+- `oag-collisions`: **29 passed, 0 failed**.
+
+**Why a full pass.** This closed a long run of increments (keyset pagination, persisted libp2p
+identity, content-based source independence, side-fetch pinning, per-store sync heads, the mesh node
+adapter, the pad's utility signal and step, rate-limit measurement and backoff) across three
+repositories. A full pass after that many changes is the check that they compose.
+
+**Commit identifiers:** none; verification only.
+**Push status:** n/a.
+
+**SQLITE_BUSY_SNAPSHOT (517), recorded rather than guessed.** The chaos test reports 1,971
+`database is locked` errors, codes 5 and 517. `busy_timeout(5s)` is set, and the usual cause of
+517 -- a deferred transaction that reads and then upgrades to a write -- is *not* present: the
+storage layer opens no explicit transactions and issues no `RETURNING`. So the trigger is not
+identified, and the three candidate explanations (sqlx holding a read snapshot across statements on
+a pooled connection, the FTS external-content triggers reading the index before writing, or the
+interaction of 50 peers' worth of concurrent writers) are untested. **Status: open question, not a
+fix.** A single-writer queue is the standard remedy for 517 but would serialise every write in the
+process; committing to it without knowing the cause and without measuring the write-throughput cost
+would be exactly the kind of uninformed change this session has been correcting.

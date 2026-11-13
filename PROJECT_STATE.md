@@ -157,6 +157,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    a pull that updates several stores is still best-effort per store. Judged the smaller of the two
    gaps now that the read side is closed.
 
+## Verification
+
+Last full pass across all three repositories: `open-agent-graph` 445 passed, `oag-mesh` 193,
+`oag-imagination-random-data-compute` 54 (including the Reticulum carrier), `oag-collisions` 29 --
+0 failed anywhere.
+
 ## How to work here
 
 - Every invocation starts from this file plus the per-repo `OPEN_QUESTIONS.md` and recent git log.
