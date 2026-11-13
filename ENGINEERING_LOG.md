@@ -1567,8 +1567,8 @@ rate-limit 429s, 1,971 SQLite locked, 105 fetch failures). After: **635 errors, 
 limiter; `sqlite locked` 0** (was 1,971). Counts are timing-dependent between runs, so the
 comparison is the same test on the same seed before and after, not two runs after.
 
-**Commit identifiers:** pending.
-**Push status:** pending.
+**Commit identifiers:** `419c7bc`.
+**Push status:** pushed to `origin/main`.
 **Remaining defects.** `GraphService::commit_lock` is no longer load-bearing for 517; kept as
 defence in depth and documented as such. `rebuild`'s deferred begin is correct only because its
 first statement writes -- a reorder would reintroduce the hazard, and there is no test pinning that
