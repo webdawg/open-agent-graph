@@ -45,6 +45,33 @@ format.
 
 ---
 
+## 2026-11-12 — the HTTP listing is paginated and query-string aware
+
+**Repository:** `oag-listend`, commits `3eaf9ba` and the SPEC rewrite on `master`; records in
+`open-agent-graph`.
+
+**The defect.** `route` matched on the whole request path, so a query string was part of it:
+`GET /audio?offset=0` fell through to 404. Any client that added a query got an error.
+
+**What changed.** `route` splits the path from the query before matching. `GET /audio` is
+paginated with `?offset=&limit=` (clamped to `MAX_LIST_LIMIT`) and reports `X-Total-Count` and
+`X-Offset`, matching the native paginated listing. An unparsable `limit` falls back to the default;
+an `offset` past the end is clamped. The HTTP carrier spec paragraph was also rewritten, since it
+still described an earlier surface.
+
+**Tests executed.** `cargo test -p oag-listend`: 37 unit + 14 end-to-end, 0 failed (was 37 + 13).
+New `http_query_strings_and_paginated_listing`: both pages, an offset past the end, an unparsable
+limit, a query on an audio path serving, and an unknown route with a query still 404.
+
+**Verified by hand with curl.** `?offset=0&limit=2` → 200 with `X-Total-Count: 4`, `X-Offset: 0`,
+2 lines; `?offset=2&limit=2` → `X-Offset: 2`; `/audio/<hash>?x=1` → 200; `/nope?x=1` → 404.
+
+**Commit identifiers:** `oag-listend` `3eaf9ba` plus the SPEC follow-up; this entry's commit
+pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — paginate the listing so it always fits the frame cap
 
 **Repository:** `oag-listend`, commit `4e505d0` on `master`; records in `open-agent-graph`.

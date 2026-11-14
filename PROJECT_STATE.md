@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's HTTP listing is paginated and query-string aware.** A query string was part of
+  the path, so `GET /audio?offset=0` was a 404; the path is now split from the query, and
+  `GET /audio` takes `?offset=&limit=` with `X-Total-Count`/`X-Offset`, matching the native listing.
+  37 unit + 14 end-to-end tests; verified with curl (X-Total-Count 4 / X-Offset 0 and 2,
+  `/audio/<hash>?x=1` → 200, `/nope?x=1` → 404).
 - **oag-listend's listing is paginated.** `List` returned every hash in one frame, so a store with
   more than ~250k items would make the daemon send a frame its own client must reject as too long.
   `List { offset, limit }` now returns one page plus the store's `total`; stream carriers cap the
