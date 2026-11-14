@@ -138,6 +138,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's HTTP carrier allows cross-origin browser clients.** Every response carries
+  `Access-Control-Allow-Origin: *` and `OPTIONS` is answered with the allowed methods and headers,
+  so a page on another origin can `fetch()` the audio instead of being blocked at the preflight.
+  32 unit + 13 end-to-end tests; verified with curl (204 preflight, ACAO on GET). IPFS and
+  Reticulum are recorded as deliberately not built: both need external infrastructure or a
+  physical interface and cannot be tested from this repository.
 - **oag-listend runs as a service and stops cleanly.** It handled only SIGINT, so `systemctl stop`
   and `kill` bypassed the clean path; SIGINT and SIGTERM now both return the accept loops, remove
   the Unix socket, and exit 0. `scripts/oag-listend.service` runs all four carriers with a
@@ -280,9 +286,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: the remaining carriers.** IPFS and Reticulum, each reusing
-   `AudioStore::accept` and adding no operations. The service unit and the clean SIGTERM stop are
-   done, so "turn this thing on" is `systemctl enable --now oag-listend`.
+1. **oag-listend: a carrier that does not need external infrastructure.** IPFS needs a Kubo node
+   or an embedded libp2p node and Reticulum needs a physical interface, so both are recorded as
+   deliberately not built. The honest next carrier is one that can be tested from this repository.
+   The service unit and clean SIGTERM stop are done, so "turn this thing on" is
+   `systemctl enable --now oag-listend`.
 2. **oag-listend: the remaining carriers and a real address.** The HTTP carrier now streams; the
    native and UDP carriers and persistence are done. IPFS and Reticulum, each reusing
    `AudioStore::accept` and adding no operations; then give the daemon a real listening address on

@@ -45,6 +45,35 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend allows a cross-origin browser client
+
+**Repository:** `oag-listend`, commit `a2188fe` on `master`; records in `open-agent-graph`.
+
+**What changed.** The HTTP carrier emits `Access-Control-Allow-Origin: *` on every response and
+answers `OPTIONS` with `Access-Control-Allow-Methods: GET, HEAD, POST, OPTIONS`,
+`Access-Control-Allow-Headers: content-type, range`, and `Access-Control-Max-Age: 3600`. A page on
+another origin could embed the audio but could not `fetch()` it: the browser blocks the request
+without the header, and the preflight previously got a 404. The service holds no credentials, so
+`*` is the honest allowance.
+
+**Tests executed.** `cargo test -p oag-listend`: 32 unit + 13 end-to-end, 0 failed (was 32 + 12).
+New `http_allows_a_cross_origin_browser_client`: the preflight returns 204 with the three headers
+and no body, and `GET /`, `/audio`, and `/audio/{hash}` all carry `Access-Control-Allow-Origin: *`.
+
+**Verified by hand with curl.** `OPTIONS /audio` returned 204 with the three headers; a GET with
+`Origin: http://example.com` returned 200 with `Access-Control-Allow-Origin: *`.
+
+**Also recorded.** IPFS and Reticulum are deliberately not built: IPFS needs a Kubo node (external
+infrastructure) or an embedded libp2p node (heavyweight), and Reticulum needs a physical interface.
+Neither can be tested against a real network from this repository, so the honest status is "not
+built", not "built and untested".
+
+**Commit identifiers:** `oag-listend` `a2188fe`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** A carrier that can be tested from this repository and does not need
+external infrastructure; then continued hardening.
+---
+
 ## 2026-11-12 — oag-listend runs as a service and stops cleanly
 
 **Repository:** `oag-listend`, commit `995c9b5` on `master`; records in `open-agent-graph`.
