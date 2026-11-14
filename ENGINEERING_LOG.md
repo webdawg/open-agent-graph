@@ -6,6 +6,44 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — EXP-026/027: the recall is base-dependent, and the multi-probe stabilises it
+
+**Repository:** `oag-collisions`
+**Files modified:** `crates/oag-collisions/src/lib.rs`,
+`crates/oag-collisions/examples/dual_hash.rs`,
+`crates/oag-collisions/examples/recall_variance.rs`, `EXPERIMENTS.md`, `README.md`.
+
+**EXP-026 (negative result).** A second independent hash (a domain-separated BLAKE3) was tested as
+a recall mechanism: two hashes of one corpus recalled 73.1% and 22.5%, and their union 75.6%.
+The misses are roughly independent (the union is close to `1 - (1-0.731)(1-0.225) = 0.791`), so
+the gain is bounded by the better hash. Doubling the index memory for 2.5 points is a bad trade.
+`simhash_with_domain` stays as a public primitive because it is the honest way to ask the
+question, and the answer is recorded rather than left as an assumption.
+
+**EXP-027 (the actual finding).** The recall is a property of the *base document*, not of the
+edit. A near-duplicate's flipped bits are the base's near-zero majority-vote positions, which are
+essentially random per document. Across 24 base documents, the same 32-token edit model:
+
+| scheme | min | median | max | std dev |
+|---|---|---|---|---|
+| standard ladder | 20.8% | 50.0% | 95.8% | 4.2 variants |
+| 1-flip multi-probe | 66.7% | 91.7% | 100.0% | 2.5 variants |
+| 2-flip multi-probe | 91.7% | 100.0% | 100.0% | 0.7 variants |
+
+The multi-probe does not merely raise the recall; it makes it nearly deterministic. The 2-flip
+scheme's standard deviation falls from 4.2 to 0.7 variants.
+
+**Tests executed.** `cargo test -p oag-collisions`: 31 passed, 0 failed. `cargo build --examples`:
+clean (one pre-existing `unused variable: shuffle` warning in `ranking_tradeoff.rs`, untouched).
+
+**Commit identifiers:** `4173f31`.
+**Push status:** pushed.
+**Remaining defects.** The 1-flip versus 2-flip choice is now a stated trade (probe budget and
+false positives against predictability) but neither is made the default in the API -- the caller
+chooses. The recall variance is measured on one synthetic corpus shape; a real corpus could differ.
+
+---
+
 ## 2026-11-12 — EXP-025: widening the prefix filter's recall with a 1-flip multi-probe
 
 **Repository:** `oag-collisions`

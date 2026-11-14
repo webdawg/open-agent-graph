@@ -143,6 +143,15 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
   passes the cargo process's own start time as `--protect-after` and the pruner skips anything
   newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **EXP-027: the collision recall is base-dependent, and the multi-probe stabilises it.** A
+  near-duplicate's flipped bits are the base document's near-zero majority-vote positions, which
+  are essentially random per document. Across 24 bases the standard ladder recalled 21%-96% of the
+  same 32-token edits (median 50%); the 1-flip multi-probe raised that to 67%-100% and the 2-flip
+  to 92%-100% with a standard deviation of 0.7 variants. A deployment should measure the recall
+  per corpus and choose the probe budget by how predictable it must be.
+- **EXP-026 (negative result): a second independent hash is not worth its memory.** Two hashes of
+  one corpus recalled 73% and 22%; their union 76%. The misses are roughly independent, so the
+  gain is bounded by the better hash.
 - **EXP-025: the collision index's recall is widened by a 1-flip multi-probe.** The prefix filter
   excluded 61% of variants and was steepest for the far near-duplicates. `collide_multi_probe`
   also queries the prefixes differing from the query's in a few high-order bits. With one flip it
@@ -185,12 +194,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **Collisions: the far end of the recall curve.** EXP-025 widened the near end completely (1-flip
-   multi-probe recovers every 2-, 4- and 8-token variant) but the far end is still limited: a
-   256-token variant is found 15/20 with 2 flips and 7/20 with 1. The open question is whether the
-   far near-duplicates matter enough to justify a larger probe budget or a second index, and that
-   is a corpus question rather than a mechanism question -- it needs a real corpus, not the
-   synthetic one.
+1. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
+   1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
+   versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
+   leaves the choice to the caller, which is correct, but nothing in the repository records which
+   budget a deployment should start from. The open question is a real corpus: every measurement so
+   far is on one synthetic document shape, and EXP-027 showed the recall varies 21-96% across
+   documents even at a fixed edit model.
 2. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Re-examine against
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
