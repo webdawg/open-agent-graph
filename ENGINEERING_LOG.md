@@ -45,6 +45,36 @@ format.
 
 ---
 
+## 2026-11-12 — startup generation seeds an empty store, and reports refusals
+
+**Repository:** `oag-listend`, commits `e0d5004` and the SPEC follow-up on `master`; records in
+`open-agent-graph`.
+
+**The defect.** `publish_generated` ran on every start. With `--dir` and the default clock seed,
+each restart generated four *new* sounds (different hashes), so the generated set grew without
+bound and, once `--max-bytes` was reached, evicted the operator's own audio. The directive's
+rationale for the generated set is "so a client that only fetches still receives sound" -- a seed
+for an empty store, not a recurring addition.
+
+**What changed.** `ListendServer::publish_generated` returns a `GeneratedReport { accepted, rejected,
+skipped_non_empty }` and returns early when the store is not empty. A generated sound the store
+refuses is reported instead of being dropped. `main.rs` prints accepted hashes, rejection reasons,
+and the skip.
+
+**Tests executed.** `cargo test -p oag-listend`: 35 unit + 13 end-to-end, 0 failed (was 33 + 13).
+New `generation_seeds_only_an_empty_store` (a second call adds nothing and sets the skip flag) and
+`a_generated_sound_the_store_refuses_is_reported` (all four refusals reported).
+
+**Verified by hand.** Three restarts with `--dir`: run 1 generated 4, runs 2 and 3 printed "store
+already holds audio" and the HTTP listing stayed at 4 items. With `--max-bytes 5`, all four
+generated sounds were reported as `audio is 1484 bytes, larger than the 5 byte store bound`.
+
+**Commit identifiers:** `oag-listend` `e0d5004` plus the SPEC follow-up; this entry's commit
+pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — oag-listend's hello says what the daemon is
 
 **Repository:** `oag-listend`, commit `f1c65f0` on `master`; records in `open-agent-graph`.

@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's startup generation no longer grows the store.** Generation ran on every start, so
+  with `--dir` and the default clock seed each restart added four new sounds and would slowly evict
+  the operator's own audio. It now seeds only an empty store and says so when it skips; a generated
+  sound the store refuses is reported rather than dropped. 35 unit + 13 end-to-end tests; verified by
+  hand (three restarts stayed at 4 items; `--max-bytes 5` reported all four refusals).
 - **oag-listend's hello says what the daemon is.** `Hello` answered with only an item count; it now
   carries the daemon name, the frame protocol version, and the count, and an unrecognised name still
   decodes so a future daemon is recognisable rather than a protocol error. `GET /` reports the
