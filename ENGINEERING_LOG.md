@@ -45,6 +45,29 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend's hello says what the daemon is
+
+**Repository:** `oag-listend`, commit `f1c65f0` on `master`; records in `open-agent-graph`.
+
+**What changed.** `Response::Hello` carried only `item_count`, so a client could not tell what it
+had reached or whether it spoke the same protocol. It now carries `name` (`oag-listend`),
+`protocol_version` (1), and `item_count`. The decode keeps an unrecognised name rather than
+rejecting it, so a future daemon is recognisable instead of a protocol error. `GET /` reports the
+protocol version as well. `protocol::DAEMON_NAME` and `protocol::PROTOCOL_VERSION` are the single
+source for both.
+
+**Tests executed.** `cargo test -p oag-listend`: 33 unit + 13 end-to-end, 0 failed (was 32 + 13).
+New `hello_carries_the_daemon_identity_and_a_future_name_still_decodes` round-trips the real hello
+and a hypothetical `oag-listend-2` at version 2.
+
+**Verified by hand.** `push_pull` printed `Hello { name: "oag-listend", protocol_version: 1,
+item_count: 4 }` over TCP and `... item_count: 5 }` over UDP.
+
+**Commit identifiers:** `oag-listend` `f1c65f0`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — oag-listend allows a cross-origin browser client
 
 **Repository:** `oag-listend`, commit `a2188fe` on `master`; records in `open-agent-graph`.

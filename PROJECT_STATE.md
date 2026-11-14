@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's hello says what the daemon is.** `Hello` answered with only an item count; it now
+  carries the daemon name, the frame protocol version, and the count, and an unrecognised name still
+  decodes so a future daemon is recognisable rather than a protocol error. `GET /` reports the
+  protocol version too. 33 unit + 13 end-to-end tests; verified by hand on TCP and UDP.
 - **oag-listend's HTTP carrier allows cross-origin browser clients.** Every response carries
   `Access-Control-Allow-Origin: *` and `OPTIONS` is answered with the allowed methods and headers,
   so a page on another origin can `fetch()` the audio instead of being blocked at the preflight.
