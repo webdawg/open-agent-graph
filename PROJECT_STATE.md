@@ -138,6 +138,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend serves.** The TCP carrier is live: a listener, a length-prefixed frame protocol
+  with four operations (hello, publish, fetch, list), and every inbound publish through
+  `AudioStore::accept`. A seeded WAV generator (silence, tone, noise) is published at startup, the
+  daemon binary is `oag-listend --listen --seed --max-bytes`, and `examples/push_pull.rs` exchanges
+  audio by hand. 20 unit tests plus 2 end-to-end tests, the whole exchange bounded at 10s; verified
+  against a running daemon (both sounds fetched `verified=true`, HTML labelled `audio/wav`
+  rejected). `SPEC.md` status is now "serves". `target/` was untracked in the same commit.
 - **oag-listend is founded** -- the fifth repository and the serving surface above the layers:
   the global daemon that serves audio to anything that connects, and accepts nothing but audio.
   The audio surface exists (`AudioItem`, `AudioStore`, `AudioFormat::sniff`, and the inbound rule
@@ -226,10 +233,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: the first carrier.** One carrier (TCP, borrowed from the imagination layer's
-   `Transport` seam), one audio item, served end to end with the receiver verifying the BLAKE3.
-   The inbound path must go through `AudioStore::accept`. This is the slice that changes the
-   SPEC.md status line from "founded" to "serves".
+1. **oag-listend: the HTTP carrier.** `GET /audio/{hash}` serves the bytes with an audio content
+   type and `POST /audio` accepts a body through `AudioStore::accept`. A new file, not a new set
+   of rules; the four-operation protocol stays the daemon's native surface.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

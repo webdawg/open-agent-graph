@@ -45,6 +45,40 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend listens: TCP carrier, seeded sounds, and a daemon you can turn on
+
+**Repository:** `oag-listend` (https://github.com/webdawg/oag-listend), commit `a97c71f` on `master`;
+cross-project records in `open-agent-graph`.
+
+**What changed.** The minimum bar in `DIRECTIVE.md` is green. New modules:
+`protocol.rs` (length-prefixed frames, four operations only -- hello, publish, fetch, list -- a
+16 MiB frame cap enforced before the body is allocated, typed `WireError`s for a bad hash or an
+unknown operation), `wav.rs` (seeded 16-bit PCM WAV: silence, tone, noise, via SplitMix64; the
+header and the determinism are tested), `server.rs` (`ListendServer`: bind, accept, 10s read and
+write timeouts, 64-session semaphore, watch-channel shutdown; every publish through
+`AudioStore::accept`), `main.rs` (the `oag-listend` binary with `--listen`, `--seed`, `--max-bytes`,
+`--no-generate`), `examples/push_pull.rs` (operator client), and `tests/back_and_forth.rs`.
+`AudioStore` gained `hashes()` in insertion order, and the startup generation goes through
+`AudioStore::accept` too, so generated sound is not a way around the inbound rule.
+
+**Tests executed.** `cargo test -p oag-listend`: 20 unit + 2 end-to-end, 0 failed. The acceptance
+test pushes a generated tone, fetches it back, verifies the BLAKE3, lists it, refuses five
+non-audio inputs however labelled (HTML, JSON, PNG, empty labelled `audio/wav`, text labelled
+`audio/mpeg`) and observes not-found; the second test proves a publish on one connection is served
+on another. Both are bounded at 10s. Also verified by hand: daemon on `127.0.0.1:7199`, then
+`push_pull` fetched the tone and the noise with `verified=true` and printed
+`Rejected { reason: "input is not audio; only audio is accepted" }` for HTML labelled `audio/wav`.
+
+**Defect fixed along the way.** `target/` had been swept into the founding commit; it is now
+untracked (668 files removed from the index) and ignored.
+
+**Commit identifiers:** `oag-listend` `a97c71f`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The HTTP carrier (`GET /audio/{hash}`, `POST /audio`) is next; it
+must reuse `AudioStore::accept` and not grow the operation set. The format sniff is a closed list
+that grows only when a real carrier needs a format.
+---
+
 ## 2026-11-12 — test the budget sync scheduler
 
 **Repository:** `oag-mesh`
