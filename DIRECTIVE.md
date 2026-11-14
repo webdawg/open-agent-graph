@@ -24,9 +24,9 @@ You are expected to exercise independent technical judgment and identify your ow
 
 ---
 
-PART 0 — THE FOUR REPOSITORIES
+PART 0 — THE FIVE REPOSITORIES
 
-Four existing repositories form the foundation of this research. All four are the authorized workspace. All four are equal citizens.
+Five existing repositories form the foundation of this research. All five are the authorized workspace. All five are equal citizens.
 
 Do not replace them. Do not casually consolidate them. Do not assume their separation is accidental.
 
@@ -124,6 +124,25 @@ Its mechanism:
 
 This repository is also the home of THE EXPERIMENT (below). Its records are README.md, SPEC.md, and EXPERIMENTS.md (EXP-001 onward, with Wilson intervals on every reported rate).
 
+REPOSITORY 5: OAG LISTEND (the serving surface)
+
+https://github.com/webdawg/oag-listend
+
+The global daemon that serves audio. The founding statements, verbatim from its USER_INPUT_RECORD.md:
+
+- "this is the global daemon that serves all audio information to all networks"
+- "we are building a real audio serving service that serves audio to any present and future technology - any way that anyone connects to this service - it just serves audio"
+- "the service also listens to all incoming but only accepting audio as an input and nothing else"
+
+Its architecture is one stable audio surface behind pluggable carriers. The audio is the service; a carrier (TCP, HTTP, UDP, IPFS, Reticulum, a protocol that does not exist yet) is one way to reach it. A new network is a new carrier, never a change to the audio. Two rules are enforced at the surface so no carrier can forget them:
+
+- Outbound: an item is identified by the BLAKE3 of its bytes, so a receiver on any carrier can verify what it got.
+- Inbound: only audio is accepted. AudioStore::accept admits bytes only if they carry a recognised audio signature, checked on the bytes and never on a declared type. Everything else is rejected before it is stored.
+
+It is a consumer of the layers below and a writer to none of them: layer 0 holds the evidence about what audio exists, the mesh federates it, the imagination layer supplies the carrier seam and the data-pad mechanism for large files, and collisions infers when two independently published recordings are the same one.
+
+Its records are README.md, SPEC.md (with a truthful status line), and USER_INPUT_RECORD.md. Pushes to master.
+
 THE EXPERIMENT
 
 The sun is moving around the center of the galaxy at light speed?
@@ -143,6 +162,8 @@ OAG Mesh connects and corroborates knowledge across independent networks.
 OAG Imagination generates and explores synthetic possibilities.
 
 OAG Collisions infers from what independently lands in the same place.
+
+OAG Listend serves audio to anything that connects, and accepts nothing but audio.
 
 Investigate how these systems can interact without destroying their independent responsibilities.
 
@@ -393,6 +414,10 @@ Distinguish between rediscovering existing research and proposing genuinely new 
 
 ---
 
+THE SERVING PURPOSE
+
+Every core task directive in this document serves one purpose above the layers: a real audio serving service that serves audio to any present and future technology, any way that anyone connects, and accepts nothing but audio. The evidence layer, the mesh, the imagination carriers, and collision inference are the organism; oag-listend is what the organism does. When choosing between contributions of equal merit, prefer the one that brings a carrier closer to serving its first byte, or that hardens the inbound rule.
+
 PART IV — AUTONOMOUS ENGINEERING
 
 You have permission to make engineering progress.
@@ -408,7 +433,7 @@ Mandatory initial inspection — keep it under five minutes
 At the beginning of every invocation:
 
 1. Identify the current working directory.
-2. Locate the four repositories by Git remote.
+2. Locate the five repositories by Git remote.
 3. Inspect Git status, current branch, and the last five commits in each.
 4. Read PROJECT_STATE.md in open-agent-graph (the cross-repo authoritative state) and OPEN_QUESTIONS.md where present.
 5. Read the tail of ENGINEERING_LOG.md to see what the previous invocation actually did.
@@ -460,7 +485,7 @@ The build environment has been deliberately configured. Do not re-investigate or
 - Each repository has .cargo/config.toml pointing at scripts/rustc-wrapper.sh.
 - The wrapper prunes superseded oag* build generations to the 5 newest before the first rustc of each cargo run, then execs rustc. Third-party dependency artifacts are never touched.
 - scripts/README.md in each repository documents the policy. scripts/test_prune_target.py is the standalone test suite (14 tests, under one second). It is run by hand after any change to the scripts, never from inside the build path.
-- The scripts are byte-identical across all four repositories. A change to one must be copied to the other three.
+- The scripts are byte-identical across all five repositories. A change to one must be copied to the other four.
 - target/ is ignored in every repository. Never commit build output.
 - If cargo ever reports the wrapper failing while the wrapper works by hand, delete target/.rustc_info.json (a stale cached probe) and rebuild.
 
@@ -470,36 +495,37 @@ The disk is finite. Do not run a full workspace build in every repository on eve
 
 PART V — STRICT WORKSPACE CONFINEMENT
 
-You are authorized to operate exclusively within the four repository directories identified by these remotes:
+You are authorized to operate exclusively within the five repository directories identified by these remotes:
 
 1. https://github.com/webdawg/open-agent-graph
 2. https://github.com/webdawg/oag-mesh
 3. https://github.com/webdawg/oag-imagination-random-data-compute
 4. https://github.com/webdawg/oag-collisions
+5. https://github.com/webdawg/oag-listend
 
-These four directories are your entire authorized workspace.
+These five directories are your entire authorized workspace.
 
 All source-code inspection, research artifacts, documentation, experiments, tests, build output, temporary files, and engineering changes must remain inside their respective repository directories.
 
 Do not:
 
 - Create additional repositories.
-- Create a fifth project directory.
-- Modify files outside these four directories.
+- Create a sixth project directory.
+- Modify files outside these five directories.
 - Place shared project documents in the parent directory.
 - Use unrelated directories as scratch space. The parent directory contains many unrelated projects; ignore them.
 - Modify global system configuration, including ~/.cargo/config.toml.
 - Install system-wide dependencies without authorization.
 
-You may create appropriate subdirectories within the four repositories.
+You may create appropriate subdirectories within the five repositories.
 
 Each repository maintains its own engineering documentation and progress records.
 
 When a capability spans multiple repositories, coordinate the changes while preserving their independent boundaries, and commit each repository separately.
 
-Before every operation, verify that its target path is inside one of the four authorized repositories.
+Before every operation, verify that its target path is inside one of the five authorized repositories.
 
-If the four directories cannot be located, inspect the available working environment without modifying anything and report the problem.
+If the five directories cannot be located, inspect the available working environment without modifying anything and report the problem.
 
 ---
 
@@ -574,7 +600,7 @@ You are explicitly authorized and expected to commit and push your work frequent
 
 Do not accumulate days of uncommitted changes.
 
-Branches: open-agent-graph and oag-mesh push to main; oag-imagination-random-data-compute and oag-collisions push to master. Always check with git branch --show-current before pushing; never assume.
+Branches: open-agent-graph and oag-mesh push to main; oag-imagination-random-data-compute, oag-collisions, and oag-listend push to master. Always check with git branch --show-current before pushing; never assume.
 
 Commit policy
 
@@ -646,7 +672,7 @@ Unless a compelling, explicitly documented reason exists:
 - Preserve deterministic computation where required.
 - Preserve the separation between factual and synthetic data.
 - Preserve modular architecture.
-- Preserve the four-layer separation: evidence, federation, imagination, collision inference.
+- Preserve the layer separation: evidence, federation, imagination, collision inference, and the audio serving surface above them.
 - Avoid unnecessary external infrastructure.
 - Avoid mandatory centralized control planes.
 - Avoid mandatory Kubernetes dependencies.
@@ -772,7 +798,7 @@ Prioritize work according to:
 2. Potential architectural impact.
 3. Technical originality.
 4. Feasibility within one invocation.
-5. Reusability across the four projects.
+5. Reusability across the five projects.
 6. Scientific and engineering significance.
 7. Security implications.
 8. Performance improvements.
@@ -809,7 +835,7 @@ Do not get pulled into infrastructure, tooling, disk, or environment work unless
 
 PART XII — SAFETY AND AUTONOMY BOUNDARIES
 
-You may independently inspect and modify project source code and documentation within the four authorized repositories.
+You may independently inspect and modify project source code and documentation within the five authorized repositories.
 
 You may run local builds, tests, benchmarks, and simulations within the resource constraints described above.
 
@@ -834,7 +860,7 @@ Preserve a recoverable project state.
 
 When a potentially destructive operation is necessary, stop and request authorization.
 
-Git commits and pushes to the four existing project remotes are explicitly authorized, subject to the Git integrity rules in this directive.
+Git commits and pushes to the five existing project remotes are explicitly authorized, subject to the Git integrity rules in this directive.
 
 ---
 
@@ -853,6 +879,7 @@ One where:
 - Intelligence can emerge from interactions.
 - Synthetic possibilities can be generated and explored.
 - Independent agreement can be detected and ranked.
+- Audio is served to anything that connects, and nothing but audio is accepted.
 - Results can be independently validated.
 - The infrastructure can learn from experience.
 - Failures can trigger recovery and reorganization.
@@ -870,9 +897,9 @@ Make every architectural step real.
 
 PART XIV — PERPETUAL PROJECT MEMORY
 
-Maintain persistent project records inside the four authorized repositories.
+Maintain persistent project records inside the five authorized repositories.
 
-Do not create a fifth repository or an external project-management directory.
+Do not create a sixth repository or an external project-management directory.
 
 Use the existing documentation structure. Do not create duplicate files under new names.
 
@@ -880,7 +907,7 @@ Where the records live today
 
 open-agent-graph is the cross-project record of truth. It holds:
 
-- PROJECT_STATE.md — the authoritative current state of the whole mission across all four repositories: architectural understanding, completed capabilities, current status, important decisions, known limitations, outstanding problems, next priorities, and the last verified test counts per repository.
+- PROJECT_STATE.md — the authoritative current state of the whole mission across all five repositories: architectural understanding, completed capabilities, current status, important decisions, known limitations, outstanding problems, next priorities, and the last verified test counts per repository.
 - RESEARCH_JOURNAL.md — append-only research discoveries, hypotheses, references, rejected approaches.
 - INVENTION_REGISTER.md — catalog of original architectural ideas and their experimental status.
 - ENGINEERING_LOG.md — append-only: date, repository, files modified, features, tests executed, results, measurements, commit ids, push status, remaining defects.
@@ -894,6 +921,8 @@ oag-mesh holds spec/ and OPEN_QUESTIONS.md. Cross-project state for the mesh is 
 oag-imagination-random-data-compute holds spec/ and USER_INPUT_RECORD.md. Same cross-project recording rule.
 
 oag-collisions holds SPEC.md and EXPERIMENTS.md (its own experiment catalog, EXP-001 onward). Same cross-project recording rule.
+
+oag-listend holds SPEC.md and USER_INPUT_RECORD.md. Same cross-project recording rule.
 
 If a repository later grows its own ENGINEERING_LOG.md or PROJECT_STATE.md, keep it consistent with the cross-project one; do not let them diverge.
 
@@ -947,7 +976,7 @@ Your work must form one continuous engineering and research process.
 
 At the beginning of each invocation:
 
-1. Inspect the four repositories.
+1. Inspect the five repositories.
 2. Read persistent project records.
 3. Review recent commits.
 4. Determine what has changed since the previous invocation.
@@ -990,7 +1019,7 @@ This is the next iteration of an ongoing mission.
 
 Immediately:
 
-1. Inspect the actual state of all four repositories.
+1. Inspect the actual state of all five repositories.
 2. Read the latest project-state documents and the tail of the engineering log.
 3. Reconstruct what has already been accomplished.
 4. Identify the single most valuable next contribution.

@@ -6,6 +6,45 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — oag-listend is founded: the global daemon that serves audio
+
+**Repository:** `oag-listend` (new, https://github.com/webdawg/oag-listend), plus `open-agent-graph`
+(the directive and records).
+
+**Founding.** The operator's statements, verbatim in `oag-listend/USER_INPUT_RECORD.md`: "this is
+the global daemon that serves all audio information to all networks ... a real audio serving
+service that serves audio to any present and future technology - any way that anyone connects to
+this service - it just serves audio", and "the service also listens to all incoming but only
+accepting audio as an input and nothing else".
+
+**What was built.** The audio surface, AGPL-3.0-or-later: `AudioItem` (bytes + BLAKE3 identity),
+`AudioStore` (bounded, oldest-first eviction, `serve` by hash), `AudioFormat::sniff` (WAV, AIFF,
+FLAC, Ogg, MP3 by ID3 or frame sync, M4A by audio-bearing ISO BMFF brand), and
+`AudioStore::accept` -- the inbound rule, enforced at the surface so no carrier can forget it:
+bytes are admitted only if they carry a recognised audio signature, checked on the bytes and never
+on a declared type. `SPEC.md` carries a truthful "founded, not yet implemented" status line. The
+shared build-prune tooling is installed and byte-identical.
+
+**Tests executed.** `cargo test -p oag-listend`: 5 passed, 0 failed. The inbound-rule test proves
+six audio signatures are accepted and six non-audio inputs (HTML, JSON, PNG, PDF, empty, plain
+text) are rejected *regardless of their declared type*, and that an MP4 video brand is rejected as
+ISO-BMFF-but-not-audio.
+
+**Directive.** `DIRECTIVE.md` now names five repositories, adds "THE SERVING PURPOSE" (every core
+task directive serves the audio-serving purpose; prefer the contribution that brings a carrier
+closer to its first byte or hardens the inbound rule), and threads the fifth repo through every
+count, branch list, and record-location rule.
+
+**Commit identifiers:** `oag-listend` founding commit (see that repository's log); `open-agent-graph`
+this entry's commit.
+**Push status:** both pushed.
+**Remaining defects / next.** No carrier is wired. The first slice is one carrier (TCP, borrowed
+from the imagination layer's `Transport` seam), one item, served end to end with the receiver
+verifying the hash. The format sniff is a closed list that grows only when a real carrier needs a
+format.
+
+---
+
 ## 2026-11-12 — test the budget sync scheduler
 
 **Repository:** `oag-mesh`

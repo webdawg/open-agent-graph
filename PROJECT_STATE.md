@@ -138,6 +138,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend is founded** -- the fifth repository and the serving surface above the layers:
+  the global daemon that serves audio to anything that connects, and accepts nothing but audio.
+  The audio surface exists (`AudioItem`, `AudioStore`, `AudioFormat::sniff`, and the inbound rule
+  `AudioStore::accept`, checked on bytes never on a declared type). AGPL-3.0-or-later, 5 tests, no
+  carrier yet. `DIRECTIVE.md` names five repositories and "THE SERVING PURPOSE".
+
 - **The pruner no longer races cargo.** The prune hook could delete the
   `incremental/`/`.fingerprint/`/`build/` directories cargo had created for the units it was about
   to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
@@ -220,37 +226,41 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
+1. **oag-listend: the first carrier.** One carrier (TCP, borrowed from the imagination layer's
+   `Transport` seam), one audio item, served end to end with the receiver verifying the BLAKE3.
+   The inbound path must go through `AudioStore::accept`. This is the slice that changes the
+   SPEC.md status line from "founded" to "serves".
+2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
    leaves the choice to the caller, which is correct, but nothing in the repository records which
    budget a deployment should start from. The open question is a real corpus: every measurement so
    far is on one synthetic document shape, and EXP-027 showed the recall varies 21-96% across
    documents even at a fixed edit model.
-2. **Mesh: the fallback classification's blind spot.** The classification is on
+3. **Mesh: the fallback classification's blind spot.** The classification is on
    `reqwest::Error::is_connect()` / `is_timeout()`. A slow-but-alive peer whose heads request times
    out will skip the fallback; its stores would likely time out too, so the skip is defensible --
    but it is a judgement, not a measurement. The open question is whether a timed-out heads request
    should still try one store (cheap) before giving up, which would need a measurement of how
    often a timed-out heads endpoint still serves stores.
-3. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
+4. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Re-examine against
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
    atomically, so the gap may be narrower than it looks -- the in-memory merge is per-store and a
    crash loses it, but that state is re-learned from the mesh.
-4. **rust-ai: make the new HTTP timeouts configurable.** Every outbound client is now bounded,
+5. **rust-ai: make the new HTTP timeouts configurable.** Every outbound client is now bounded,
    but the values are fixed constants. An operator running a genuinely slow self-hosted model may
    need a longer embeddings timeout, and a slow Kubo daemon a longer pin timeout. The open
    question is whether these belong in `config.toml` (like `[gateway].query_peers`) or are fine as
    compile-time constants -- that needs an operator's requirement, not a guess.
-5. **Imagination: the gather's bound and its node list.** `MAX_CONCURRENT_GATHERS` (32) is a fixed
+6. **Imagination: the gather's bound and its node list.** `MAX_CONCURRENT_GATHERS` (32) is a fixed
    constant, and the fan-out loop is over the caller's `nodes` list rather than the manifest's
    `pad_ids` -- so a caller that passes more nodes than the manifest names still asks them all. The
    open question is whether the bound should be configurable per carrier and whether the loop should
    be driven by the manifest.
-6. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
+7. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
    inlining remain (see `spec/29` "Explicitly deferred"); crawler side-fetch pinning is done.
-7. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
+8. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
    proposed, not implemented; both are large and need a design pass before code.
 
 ## Verification
