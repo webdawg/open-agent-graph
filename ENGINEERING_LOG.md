@@ -45,6 +45,30 @@ format.
 
 ---
 
+## 2026-11-12 — cache immutable audio with an ETag
+
+**Repository:** `oag-listend`, commit `e6d0434` on `master`; records in `open-agent-graph`.
+
+**What changed.** A served audio item carries `ETag: "<content hash>"` and
+`Cache-Control: public, max-age=31536000, immutable`. A request with a matching `If-None-Match`
+(including `*`) is answered 304 with the ETag and no body; a non-matching validator is served
+normally. `HttpRequest` parses `If-None-Match`; `HttpResponse` gained an `extra_headers` list so
+future metadata headers do not each need a field. `GET /` and the listing do not get an ETag: they
+change as the store changes.
+
+**Tests executed.** `cargo test -p oag-listend`: 37 unit + 15 end-to-end, 0 failed (was 37 + 14).
+New `http_caches_immutable_audio_with_an_etag`: 200 carries both headers, 304 on a matching and on
+`*` validators with an empty body, 200 on a stale validator, and ETag on HEAD.
+
+**Verified by hand with curl.** `GET` returned `ETag: "<hash>"` and
+`Cache-Control: public, max-age=31536000, immutable`; revalidation with that ETag returned
+`304 Not Modified`; a stale validator returned 200.
+
+**Commit identifiers:** `oag-listend` `e6d0434`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — the HTTP listing is paginated and query-string aware
 
 **Repository:** `oag-listend`, commits `3eaf9ba` and the SPEC rewrite on `master`; records in

@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend caches immutable audio.** A served item carries `ETag` (the content hash) and
+  `Cache-Control: public, max-age=31536000, immutable`, and a matching `If-None-Match` gets 304 with
+  no body. Content-addressed audio cannot change, so re-downloading it on every fetch was waste.
+  37 unit + 15 end-to-end tests; verified with curl (200 + ETag, 304 on revalidation, 200 for a
+  stale validator).
 - **oag-listend's HTTP listing is paginated and query-string aware.** A query string was part of
   the path, so `GET /audio?offset=0` was a 404; the path is now split from the query, and
   `GET /audio` takes `?offset=&limit=` with `X-Total-Count`/`X-Offset`, matching the native listing.
