@@ -143,6 +143,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
   passes the cargo process's own start time as `--protect-after` and the pruner skips anything
   newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **The mesh's anti-entropy tick is bounded.** Each pull was bounded but a tick is a loop over
+  every peer, so unreachable peers cost their timeout each -- and a pull against a black-holed peer
+  costs the heads request plus the five-store fallback (six timeouts, 1.8s measured). The live
+  peers' next refresh waited for the dead ones. `sync_with_all_peers_bounded` and
+  `spawn_periodic_sync_with_budget` cap the tick; the skipped peers are retried, so "never not
+  asked" still holds. `oag-mesh` 194 passed (was 193).
 - **EXP-027: the collision recall is base-dependent, and the multi-probe stabilises it.** A
   near-duplicate's flipped bits are the base document's near-zero majority-vote positions, which
   are essentially random per document. Across 24 bases the standard ladder recalled 21%-96% of the
@@ -201,14 +207,20 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    budget a deployment should start from. The open question is a real corpus: every measurement so
    far is on one synthetic document shape, and EXP-027 showed the recall varies 21-96% across
    documents even at a fixed edit model.
-2. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
+2. **Mesh: the per-peer fallback cost.** A pull whose heads request fails falls back to a full
+   five-store pull (`spec/10`), which for an unreachable peer is six timeouts of pure waste -- the
+   new tick bound caps the aggregate but not that per-peer cost. The fallback exists for a peer
+   whose heads endpoint is broken but whose stores serve, which is narrow. The open question is
+   whether the error can be classified (unreachable vs. endpoint-broken) so the fallback is only
+   paid when it can help.
+3. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Re-examine against
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
    atomically, so the gap may be narrower than it looks -- the in-memory merge is per-store and a
    crash loses it, but that state is re-learned from the mesh.
-2. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
+4. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
    inlining remain (see `spec/29` "Explicitly deferred"); crawler side-fetch pinning is done.
-3. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
+5. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
    proposed, not implemented; both are large and need a design pass before code.
 
 ## Verification

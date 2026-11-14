@@ -6,6 +6,38 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — bound the mesh's anti-entropy tick, not just each pull
+
+**Repository:** `oag-mesh`
+**Files modified:** `crates/oag-mesh/src/transport.rs`, `crates/oag-mesh/src/lib.rs`,
+`spec/10-anti-entropy.md`.
+
+**Gap.** Each pull is bounded (`HTTP_CONNECT_TIMEOUT` + `HTTP_REQUEST_TIMEOUT`), but a tick is
+a loop over every peer, so unreachable peers cost their timeout each. A pull against a black-holed
+peer costs the heads request *plus* the five-store fallback -- six timeouts, measured at 1.8s in
+the new test. `link_quality` asks the live peers first, so their data arrives early, but the live
+peers' next refresh waits for the dead ones to be waited out, and the next tick cannot start until
+this one finishes.
+
+**Fix.** `sync_with_all_peers_bounded(state, budget)` and
+`spawn_periodic_sync_with_budget(state, interval, tick_budget)`. The budget is checked between
+pulls, so the pull in flight completes and the rest are left for the next tick. This bounds the
+tick rather than dropping anyone -- the skipped peers are retried, so `OPEN_QUESTIONS.md`'s "a
+peer that is down is asked last, never not asked" still holds. The unbounded forms remain.
+
+**Tests executed.** `cargo test -p oag-mesh`: 194 passed, 0 failed (was 193). New test
+`a_bounded_tick_stops_at_the_budget_instead_of_waiting_out_every_peer`, which counts attempts
+through the `link_quality` ledger rather than the clock so it is not a timing race.
+
+**Commit identifiers:** `a621322`.
+**Push status:** pushed.
+**Remaining defects.** The budget is checked between pulls, not during one, so a single slow
+pull can exceed it -- bounding that would mean cancelling an in-flight pull. The per-peer fallback
+(heads failure -> five-store full pull) is the larger cost and is a deliberate design choice
+(`spec/10`); changing it is not done here.
+
+---
+
 ## 2026-11-12 — EXP-026/027: the recall is base-dependent, and the multi-probe stabilises it
 
 **Repository:** `oag-collisions`
