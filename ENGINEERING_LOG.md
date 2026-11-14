@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend enforces its store bound on the way in
+
+**Repository:** `oag-listend`, commit `1ef956d` on `master`; records in `open-agent-graph`.
+
+**What changed.** Two unbounded paths on the store. `AudioStore::accept` now refuses bytes larger
+than `max_bytes` with a new `ListendError::TooLarge { len, max }` instead of writing them and
+immediately evicting them. `AudioStore::with_directory` reads the entry's metadata first and skips
+a file larger than `max_bytes` without reading it, counting it in `LoadReport::skipped`. A bound
+checked only after the read or write is not a bound.
+
+**Tests executed.** `cargo test -p oag-listend`: 32 unit + 9 end-to-end, 0 failed (was 30 + 9).
+New `an_item_larger_than_the_store_bound_is_refused` and
+`a_file_larger_than_the_store_bound_is_skipped_without_being_read` (the latter also confirms a
+small item in the same directory still loads).
+
+**Verified by hand.** A 4044-byte WAV posted to a daemon with `--max-bytes 100` returned
+`400` with `audio is 4044 bytes, larger than the 100 byte store bound`; a small WAV was accepted
+with `201` and a 64-character hash.
+
+**Commit identifiers:** `oag-listend` `1ef956d`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The remaining imagination carriers (IPFS, Reticulum), then a
+documented one-command way to run the daemon.
+---
+
 ## 2026-11-12 — oag-listend's HTTP carrier is self-describing
 
 **Repository:** `oag-listend`, commit `7fbb86a` on `master`; records in `open-agent-graph`.

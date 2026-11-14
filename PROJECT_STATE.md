@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend enforces its store bound on the way in.** Two unbounded paths are closed:
+  `accept` no longer writes an item larger than `--max-bytes` and immediately evicts it (it refuses
+  with `ListendError::TooLarge`), and a startup file larger than the bound is skipped without being
+  read. 32 unit + 9 end-to-end tests; verified by hand (4044-byte WAV vs a 100-byte bound refused,
+  small WAV accepted).
 - **oag-listend's HTTP carrier is self-describing.** `GET /audio` lists the content hashes (the
   list operation, on HTTP), so a client that only fetches can discover what exists, and
   `Expect: 100-continue` is answered before a large upload is read. 30 unit + 9 end-to-end tests;
