@@ -7,3 +7,7 @@
 identity.key
 .env
 /.claude/worktrees/
+
+# Python test/tooling bytecode
+__pycache__/
+*.pyc
