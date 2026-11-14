@@ -138,6 +138,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend rejects MP4 video by brand, not by major brand alone.** The sniff accepted any
+  ISO BMFF file whose major brand was `isom` or `mp42` -- generic brands MP4 *video* uses -- so
+  video was accepted as audio. It now reads the whole `ftyp` brand list and accepts only an audio
+  brand (`M4A `/`M4B `/`M4P `), which also keeps ffmpeg-written M4A (`isom` major, `M4A `
+  compatible). `ftyp` size 0 and the 64-bit largesize are handled. 40 unit + 16 end-to-end tests;
+  verified by hand (`isom`/`avc1` → 400, `isom`+`M4A ` → 201, `M4A ` → 201).
 - **oag-listend reports store byte usage and matches validator lists.** `GET /` and the startup
   line report bytes held against the bound, so an operator can see the bound working. And
   `If-None-Match` with a comma-separated validator list (what a shared cache sends) now matches,

@@ -45,6 +45,35 @@ format.
 
 ---
 
+## 2026-11-12 — reject MP4 video by reading the whole ftyp brand list
+
+**Repository:** `oag-listend`, commits `5a3f0c9` and `dc70647` on `master`; records in
+`open-agent-graph`.
+
+**The defect.** `AudioFormat::sniff` accepted any ISO BMFF file whose major brand was `isom` or
+`mp42`. Both are generic brands that MP4 *video* uses, so a video file was accepted as audio -- the
+inbound rule's exact failure case. The major brand alone cannot decide this: ffmpeg-written M4A
+often has `isom` as the major brand and `M4A ` among the compatible brands.
+
+**What changed.** The sniff reads the `ftyp` box's major and compatible brands and accepts only an
+audio brand (`M4A `, `M4B `, `M4P `). A box size of 0 (to end of file) and a 64-bit largesize are
+handled. Also added `every_recognised_format_maps_to_an_audio_media_type`, which an earlier edit had
+targeted in the wrong file and therefore never landed.
+
+**Tests executed.** `cargo test -p oag-listend`: 40 unit + 16 end-to-end, 0 failed (was 38 + 16).
+New `every_recognised_format_maps_to_an_audio_media_type` and
+`an_ftyp_box_that_runs_to_the_end_of_the_file_is_still_sniffed`; the inbound-rule test now covers
+an `isom`/`avc1` video rejected and an `isom`+`M4A ` audio accepted.
+
+**Verified by hand.** Correctly-built `ftyp` boxes posted over HTTP: `isom`/`avc1` -> 400,
+`isom` with `M4A ` compatible -> 201, `M4A ` major -> 201. (Two earlier hand attempts built the
+box size field wrong; the daemon was right each time.)
+
+**Commit identifiers:** `oag-listend` `5a3f0c9`, `dc70647`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — store byte usage and If-None-Match validator lists
 
 **Repository:** `oag-listend`, commit `8e045cd` on `master`; records in `open-agent-graph`.
