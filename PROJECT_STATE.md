@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend honours a zero listing limit and says when a bind is public.** `limit=0` was
+  clamped to 1, so a client asking for the default got one item; `normalize_limit` now resolves
+  zero to `DEFAULT_LIST_LIMIT` (capped by the carrier). And because the default bind is `0.0.0.0`
+  (every interface), a non-loopback bind now prints a note rather than leaving the operator to
+  discover it. 38 unit + 15 end-to-end tests; verified by hand.
 - **oag-listend caches immutable audio.** A served item carries `ETag` (the content hash) and
   `Cache-Control: public, max-age=31536000, immutable`, and a matching `If-None-Match` gets 304 with
   no body. Content-addressed audio cannot change, so re-downloading it on every fetch was waste.

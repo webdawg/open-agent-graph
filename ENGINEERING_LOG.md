@@ -45,6 +45,29 @@ format.
 
 ---
 
+## 2026-11-12 — a zero listing limit means the default, and a public bind says so
+
+**Repository:** `oag-listend`, commit `12bad84` on `master`; records in `open-agent-graph`.
+
+**What changed.** Two operator-safety details. `List { limit: 0 }` was clamped to 1, so a client
+asking for the default page got one item; `protocol::normalize_limit` now resolves zero to
+`DEFAULT_LIST_LIMIT`, capped by the carrier's maximum. And the default bind is `0.0.0.0` -- every
+interface -- so a carrier binding a non-loopback address now prints a note saying so, rather than
+leaving the operator to discover it later. A loopback bind prints nothing.
+
+**Tests executed.** `cargo test -p oag-listend`: 38 unit + 15 end-to-end, 0 failed (was 37 + 15).
+New `a_zero_limit_means_the_default_not_one_item` covers zero, an explicit limit, an over-cap
+limit, and a carrier whose cap is below the default.
+
+**Verified by hand.** A loopback bind printed no note; `0.0.0.0` printed
+"note: 0.0.0.0:7450 is not a loopback address -- this serves audio to that interface"; and
+`GET /audio?limit=0` returned the default page (4 lines).
+
+**Commit identifiers:** `oag-listend` `12bad84`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — cache immutable audio with an ETag
 
 **Repository:** `oag-listend`, commit `e6d0434` on `master`; records in `open-agent-graph`.
