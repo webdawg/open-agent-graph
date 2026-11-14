@@ -6,6 +6,43 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — EXP-023 corrected: the detection rate is a step function of the stride
+
+**Repository:** `oag-collisions`
+**Files modified:** `crates/oag-collisions/examples/distribution.rs`, `EXPERIMENTS.md`.
+
+**Defect in the previous entry's own measurement.** The first EXP-023 run sampled edit positions
+with a systematic step. A step resonates with the window stride `ceil(798/budget)`: a step of 16
+read 99.8% at budget 50 (the coverage of window *starts*, not of edits), and a step of 7 was
+coprime with most strides but shared a factor with the strides at budgets 60, 120 and 130. The
+reported curve was contaminated at those points. Positions are now sampled pseudo-randomly, which
+has no resonance with any stride.
+
+**Three findings from the clean measurement.**
+
+1. **The detection rate is a function of the stride, not the budget.** Budgets sharing a stride
+   give identical rates (spread exactly 0.0): stride 8 -> 41.0%, 7 -> 48.2%, 6 -> 65.8%, 5 -> 75.0%,
+   4 -> 84.2%. The curve is a step function; the "jaggedness" EXP-022 could not resolve is the
+   step, and there is no budget to tune between strides.
+2. **The window scheme has a periodic blind spot, and it is total.** At budget 100 (stride 8), the
+   residues modulo the stride are missed at 2.0%, 0.0%, 0.0%, **100.0%, 100.0%, 100.0%, 100.0%**,
+   4.7%. The gap is `(stride - window - 1)/stride` of positions, zero only when
+   `stride <= window + 1` -- at 800 tokens and window 3, a budget of at least 200. This refines
+   EXP-016's "no blind spot" claim, which was measured at budget 200 and holds there but not below.
+3. **Most detections are thin-margin.** At budget 200, 62.2% of detections move only 1-2 bits; the
+   6-10 and 11+ buckets are nearly empty at every budget.
+
+**Tests executed.** `cargo test -p oag-collisions`: 29 passed, 0 failed. `cargo build --examples`:
+clean (one pre-existing `unused variable: shuffle` warning in `ranking_tradeoff.rs`, untouched).
+
+**Commit identifiers:** `3e70a6a`.
+**Push status:** pushed.
+**Remaining defects.** The blind-spot formula is derived for a 2-token edit; the general form for
+an `edit_len`-token edit is recorded in EXP-023's limits but not measured. The margin-failure
+mechanism (why a covered edit does not flip a bit) is described, not modelled.
+
+---
+
 ## 2026-11-12 — the pruner no longer races cargo; EXP-023 measures detection as a distribution
 
 **Repository:** `open-agent-graph` (scripts) and `oag-collisions` (experiment).
