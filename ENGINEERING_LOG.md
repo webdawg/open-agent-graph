@@ -6,6 +6,47 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — EXP-023 finding 4: the margin is set by the edit, not the budget
+
+**Repository:** `oag-collisions`
+**Files modified:** `crates/oag-collisions/examples/distribution.rs`, `EXPERIMENTS.md`.
+
+**Question.** EXP-023 separated the two causes of a miss -- the coverage gap and the
+majority-vote margin -- and left the second described but not modelled. If the thin margin were a
+budget problem, a larger budget would thicken it.
+
+**Measurement.** Panel 4 of `examples/distribution.rs`: at a fixed budget of 200, vary the edit
+length over 100 random positions x 5 seeds.
+
+| edit | detected | mean bits moved |
+|---|---|---|
+| 1 token | 56.8% | 1.12 |
+| 2 tokens | 84.2% | 1.68 |
+| 4 tokens | 89.6% | 2.13 |
+| 8 tokens | 96.4% | 3.12 |
+| 16 tokens | 99.2% | 4.06 |
+
+The margin grows with the number of changed units, and even a 16-token edit out of 800 moves only
+about 4 bits; the 11+ bucket stays essentially empty. The mechanism is the majority vote: an edit
+crosses only the margins of the units whose windows it overlaps.
+
+**Consequence.** A high detection rate does not mean a confident detection. The rate saturates
+near 100% for a 16-token edit while the mean margin is still 4 bits; at the common 2-token edit
+the index detects 84% at a mean of 1.68 bits. A consumer that treats "detected" as "these
+documents differ" is reading a 1-bit signal at the common edit size.
+
+**Tests executed.** `cargo test -p oag-collisions`: 29 passed, 0 failed. `cargo build --examples`:
+clean. Example runtime 22s.
+
+**Commit identifiers:** `32a683e`.
+**Push status:** pushed.
+**Remaining defects.** The margin measurement and the ranking measurement are still unjoined:
+if a detection is 1-2 bits, the longest-shared-prefix rank is 62-63 bits, and whether that orders
+ two near-duplicates at different distances is the question EXP-004 raised and EXP-023 does not
+ answer.
+
+---
+
 ## 2026-11-12 — EXP-023 corrected: the detection rate is a step function of the stride
 
 **Repository:** `oag-collisions`

@@ -148,8 +148,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   (spread 0.0). The window scheme has a periodic blind spot of `(stride - window - 1)/stride` -- the
   gap residues are missed on 100% of seeds -- which is zero only when `stride <= window + 1` (at 800
   tokens and window 3, a budget of at least 200). Most detections are thin-margin (62.2% move 1-2
-  bits at budget 200). Recorded in `oag-collisions/EXPERIMENTS.md`, with a correction pointer on
-  EXP-016's "no blind spot" claim.
+  bits at budget 200), and the margin is set by the edit, not the budget: 1.12 bits for a 1-token
+  edit, 4.06 for a 16-token edit, with the 11+ bucket essentially unreachable. A high detection rate
+  does not mean a confident detection. Recorded in `oag-collisions/EXPERIMENTS.md`, with a
+  correction pointer on EXP-016's "no blind spot" claim.
 - **The imagination pad's recovery from a deep lock-in is bounded.** The exploration floor was an
   absolute `1e-6`, meaningless against a pad normalized to `PAD_MEAN`; a penalized slot fell to
   denormal `f32` (~1e-45) and recovery took 1,061 measured decisions, growing with lock-in depth.
@@ -169,12 +171,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **Collisions: the margin-failure mechanism.** EXP-023 separated the two causes of a miss: the
-   coverage gap (now explained and quantified) and the majority-vote margin (a covered edit that
-   does not flip a bit). The second is described but not modelled. The open question is why the
-   6-10 and 11+ margin buckets are nearly empty at every budget -- if a detection is nearly always
-   1-2 bits, the index's ranking resolution is thinner than the rate suggests, and that should be
-   measured against the ranking experiments (EXP-004, EXP-013).
+1. **Collisions: join the margin measurement to the ranking measurement.** EXP-023 established that
+   a detection is 1-2 bits at the common 2-token edit, so the longest-shared-prefix rank is 62-63
+   bits. Whether that is enough to order two near-duplicates at *different* distances is the
+   question EXP-004 raised and EXP-023 does not answer. The two measurements have not been joined:
+   a ranking experiment that reports the margin distribution per rank would show whether the thin
+   margin actually limits the ranking, or whether the prefix ladder resolves it.
 2. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Re-examine against
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
