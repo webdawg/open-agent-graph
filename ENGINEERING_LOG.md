@@ -6,6 +6,50 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — EXP-025: widening the prefix filter's recall with a 1-flip multi-probe
+
+**Repository:** `oag-collisions`
+**Files modified:** `crates/oag-collisions/src/lib.rs`,
+`crates/oag-collisions/examples/recall.rs`, `EXPERIMENTS.md`, `README.md`.
+
+**Question.** EXP-024 fixed the ranking signal but not the candidate set: the prefix filter
+excluded 61% of variants, and the exclusion was steepest for the far near-duplicates. An item
+whose first differing bit is above bit 8 is invisible at every level, however few bits moved.
+
+**Measurement.** `examples/recall.rs`: an 800-token base, window 3, budget 200, 20 variants at
+each edit distance from 2 to 256 (160 near-duplicates) and 160 unrelated documents.
+
+| scheme | probes | near found | unrelated found |
+|---|---|---|---|
+| standard | 57 | 62/160 (38.8%) | 1/160 (0.6%) |
+| 1 flip | 65 | **118/160 (73.8%)** | 5/160 (3.1%) |
+| 2 flips | 93 | 143/160 (89.4%) | 22/160 (13.8%) |
+
+The 1-flip scheme nearly doubles the recall for 8 extra probes, at **14 near-duplicates recovered
+per unrelated document admitted**. The 2-flip scheme's ratio is 3.9 near per unrelated, and the
+unrelated rate quadruples.
+
+**The recall that matters is at the near end.** The 1-flip scheme recovers every variant at 2, 4
+and 8 tokens (20/20 at all three; the standard ladder gets 14, 14 and 12). A lost near-duplicate
+is a false negative a deployment feels; a far one recovered at 128 tokens is a weaker inference.
+
+**Fix.** `CollisionIndex::collide_multi_probe` (and `_text`) probes the query's prefixes at every
+level, plus the length-8 prefixes differing from the query's in up to `max_flips` of the first
+`probe_bits` bits. Two tests pin the contract: `max_flips = 0` is exactly the standard ladder, and
+extra probes never narrow the candidate set.
+
+**Tests executed.** `cargo test -p oag-collisions`: 31 passed, 0 failed (was 30). New test
+`multi_probe_zero_flips_matches_the_ladder_and_extra_flips_never_narrow_it`. `cargo build
+--examples`: clean.
+
+**Commit identifiers:** `c1dac22`.
+**Push status:** pushed.
+**Remaining defects.** The far end is still limited: no probe count short of a full scan recovers
+a 256-token variant reliably (15/20 with 2 flips). The unrelated documents are synthetic, so the
+false-positive rate is a property of this corpus.
+
+---
+
 ## 2026-11-12 — EXP-024: the index ranks by a weaker signal than it stores
 
 **Repository:** `oag-collisions`

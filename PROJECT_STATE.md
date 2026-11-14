@@ -143,6 +143,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
   passes the cargo process's own start time as `--protect-after` and the pruner skips anything
   newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **EXP-025: the collision index's recall is widened by a 1-flip multi-probe.** The prefix filter
+  excluded 61% of variants and was steepest for the far near-duplicates. `collide_multi_probe`
+  also queries the prefixes differing from the query's in a few high-order bits. With one flip it
+  nearly doubles recall (38.8% → 73.8%) for 8 extra probes, at 14 near-duplicates per unrelated
+  document admitted, and it recovers **every** variant at the 2-, 4- and 8-token edit distances.
+  Two tests pin the contract: zero flips is the standard ladder, and extra probes never narrow the
+  candidate set.
 - **EXP-024: the collision index now ranks by Hamming distance, not by first differing bit.** The
   index ranked by the longest shared prefix, which is a weak proxy for the edit size: Spearman
   +0.916 between edit distance and Hamming distance, but only -0.443 between edit distance and
@@ -178,13 +185,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **Collisions: the recall limit of the prefix filter.** EXP-024 fixed the ranking signal but not
-   the candidate set: the prefix filter excludes 61% of variants in the measured corpus, and the
-   exclusion is steepest for the far near-duplicates (70% of 2-token variants are candidates; 5%
-   of 256-token ones). An item whose first differing bit is above bit 8 is invisible at every
-   level. The open question is whether the candidate set can be widened without a full scan -- a
-   multi-probe scheme (querying neighbouring prefixes) is the standard LSH answer and has not been
-   measured here.
+1. **Collisions: the far end of the recall curve.** EXP-025 widened the near end completely (1-flip
+   multi-probe recovers every 2-, 4- and 8-token variant) but the far end is still limited: a
+   256-token variant is found 15/20 with 2 flips and 7/20 with 1. The open question is whether the
+   far near-duplicates matter enough to justify a larger probe budget or a second index, and that
+   is a corpus question rather than a mechanism question -- it needs a real corpus, not the
+   synthetic one.
 2. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Re-examine against
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
