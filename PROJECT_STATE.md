@@ -143,6 +143,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
   passes the cargo process's own start time as `--protect-after` and the pruner skips anything
   newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **The imagination layer's data-pad gather fans out with a bounded concurrency.** The gather
+  asked each node for its pad sequentially, so a file split across the default 1000 pads cost a
+  thousand round-trips. `MAX_CONCURRENT_GATHERS` (32) caps the fan-out; `datapad::gather` restores
+  manifest order. `oag-imagination` 55 passed (was 54).
 - **Every outbound HTTP client in the workspace is bounded.** The API's gateway quorum fan-out
   and relayed transfer used a plain `reqwest::Client::new()` -- a peer that accepted but never
   responded would hold them open indefinitely. The operator-configured integrations were also
@@ -235,9 +239,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    need a longer embeddings timeout, and a slow Kubo daemon a longer pin timeout. The open
    question is whether these belong in `config.toml` (like `[gateway].query_peers`) or are fine as
    compile-time constants -- that needs an operator's requirement, not a guess.
-5. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
+5. **Imagination: the gather's bound and its node list.** `MAX_CONCURRENT_GATHERS` (32) is a fixed
+   constant, and the fan-out loop is over the caller's `nodes` list rather than the manifest's
+   `pad_ids` -- so a caller that passes more nodes than the manifest names still asks them all. The
+   open question is whether the bound should be configurable per carrier and whether the loop should
+   be driven by the manifest.
+6. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
    inlining remain (see `spec/29` "Explicitly deferred"); crawler side-fetch pinning is done.
-6. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
+7. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
    proposed, not implemented; both are large and need a design pass before code.
 
 ## Verification

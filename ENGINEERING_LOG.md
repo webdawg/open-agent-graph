@@ -6,6 +6,32 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — the data-pad gather fans out with a bounded concurrency
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/socket.rs`, `spec/03-transports.md`.
+
+**Gap.** `gather_file_with` asked each node for its pad sequentially. A file split across the
+default `DEFAULT_SHARD_COUNT` (1000) pads -- the design case -- cost a thousand sequential
+round-trips. The gather is all-or-nothing (`datapad::gather` needs every shard), so fanning out is
+the only lever.
+
+**Fix.** `MAX_CONCURRENT_GATHERS` (32) caps how many peers are asked at once, via a semaphore over
+a `JoinSet`. `datapad::gather` sorts by the manifest's `pad_ids`, so the fan-out does not reorder
+the shards. `gather_file_with` takes the carrier as an `Arc` so the spawned requests can share it.
+
+**Tests executed.** `cargo test -p oag-imagination`: 55 passed, 0 failed (was 54). New test
+`gathering_fans_out_with_a_bounded_concurrency` uses a tracking carrier to assert both that every
+shard still arrives and that the peak concurrency is exactly the bound (not a timing race).
+
+**Commit identifiers:** `40d4fa8`.
+**Push status:** pushed.
+**Remaining defects.** The bound (32) is a fixed constant, not configurable. A manifest naming
+more nodes than shards still asks every node (the loop is over `nodes`, not `manifest.pad_ids`),
+which is the caller's contract rather than a defect but is worth noting.
+
+---
+
 ## 2026-11-12 — every outbound HTTP client in the workspace is now bounded
 
 **Repository:** `open-agent-graph`
