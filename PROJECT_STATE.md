@@ -143,6 +143,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
   passes the cargo process's own start time as `--protect-after` and the pruner skips anything
   newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **Every outbound HTTP client in the workspace is bounded.** The API's gateway quorum fan-out
+  and relayed transfer used a plain `reqwest::Client::new()` -- a peer that accepted but never
+  responded would hold them open indefinitely. The operator-configured integrations were also
+  unbounded, and `spec/18` had recorded that as a deliberate carve-out; that judgement did not
+  hold (a timeout is not a trust decision, and the embeddings provider sits on the search path).
+  All five clients now carry named connect and request timeouts.
 - **The mesh's heads-failure fallback is classified.** A pull whose heads request fails used to
   fall back to a full five-store pull regardless of why. For an unreachable peer that is six
   timeouts of pure waste (1.8s measured); `PullError::Request` with `is_connect()` or
@@ -224,9 +230,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
    atomically, so the gap may be narrower than it looks -- the in-memory merge is per-store and a
    crash loses it, but that state is re-learned from the mesh.
-4. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
+4. **rust-ai: make the new HTTP timeouts configurable.** Every outbound client is now bounded,
+   but the values are fixed constants. An operator running a genuinely slow self-hosted model may
+   need a longer embeddings timeout, and a slow Kubo daemon a longer pin timeout. The open
+   question is whether these belong in `config.toml` (like `[gateway].query_peers`) or are fine as
+   compile-time constants -- that needs an operator's requirement, not a guess.
+5. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
    inlining remain (see `spec/29` "Explicitly deferred"); crawler side-fetch pinning is done.
-5. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
+6. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
    proposed, not implemented; both are large and need a design pass before code.
 
 ## Verification

@@ -6,6 +6,51 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — every outbound HTTP client in the workspace is now bounded
+
+**Repository:** `open-agent-graph`
+**Files modified:** `crates/oag-api/src/state.rs`, `crates/oag-api/src/lib.rs`,
+`crates/oag-cli/src/commands.rs`, `crates/oag-embeddings/src/provider.rs`,
+`crates/oag-crawler/src/llm_extract.rs`, `crates/oag-ipfs/src/provider.rs`,
+`spec/18-rate-limiting-and-resource-limits.md`.
+
+**Gap.** The peer-to-peer request paths were unbounded: the API's gateway quorum fan-out and
+relayed transfer used a plain `reqwest::Client::new()`, and the CLI's `fetch` command did too. A
+peer that accepted but never responded would hold a gateway fan-out or a relayed transfer open
+indefinitely. The operator-configured integrations (LLM extractor, embeddings, Kubo) were also
+unbounded, and `spec/18` recorded that as a deliberate carve-out.
+
+**Why the carve-out did not hold.** A timeout is not a trust decision -- it bounds the wait
+regardless of who configured the integration. And the embeddings provider sits on the search
+path, where a hung model server would hold a search open. `spec/18`'s reasoning was about the
+*attack surface* (the p2p paths are reachable by an admitted peer; the integrations are not), not
+about whether a bound is needed.
+
+**Fix.** Named connect and request timeouts on every outbound client:
+
+| client | constants | values |
+|---|---|---|
+| API gateway / relayed transfer | `API_CONNECT_TIMEOUT` / `API_REQUEST_TIMEOUT` | 10s / 120s |
+| sync | `SYNC_CONNECT_TIMEOUT` / `SYNC_REQUEST_TIMEOUT` | 10s / 120s |
+| LLM extractor | `EXTRACTOR_CONNECT_TIMEOUT` / `EXTRACTOR_REQUEST_TIMEOUT` | 10s / 120s |
+| embeddings | `EMBEDDINGS_CONNECT_TIMEOUT` / `EMBEDDINGS_REQUEST_TIMEOUT` | 10s / 60s |
+| Kubo IPFS | `KUBO_CONNECT_TIMEOUT` / `KUBO_REQUEST_TIMEOUT` | 10s / 60s |
+
+The embeddings provider gains a test-only `with_timeouts` constructor (mirroring `oag_sync`'s)
+and a test proving a non-responding server is abandoned at the bound.
+
+**Tests executed.** `cargo test -p oag-api`: 65 passed. `-p oag-crawler`: 75 passed.
+`-p oag-ipfs`: 15 passed. `-p oag-embeddings`: 12 passed (was 11). `cargo build -p oag-cli`: clean.
+
+**Commit identifiers:** `2c2e23a`.
+**Push status:** pushed.
+**Remaining defects.** The timeouts are fixed constants, not configurable per deployment. An
+operator running a genuinely slow self-hosted model may need a longer embeddings timeout; that
+would need a config field, which is not built here. The `serve.rs` test client is still unbounded,
+which is correct (a test client is bounded by the test harness).
+
+---
+
 ## 2026-11-12 — classify the mesh's heads failure so the fallback is only paid when it can help
 
 **Repository:** `oag-mesh`
