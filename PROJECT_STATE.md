@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend also serves over HTTP.** A hand-rolled HTTP/1.1 carrier shares the native
+  carrier's store: `GET /audio/{hash}`, `POST /audio` through `AudioStore::accept`, 404 elsewhere.
+  Verified by hand with curl -- a 1644-byte WAV came back byte-identical, empty and HTML bodies
+  labelled `audio/wav` were refused. 20 unit + 4 end-to-end tests. Next: the imagination layer's
+  `Transport` carriers (UDP, IPFS, Reticulum).
 - **oag-listend serves.** The TCP carrier is live: a listener, a length-prefixed frame protocol
   with four operations (hello, publish, fetch, list), and every inbound publish through
   `AudioStore::accept`. A seeded WAV generator (silence, tone, noise) is published at startup, the
@@ -233,9 +238,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: the HTTP carrier.** `GET /audio/{hash}` serves the bytes with an audio content
-   type and `POST /audio` accepts a body through `AudioStore::accept`. A new file, not a new set
-   of rules; the four-operation protocol stays the daemon's native surface.
+1. **oag-listend: the next carrier.** Whatever the imagination layer's `Transport` seam already
+   offers -- UDP, IPFS, Reticulum. It must reuse `AudioStore::accept`, must not grow the operation
+   set, and must carry its own bounds. Then: persist the store (today it is in-memory only, so a
+   restart loses the audio) and give the daemon a real listening address on the operator's network.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

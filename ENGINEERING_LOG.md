@@ -45,6 +45,35 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend adds HTTP, and a browser can now reach the audio
+
+**Repository:** `oag-listend`, commit `57c4c24` on `master`; records in `open-agent-graph`.
+
+**What changed.** `http.rs`: a hand-rolled HTTP/1.1 request/response loop over the same
+`Arc<Mutex<AudioStore>>` as the native carrier. `GET /` says what it is and how much audio it
+holds; `GET /audio/{hash}` serves the bytes with the item's media type (404 if unknown); `POST
+/audio` runs the body through `AudioStore::accept` (201 with the content hash, 400 if the bytes
+are not audio); anything else is 404. No framework, no keep-alive -- one request, one response,
+then close -- with a 16 KiB head cap, the same 16 MiB body cap as the native frame, 10 s bounds,
+and a 64-session semaphore. `ListendServer::bind_shared` / `HttpCarrier::bind_shared` bind both
+carriers around one store, and `main.rs` gained `--http ADDR`.
+
+**Tests executed.** `cargo test -p oag-listend`: 20 unit + 4 end-to-end, 0 failed (was 20 + 2).
+`http_serves_audio_and_refuses_the_rest` posts a generated WAV, fetches it back byte-identical with
+`Content-Type: audio/wav`, refuses HTML labelled `audio/wav`, and 404s an unknown hash and an
+unknown route. `the_two_carriers_serve_the_same_audio` publishes over HTTP and fetches over the
+native protocol, proving one store. Verified by hand with curl against a running daemon: a
+1644-byte WAV returned byte-identical (`cmp` clean), an empty body and HTML labelled `audio/wav`
+were both refused with "input is not audio", and `GET /` reported 5 items.
+
+**Commit identifiers:** `oag-listend` `57c4c24`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The store is in-memory, so a restart loses the audio; persistence is
+the honest next step after the next carrier. The next carrier is whatever the imagination layer's
+`Transport` seam offers (UDP, IPFS, Reticulum), reusing `AudioStore::accept` and adding no
+operations.
+---
+
 ## 2026-11-12 — oag-listend listens: TCP carrier, seeded sounds, and a daemon you can turn on
 
 **Repository:** `oag-listend` (https://github.com/webdawg/oag-listend), commit `a97c71f` on `master`;
