@@ -17,6 +17,11 @@ natural ceiling regardless of what a caller requests, unlike the `search` `limit
 Each returned node carries `distance` — hops from the root, correct because BFS guarantees the
 first time a node is reached is via a shortest path (later rounds never revisit it).
 
+The response order is deterministic: nodes are sorted by `(distance, canonical_identifier)` and
+edges by `id`. Both collections come from `HashMap`s, whose iteration order is unspecified, so
+without an explicit sort the same request could serialize differently on different runs — a
+reproducibility hazard for a cacheable API response and for any test that compares two responses.
+
 ## Explainability (`find_sources`)
 
 All evidence backing any assertion whose edge touches a given node — "why is this relationship

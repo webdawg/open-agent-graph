@@ -82,10 +82,21 @@ impl GraphService {
             assertions.extend(assertions_repo::list_by_edge(&mut conn, *edge_id).await?);
         }
 
-        Ok(Subgraph {
-            nodes: visited_nodes.into_values().map(|(node, distance)| SubgraphNode { node, distance }).collect(),
-            edges: visited_edges.into_values().collect(),
-            assertions,
-        })
+        // Both maps are `HashMap`s, so their iteration order is unspecified: the same
+        // request could return the same neighborhood in a different order on different runs.
+        // That is a reproducibility hazard for a cacheable API response and for any test that
+        // compares two responses, so the order is fixed here -- nodes by
+        // `(distance, canonical_identifier)` so the traversal order is visible and the tie-break
+        // is the identifier a caller actually sees, edges by id. Assertions keep the edge
+        // iteration order, which is now deterministic too.
+        let mut nodes: Vec<SubgraphNode> = visited_nodes
+            .into_values()
+            .map(|(node, distance)| SubgraphNode { node, distance })
+            .collect();
+        nodes.sort_by(|a, b| (a.distance, &a.node.canonical_identifier).cmp(&(b.distance, &b.node.canonical_identifier)));
+        let mut edges: Vec<Edge> = visited_edges.into_values().collect();
+        edges.sort_by_key(|edge| edge.id);
+
+        Ok(Subgraph { nodes, edges, assertions })
     }
 }

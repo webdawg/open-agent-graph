@@ -976,6 +976,52 @@ async fn subgraph_reports_correct_hop_distance_along_a_chain() {
     assert_eq!(distance_of("url:https://example.com/chain-c"), 3);
 }
 
+/// The subgraph response must be reproducible: the same neighborhood in the same order on
+/// every call. Both collections come from `HashMap`s, whose iteration order is unspecified,
+/// so without an explicit sort two identical requests could serialize differently -- a hazard
+/// for a cacheable API response and for any test that compares two runs.
+#[tokio::test]
+async fn subgraph_is_returned_in_a_deterministic_order() {
+    let (service, auth) = service_with_admin("subgraph-deterministic-order").await;
+
+    // A star around one root: every leaf is distance 1, so the distance key alone does not
+    // order them -- a stable sort on (distance, id) is what makes the result reproducible.
+    for i in 0..5 {
+        service
+            .assert(&auth, related_to_input("https://example.com/order-root", &format!("https://example.com/order-{i}")))
+            .await
+            .unwrap();
+    }
+
+    let ResolveOutcome::Found { node: root, .. } = service.resolve("https://example.com/order-root").await.unwrap() else {
+        panic!("root should resolve");
+    };
+
+    let first = service.get_subgraph(root.id, 1, 100).await.unwrap();
+    let second = service.get_subgraph(root.id, 1, 100).await.unwrap();
+
+    let ids = |sg: &crate::Subgraph| -> Vec<String> {
+        sg.nodes.iter().map(|n| n.node.canonical_identifier.clone()).collect()
+    };
+    assert_eq!(ids(&first), ids(&second), "two identical requests must serialize identically");
+
+    // And the order is the documented one: by (distance, id).
+    let mut expected: Vec<(u32, String)> = first
+        .nodes
+        .iter()
+        .map(|n| (n.distance, n.node.canonical_identifier.clone()))
+        .collect();
+    expected.sort();
+    let expected_ids: Vec<String> = expected.into_iter().map(|(_, id)| id).collect();
+    assert_eq!(ids(&first), expected_ids, "nodes must be ordered by (distance, id)");
+
+    // The edges are ordered too.
+    let mut expected_edges: Vec<_> = first.edges.iter().map(|e| e.id).collect();
+    expected_edges.sort();
+    let edge_ids: Vec<_> = first.edges.iter().map(|e| e.id).collect();
+    assert_eq!(edge_ids, expected_edges, "edges must be ordered by id");
+}
+
 #[tokio::test]
 async fn subgraph_keeps_the_shortest_distance_when_a_node_is_reachable_two_ways() {
     let (service, auth) = service_with_admin("subgraph-distance-diamond").await;
