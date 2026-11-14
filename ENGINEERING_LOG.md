@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-12 — the load report counts what is held, not what was read
+
+**Repository:** `oag-listend`, commit `9fe0948` on `master`; records in `open-agent-graph`.
+
+**The defect.** `LoadReport::loaded` was incremented for every entry accepted during a load. A
+load that exceeds `--max-bytes` evicts older entries as later ones are inserted, so `loaded`
+overstated what the daemon actually holds -- the report said 4 while the store served 2.
+
+**What changed.** `LoadReport` gained `evicted`. After the load loop, `loaded` is set to
+`store.len()` (what is held) and `evicted` to the number accepted but pushed out. `skipped` is
+unchanged (not read, or rejected). `main.rs` prints all three.
+
+**Tests executed.** `cargo test -p oag-listend`: 36 unit + 13 end-to-end, 0 failed (was 35 + 13).
+New `the_load_report_counts_only_what_is_held` writes three WAVs straight to the directory (so the
+store has not already deleted the evicted file), opens with a bound that fits two, and asserts
+`loaded == 2`, `evicted == 1`, and that one hash is no longer served.
+
+**Verified by hand.** Generated four sounds with `--dir`, then reloaded with `--max-bytes 3000`:
+`store /tmp/oag-evict-hand: loaded 2 skipped 0 evicted 2`.
+
+**Commit identifiers:** `oag-listend` `9fe0948`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — startup generation seeds an empty store, and reports refusals
 
 **Repository:** `oag-listend`, commits `e0d5004` and the SPEC follow-up on `master`; records in

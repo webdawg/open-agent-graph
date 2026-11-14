@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's load report is honest about eviction.** `LoadReport::loaded` counted entries
+  accepted during a load, but a load exceeding the byte bound evicts older entries, so the number
+  overstated what is served. The report now separates `loaded` (held), `skipped` (not read or
+  rejected), and `evicted` (accepted then pushed out). 36 unit + 13 end-to-end tests; verified by
+  hand (`loaded 2 skipped 0 evicted 2`).
 - **oag-listend's startup generation no longer grows the store.** Generation ran on every start, so
   with `--dir` and the default clock seed each restart added four new sounds and would slowly evict
   the operator's own audio. It now seeds only an empty store and says so when it skips; a generated
