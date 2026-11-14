@@ -138,6 +138,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend survives a restart.** The store is content-addressed: `--dir PATH` writes every
+  accepted item to `<PATH>/<hash>` before it is answerable (a write failure is a refusal, not a
+  silent loss), and startup re-checks every entry -- name must be the BLAKE3 of the bytes, bytes
+  must sniff as audio -- reporting `loaded N skipped M`. Eviction deletes the file, so
+  `--max-bytes` bounds disk as well as memory. 30 unit + 6 end-to-end tests; verified by hand
+  (restart loaded 5, served the posted WAV byte-identical). SPEC.md: "serves, and survives a
+  restart".
 - **oag-listend also serves over UDP.** The imagination seam's datagram transport: one datagram
   is one request, the reply returns to the sender, and the frame codec is reused unchanged, so the
   four operations and the inbound rule are identical. A response larger than 65,507 bytes is
@@ -243,11 +250,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: persist the store.** Today it is in-memory, so a restart loses every sound --
-   the one property a serving daemon cannot have. Write each accepted item content-addressed under
-   a directory and load it at startup, through the same `accept` rule. Then the remaining
-   imagination carriers (IPFS, Reticulum), each reusing `AudioStore::accept` and adding no
-   operations.
+1. **oag-listend: the remaining carriers and a real address.** IPFS and Reticulum, each reusing
+   `AudioStore::accept` and adding no operations; then give the daemon a real listening address on
+   the operator's network and a documented way to run it (a unit file or equivalent), so "turn this
+   thing on" is one command rather than a `cargo run`.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

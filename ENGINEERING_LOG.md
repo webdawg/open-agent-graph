@@ -45,6 +45,36 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend persists: a restart serves what was accepted
+
+**Repository:** `oag-listend`, commit `0341be5` on `master`; records in `open-agent-graph`.
+
+**What changed.** `AudioStore` gained an optional backing directory. `with_directory(dir,
+max_bytes)` loads `<dir>/<hash>` (audio) and `<dir>/<hash>.json` (declared media type), re-checking
+every entry on the way in: the name must be the BLAKE3 of the bytes and the bytes must still sniff
+as audio. The load is reported as `LoadReport { loaded, skipped }`, never silent. `accept` writes
+the item to `<dir>/<hash>` *before* it is answerable, so a write failure is the new
+`ListendError::Persist` refusal rather than a silent loss. Eviction deletes the file, so the
+directory and the store agree and `--max-bytes` bounds disk as well as memory. `main.rs` gained
+`--dir PATH` and prints the load report.
+
+**Tests executed.** `cargo test -p oag-listend`: 30 unit + 6 end-to-end, 0 failed (was 25 + 5). New
+unit tests: reopen serves the same bytes and media type; a file that is not its hash is skipped; a
+non-audio file in the directory is skipped; eviction deletes the file; a persist failure refuses
+the inbound. The end-to-end `audio_accepted_before_a_shutdown_is_served_after_it` binds, publishes
+over TCP, stops, reopens the directory, and serves the same bytes on a new listener.
+
+**Verified by hand.** Posted a 1644-byte WAV over HTTP, stopped the daemon, restarted with
+`--dir /tmp/oag-store-hand`: `loaded 5 skipped 0`, and `curl` returned the same 1644 bytes (`cmp`
+clean).
+
+**Commit identifiers:** `oag-listend` `0341be5`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The remaining imagination carriers (IPFS, Reticulum), then a real
+listening address and a documented one-command way to run the daemon. The format sniff is still a
+closed list that grows only when a real carrier needs a format.
+---
+
 ## 2026-11-12 — oag-listend adds the UDP carrier (the imagination seam's datagram transport)
 
 **Repository:** `oag-listend`, commit `8b669e3` on `master`; records in `open-agent-graph`.
