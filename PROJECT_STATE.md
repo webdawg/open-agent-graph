@@ -147,6 +147,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   asked each node for its pad sequentially, so a file split across the default 1000 pads cost a
   thousand round-trips. `MAX_CONCURRENT_GATHERS` (32) caps the fan-out; `datapad::gather` restores
   manifest order. `oag-imagination` 55 passed (was 54).
+- **The mesh's budget sync scheduler is tested.** `spawn_periodic_sync_with_budget` was added
+  without a test; it is a thin wrapper over `sync_with_all_peers_bounded`, so the new test
+  proves it is still a scheduler rather than a behaviour change behind a new name. `oag-mesh`
+  197 passed (was 196).
 - **Every outbound HTTP client in the workspace is bounded.** The API's gateway quorum fan-out
   and relayed transfer used a plain `reqwest::Client::new()` -- a peer that accepted but never
   responded would hold them open indefinitely. The operator-configured integrations were also

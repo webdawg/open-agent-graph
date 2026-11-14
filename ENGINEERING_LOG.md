@@ -6,6 +6,26 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — test the budget sync scheduler
+
+**Repository:** `oag-mesh`
+**Files modified:** `crates/oag-mesh/src/transport.rs`.
+
+**Gap.** `spawn_periodic_sync_with_budget` was added in the tick-bound work without a test. It is
+a thin wrapper over `sync_with_all_peers_bounded` (whose bound is tested by
+`a_bounded_tick_stops_at_the_budget_instead_of_waiting_out_every_peer`), so the new test proves
+the wrapper is still a *scheduler* -- the same periodic behaviour as `spawn_periodic_sync`, not a
+behaviour change behind a new name.
+
+**Tests executed.** `cargo test -p oag-mesh`: 197 passed, 0 failed (was 196). New test
+`spawn_periodic_sync_with_budget_still_syncs`.
+
+**Commit identifiers:** `1c289d0`.
+**Push status:** pushed.
+**Remaining defects.** None known for this function; the broader mesh priorities are unchanged.
+
+---
+
 ## 2026-11-12 — the data-pad gather fans out with a bounded concurrency
 
 **Repository:** `oag-imagination-random-data-compute`
