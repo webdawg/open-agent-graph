@@ -143,6 +143,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
   passes the cargo process's own start time as `--protect-after` and the pruner skips anything
   newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **The mesh's heads-failure fallback is classified.** A pull whose heads request fails used to
+  fall back to a full five-store pull regardless of why. For an unreachable peer that is six
+  timeouts of pure waste (1.8s measured); `PullError::Request` with `is_connect()` or
+  `is_timeout()` now returns after one, while a `Rejected` (an HTTP status -- a peer whose heads
+  endpoint is broken but whose stores serve) still pays the fallback. Both halves are tested.
+  `oag-mesh` 196 passed (was 195).
 - **The mesh's anti-entropy tick is bounded.** Each pull was bounded but a tick is a loop over
   every peer, so unreachable peers cost their timeout each -- and a pull against a black-holed peer
   costs the heads request plus the five-store fallback (six timeouts, 1.8s measured). The live
@@ -207,12 +213,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    budget a deployment should start from. The open question is a real corpus: every measurement so
    far is on one synthetic document shape, and EXP-027 showed the recall varies 21-96% across
    documents even at a fixed edit model.
-2. **Mesh: the per-peer fallback cost.** A pull whose heads request fails falls back to a full
-   five-store pull (`spec/10`), which for an unreachable peer is six timeouts of pure waste -- the
-   new tick bound caps the aggregate but not that per-peer cost. The fallback exists for a peer
-   whose heads endpoint is broken but whose stores serve, which is narrow. The open question is
-   whether the error can be classified (unreachable vs. endpoint-broken) so the fallback is only
-   paid when it can help.
+2. **Mesh: the fallback classification's blind spot.** The classification is on
+   `reqwest::Error::is_connect()` / `is_timeout()`. A slow-but-alive peer whose heads request times
+   out will skip the fallback; its stores would likely time out too, so the skip is defensible --
+   but it is a judgement, not a measurement. The open question is whether a timed-out heads request
+   should still try one store (cheap) before giving up, which would need a measurement of how
+   often a timed-out heads endpoint still serves stores.
 3. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Re-examine against
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker

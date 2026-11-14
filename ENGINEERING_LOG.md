@@ -6,6 +6,35 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — classify the mesh's heads failure so the fallback is only paid when it can help
+
+**Repository:** `oag-mesh`
+**Files modified:** `crates/oag-mesh/src/transport.rs`.
+
+**Gap.** A pull whose heads request fails falls back to a full five-store pull (`spec/10`).
+That fallback exists for a peer whose heads endpoint is broken while its stores serve. For an
+unreachable peer it is six timeouts of pure waste -- measured at 1.8s in the tick-bound work's
+test (the heads request plus five store requests, at the test client's 300ms).
+
+**Fix.** `PullError` already distinguishes the two cases: `Request` (transport) versus `Rejected`
+(HTTP status). A `Request` that is a connect error or a timeout now records the failure and
+returns; a `Rejected` (or a non-connect transport error, e.g. a malformed response) still pays the
+fallback, because the peer answered and its stores may serve.
+
+**Tests executed.** `cargo test -p oag-mesh`: 196 passed, 0 failed (was 195). New tests:
+`an_unreachable_peer_does_not_pay_the_five_store_fallback` (counts connections through an
+`AtomicUsize`: one, not six) and `a_rejected_heads_request_still_pays_the_five_store_fallback`
+(the complementary case, identified by the fallback recording no heads). The full suite dropped
+from 30.6s to 28.7s on the previous commit and the new unreachable test runs in 0.26s.
+
+**Commit identifiers:** `cb05d26` (the classification), `e1bc3d8` (the complementary test).
+**Push status:** pushed.
+**Remaining defects.** The classification is on `reqwest::Error::is_connect()` / `is_timeout()`;
+a slow-but-alive peer whose heads request times out will still skip the fallback (its stores would
+likely time out too, so the skip is defensible, but it is a judgement rather than a measurement).
+
+---
+
 ## 2026-11-12 — bound the mesh's anti-entropy tick, not just each pull
 
 **Repository:** `oag-mesh`
