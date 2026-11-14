@@ -6,6 +6,44 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — bound the imagination pad's recovery from a deep lock-in
+
+**Repository:** `oag-imagination-random-data-compute`
+**Files modified:** `crates/oag-imagination/src/engine.rs`,
+`crates/oag-imagination/examples/convergence.rs`, `spec/02-tensor-pad-routing.md`.
+
+**Defect.** The pad's exploration floor was an absolute `1e-6`, which is meaningless against a
+pad normalized to `PAD_MEAN` over `PAD_DIM` slots. A slot penalized without limit was multiplied by
+`hop_failed_penalty` every decision and fell to denormal `f32` (about `1e-45`), where the constant
+left it a share of about `1e-8` -- effectively frozen. Measured in `examples/convergence.rs`: a
+switch at decision 10,000 took **1,061** decisions to recover, because the stored ratio between the
+strongest and weakest routing slot was about `1e45` and the ratio decays by `exp(-HOP_STEP)` per
+decision. Recovery time grew with the depth of the lock-in, unbounded.
+
+**Fix.** `PAD_FLOOR_FRAC` (0.01) floors every routing slot at a fraction of the routing slots'
+mean. Applied twice: in `route` (so any pad, including one loaded from the layer below, is
+explorable) and in the stored pad after every reinforcement via `floor_routing_slots` (so the
+*stored* ratio -- the thing recovery is measured against -- is bounded). The floor is relative to
+the routing slots' own mean, not `PAD_MEAN`, because the pad is normalized over all `PAD_DIM`
+slots and the first `neighbours.len()` of them can sum to more or less than `neighbours.len()`.
+
+**Measurement.** The same switch now recovers in **69** decisions, matching the predicted bound
+`ln(neighbours / PAD_FLOOR_FRAC) / HOP_STEP` ~ 60 for four neighbours. The cost is that a
+neighbour the pad has learned to avoid keeps `PAD_FLOOR_FRAC / neighbours` of the traffic; the A/B
+control still separates cleanly (signal 99.1% on the answering neighbour vs control 59.3% on an
+arbitrary one).
+
+**Tests executed.** `cargo test -p oag-imagination`: 54 passed, 0 failed (was 51). New tests:
+`a_penalized_neighbour_keeps_a_bounded_share`, `the_stored_pad_keeps_a_bounded_ratio`,
+`recovery_from_a_deep_lock_in_is_bounded_by_the_floor`.
+
+**Commit identifiers:** pending.
+**Push status:** pending.
+**Remaining defects.** None known. The floor's cost in exploration traffic is a tuning
+question, not a defect; `PAD_FLOOR_FRAC` is a named constant for that reason.
+
+---
+
 ## 2026-11-09 — cap the imagination engine's route hops
 
 **Repository:** `oag-imagination-random-data-compute`

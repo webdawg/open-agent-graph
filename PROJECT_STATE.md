@@ -138,6 +138,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **The imagination pad's recovery from a deep lock-in is bounded.** The exploration floor was an
+  absolute `1e-6`, meaningless against a pad normalized to `PAD_MEAN`; a penalized slot fell to
+  denormal `f32` (~1e-45) and recovery took 1,061 measured decisions, growing with lock-in depth.
+  `PAD_FLOOR_FRAC` (0.01) floors the routing slots relative to their own mean, in `route` and in
+  the stored pad. The same switch now recovers in 69 decisions, matching the predicted
+  `ln(neighbours / PAD_FLOOR_FRAC) / HOP_STEP` bound. `oag-imagination` spec/02.
 - **Keyset pagination** (`cursor` / `--cursor`) on REST, MCP, and CLI. The cursor names the last
   row's `node_id`, not its rank, because FTS5's bm25 rank moves with the corpus.
 - **The embedded IPFS node's libp2p identity is persisted** (`<repo>/libp2p.key`), so a restart
@@ -151,13 +157,15 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
+1. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
+   a pull that updates several stores is still best-effort per store. Re-examine against
+   `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
+   atomically, so the gap may be narrower than it looks -- the in-memory merge is per-store and a
+   crash loses it, but that state is re-learned from the mesh.
+2. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
    inlining remain (see `spec/29` "Explicitly deferred"); crawler side-fetch pinning is done.
-2. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
+3. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
    proposed, not implemented; both are large and need a design pass before code.
-3. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
-   a pull that updates several stores is still best-effort per store. Judged the smaller of the two
-   gaps now that the read side is closed.
 
 ## Verification
 
