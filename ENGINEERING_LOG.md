@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-12 — cap the item bound by what one frame can carry
+
+**Repository:** `oag-listend`, commit `5c13817` on `master`; records in `open-agent-graph`.
+
+**The defect.** The store bound (`--max-bytes`, default 1 GiB) and the protocol frame bound
+(`MAX_FRAME_BYTES`, 16 MiB) were independent. No carrier can move an item near 1 GiB -- a `Fetch`
+response at the frame cap would itself exceed the frame cap and be rejected by the client's own
+decoder -- yet the directory load used `max_bytes` alone, so a directly-placed large file could
+load and then be unfetchable.
+
+**What changed.** `protocol::MAX_SERVABLE_BYTES = MAX_FRAME_BYTES - 256` (a margin for the length
+prefix and the response envelope). `servable_bound(max_bytes)` caps the store bound by it; both
+`AudioStore::accept` and the `with_directory` load use it, and `TooLarge` reports the effective
+bound.
+
+**Tests executed.** `cargo test -p oag-listend`: 41 unit + 16 end-to-end, 0 failed (was 40 + 16).
+New `the_item_bound_is_the_store_bound_capped_by_a_frame` covers a small bound unchanged, a huge
+bound capped, and the cap sitting below the frame cap. The 16 MiB boundary is tested through the
+helper rather than with a 16 MiB fixture.
+
+**Commit identifiers:** `oag-listend` `5c13817`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — reject MP4 video by reading the whole ftyp brand list
 
 **Repository:** `oag-listend`, commits `5a3f0c9` and `dc70647` on `master`; records in
