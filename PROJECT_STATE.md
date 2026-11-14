@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's store is tested under concurrency.** The store is one mutex and the persistent
+  `accept` does a blocking file write while holding it; neither had a concurrent test. Two bounded
+  tests: 16 tasks x 20 publish+fetch against one in-memory store (320 distinct verified hashes, all
+  listed), and 8 tasks x 10 publishes to a persistent store then a restart (all 80 survive and are
+  served). Both pass. 41 unit + 18 end-to-end tests.
 - **oag-listend caps the item bound by the frame cap.** `--max-bytes` defaults to 1 GiB, but no
   carrier can move an item near that: a `Fetch` response at the frame cap would itself exceed the
   frame cap and be rejected by the client's decoder. `servable_bound` caps the store bound by

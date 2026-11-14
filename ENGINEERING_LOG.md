@@ -45,6 +45,26 @@ format.
 
 ---
 
+## 2026-11-12 — the store under concurrent publishers
+
+**Repository:** `oag-listend`, commit `33f58c8` on `master`; records in `open-agent-graph`.
+
+**What changed.** Added `tests/concurrency.rs`. The store is a single mutex and the persistent
+`accept` path does a blocking `std::fs::write` while holding it; neither had a concurrent test.
+Two bounded tests: 16 tasks publishing and fetching 20 sounds each against one in-memory store
+(320 distinct hashes, every one verified, all 320 listed), and 8 tasks publishing 10 sounds each to
+a persistent store then a restart (all 80 survive on disk and are served).
+
+**Tests executed.** `cargo test -p oag-listend`: 41 unit + 18 end-to-end, 0 failed (was 41 + 16).
+The two new tests pass in 0.12 s.
+
+**Commit identifiers:** `oag-listend` `33f58c8`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The blocking write under the store mutex is recorded as a limitation
+(local disk makes it milliseconds; a slow share would stall every carrier). Then the remaining
+imagination carriers and a documented one-command run.
+---
+
 ## 2026-11-12 — cap the item bound by what one frame can carry
 
 **Repository:** `oag-listend`, commit `5c13817` on `master`; records in `open-agent-graph`.
