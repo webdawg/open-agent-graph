@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend reports store byte usage and matches validator lists.** `GET /` and the startup
+  line report bytes held against the bound, so an operator can see the bound working. And
+  `If-None-Match` with a comma-separated validator list (what a shared cache sends) now matches,
+  instead of being compared as one string and never revalidating. 38 unit + 16 end-to-end tests;
+  verified by hand (`held 4976`, `bytes: 4976 / 1073741824`, list validator → 304).
 - **oag-listend honours a zero listing limit and says when a bind is public.** `limit=0` was
   clamped to 1, so a client asking for the default got one item; `normalize_limit` now resolves
   zero to `DEFAULT_LIST_LIMIT` (capped by the carrier). And because the default bind is `0.0.0.0`

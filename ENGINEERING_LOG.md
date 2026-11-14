@@ -45,6 +45,28 @@ format.
 
 ---
 
+## 2026-11-12 — store byte usage and If-None-Match validator lists
+
+**Repository:** `oag-listend`, commit `8e045cd` on `master`; records in `open-agent-graph`.
+
+**What changed.** Two small correctness items. `GET /` and the startup line now report the store's
+bytes held against its bound (`AudioStore::max_bytes` added), so an operator can see the bound
+working rather than discovering it when audio stops being accepted. And `If-None-Match` was compared
+as a single string, so a shared cache sending a comma-separated validator list never matched; the
+header is now split and any matching validator (or `*`) revalidates.
+
+**Tests executed.** `cargo test -p oag-listend`: 38 unit + 16 end-to-end, 0 failed (was 38 + 15).
+Extended `http_caches_immutable_audio_with_an_etag` with a `"stale", "<hash>"` list; new
+`http_root_reports_store_usage` asserts `items:` and `bytes: N / max` before and after a publish.
+
+**Verified by hand.** Startup printed `held 4976`; `GET /` printed `items: 4` and
+`bytes: 4976 / 1073741824`; a list validator returned `304`.
+
+**Commit identifiers:** `oag-listend` `8e045cd`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — a zero listing limit means the default, and a public bind says so
 
 **Repository:** `oag-listend`, commit `12bad84` on `master`; records in `open-agent-graph`.
