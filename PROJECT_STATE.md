@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's HTTP carrier streams.** Range requests (206 with `Content-Range`, or 416 when
+  unsatisfiable; multiple ranges ignored), HEAD (entity length, no body), and a content type
+  derived from the bytes rather than a declared one -- a WAV posted as
+  `application/x-www-form-urlencoded` is served as `audio/wav`, so a browser will play it.
+  30 unit + 8 end-to-end tests; verified with curl (`-r 0-9`, `-r -10`, `-r 999999-`, `-I`).
 - **oag-listend survives a restart.** The store is content-addressed: `--dir PATH` writes every
   accepted item to `<PATH>/<hash>` before it is answerable (a write failure is a refusal, not a
   silent loss), and startup re-checks every entry -- name must be the BLAKE3 of the bytes, bytes
@@ -250,7 +255,8 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: the remaining carriers and a real address.** IPFS and Reticulum, each reusing
+1. **oag-listend: the remaining carriers and a real address.** The HTTP carrier now streams; the
+   native and UDP carriers and persistence are done. IPFS and Reticulum, each reusing
    `AudioStore::accept` and adding no operations; then give the daemon a real listening address on
    the operator's network and a documented way to run it (a unit file or equivalent), so "turn this
    thing on" is one command rather than a `cargo run`.

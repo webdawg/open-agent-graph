@@ -45,6 +45,37 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend's HTTP carrier streams: ranges, HEAD, and the type the bytes imply
+
+**Repository:** `oag-listend`, commit `92395fa` on `master`; records in `open-agent-graph`.
+
+**What changed.** The HTTP carrier became a real audio endpoint rather than a file dump.
+`Range: bytes=...` is parsed (first-byte, open-ended, and suffix forms) and answered 206 with
+`Content-Range`, or 416 with `Content-Range: bytes */len` when unsatisfiable; multiple ranges are
+ignored rather than answered with a multipart body. `HEAD` answers with the entity's
+`Content-Length` and no body (the length is carried explicitly, since an emptied body would
+otherwise advertise zero). The served `Content-Type` now comes from the format sniff, not from a
+declared type: a WAV posted as `application/x-www-form-urlencoded` was served as that and a browser
+would not play it. `AudioFormat::media_type()` maps each recognised format to its canonical audio
+MIME type.
+
+**Tests executed.** `cargo test -p oag-listend`: 30 unit + 8 end-to-end, 0 failed (was 30 + 6).
+`http_range_requests_and_head` covers no-range (200 + `Accept-Ranges: bytes`), `bytes=0-9`,
+`bytes=-10`, `bytes=100-`, an unsatisfiable start (416), multiple ranges (ignored -> 200), and
+HEAD (Content-Length = entity length, empty body). `the_served_content_type_comes_from_the_bytes`
+posts a WAV labelled `application/x-www-form-urlencoded` and asserts `content-type: audio/wav`.
+
+**Verified by hand with curl** against a running daemon: `HEAD` returned `Content-Type: audio/wav`,
+`Content-Length: 4044`, no body; `-r 0-9` returned 10 bytes matching the source with
+`Content-Range: bytes 0-9/4044`; `-r -10` matched the tail; `-r 999999-` returned 416 with
+`Content-Range: bytes */4044`; a WAV posted without a proper content type is served as `audio/wav`.
+
+**Commit identifiers:** `oag-listend` `92395fa`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The remaining imagination carriers (IPFS, Reticulum), then a real
+listening address and a documented one-command way to run the daemon.
+---
+
 ## 2026-11-12 — oag-listend persists: a restart serves what was accepted
 
 **Repository:** `oag-listend`, commit `0341be5` on `master`; records in `open-agent-graph`.
