@@ -6,6 +6,53 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — the pruner no longer races cargo; EXP-023 measures detection as a distribution
+
+**Repository:** `open-agent-graph` (scripts) and `oag-collisions` (experiment).
+**Files modified:** `scripts/prune-target.py`, `scripts/rustc-wrapper.sh`,
+`scripts/test_prune_target.py`, `scripts/README.md` (all four repositories);
+`oag-collisions/crates/oag-collisions/examples/distribution.rs`, `oag-collisions/EXPERIMENTS.md`.
+
+**Defect repaired (introduced by the earlier prune hook).** The pruner deleted
+`incremental/`, `.fingerprint/`, and `build/` directories that cargo had created for the units it
+was about to compile, and cargo then failed with `failed to write .../invoked.timestamp: No such
+file or directory`. Reproduced by `cargo build --examples` after clearing the fingerprint
+directory: 2 of 3 runs failed. The wrapper now reads the cargo process's own start time
+(`stat -c %Y /proc/<pid>`) and passes it as `--protect-after`; the pruner skips anything at or
+after that horizon. The generation being built is never pruned; old generations still are.
+
+**Tests executed.** `python3 scripts/test_prune_target.py`: 16 passed, 0 failed (was 14). New:
+`test_protect_after_skips_generations_cargo_is_using`,
+`test_protect_after_skips_dependency_outputs_cargo_is_writing`. Also `cargo build --examples` in
+`oag-collisions`: 3 consecutive clean runs after the fix, 2 of 3 failing before it.
+
+**Experiment EXP-023.** `examples/distribution.rs` implements the follow-up EXP-022 left open:
+the distribution of detection outcomes over many (budget, position, seed) triples, not a peak.
+An 800-token document, a 2-token edit, window sampling at width 3, a fine budget grid, 114 edit
+positions, 5 seeds. Three findings, all measured:
+
+- **The jaggedness is the normal case.** 10 of 19 adjacent budget pairs differ by more than their
+  combined Wilson half-widths. Budget 120 detects 96.1%; budget 140 detects 62.5% -- increasing
+  the budget can cost 34 points.
+- **Most detections are thin-margin.** At budget 200, 60.4% of detections move only 1-2 bits.
+- **The misses are positionally concentrated.** At budget 100 the per-position miss rate ranges
+  0-100% with a 49-point standard deviation, so the window scheme does have positional blind
+  spots after all.
+
+**Methodological trap recorded.** The first version sampled edit positions every 16 tokens,
+which is exactly the window stride at budget 50, so every tested position was a sampled window's
+start and the rate read 99.8% -- the coverage of window starts, not of edits. A position step
+must be coprime with the stride (7 is coprime with 16, 8, and 4).
+
+**Commit identifiers:** `89014ff` (scripts fix, open-agent-graph), `adcee5a`/`8eb1863`/`8e9df64`
+(same fix, mesh/imagination/collisions), `dd56214` (EXP-023, collisions).
+**Push status:** all pushed.
+**Remaining defects.** The positional blind spot EXP-023 found is unexplained: why the window
+scheme, which has no periodic blind spot, still concentrates its misses at particular positions.
+The pre-existing `unused variable: shuffle` warning in `ranking_tradeoff.rs` is untouched.
+
+---
+
 ## 2026-11-12 — bound the imagination pad's recovery from a deep lock-in
 
 **Repository:** `oag-imagination-random-data-compute`

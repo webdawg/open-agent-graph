@@ -138,6 +138,17 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **The pruner no longer races cargo.** The prune hook could delete the
+  `incremental/`/`.fingerprint/`/`build/` directories cargo had created for the units it was about
+  to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
+  passes the cargo process's own start time as `--protect-after` and the pruner skips anything
+  newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **EXP-023: collision detection measured as a distribution, not a peak.** The rate-over-budget
+  curve is jagged (10 of 19 adjacent pairs distinguishable; budget 120 detects 96.1%, budget 140
+  detects 62.5%), most detections are thin-margin (60.4% move 1-2 bits at budget 200), and the
+  misses are positionally concentrated (49-point std dev at budget 100). Recorded in
+  `oag-collisions/EXPERIMENTS.md` with a methodological trap: a position step aligned with the
+  window stride manufactures a 99.8% rate.
 - **The imagination pad's recovery from a deep lock-in is bounded.** The exploration floor was an
   absolute `1e-6`, meaningless against a pad normalized to `PAD_MEAN`; a penalized slot fell to
   denormal `f32` (~1e-45) and recovery took 1,061 measured decisions, growing with lock-in depth.
@@ -157,7 +168,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
+1. **Collisions: explain the positional blind spot EXP-023 found.** The window scheme has no
+   periodic blind spot, yet at budget 100 the per-position miss rate ranges 0-100% with a 49-point
+   standard deviation. The cause is not the stride (it is coprime with the sample) and is not
+   coverage (the rate is far above it). Candidates: the majority-vote margin at particular
+   positions, and the interaction between the 2-token edit and the window boundaries.
+2. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Re-examine against
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
    atomically, so the gap may be narrower than it looks -- the in-memory merge is per-store and a
