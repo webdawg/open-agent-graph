@@ -45,6 +45,34 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend's HTTP carrier is self-describing
+
+**Repository:** `oag-listend`, commit `7fbb86a` on `master`; records in `open-agent-graph`.
+
+**What changed.** `GET /audio` lists the content hashes one per line -- the list operation, on
+HTTP -- so a client that only fetches can discover what exists without already knowing a hash;
+`GET /` now points at it. A `POST` carrying `Expect: 100-continue` is answered with
+`HTTP/1.1 100 Continue` before the body is read, so a client does not commit a large upload to a
+server that might refuse it.
+
+**Tests executed.** `cargo test -p oag-listend`: 30 unit + 9 end-to-end, 0 failed (was 30 + 8).
+New `http_lists_the_audio_and_honours_expect_continue`: `GET /audio` returns exactly the published
+hash and a newline, `GET /` mentions it, and a raw `POST` with `Expect: 100-continue` reads
+`HTTP/1.1 100 Continue
+
+` before sending the body, then gets 201.
+
+**Verified by hand.** `curl http://…/audio` listed the four startup hashes and, after a POST, five
+lines. A raw socket POST with `Expect: 100-continue` got `HTTP/1.1 100 Continue` then
+`HTTP/1.1 201 Created` whose body was the 64-character hash. (curl no longer sends `Expect`
+automatically, so the interim response is exercised by the raw request and the test.)
+
+**Commit identifiers:** `oag-listend` `7fbb86a`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The remaining imagination carriers (IPFS, Reticulum), then a real
+listening address and a documented one-command way to run the daemon.
+---
+
 ## 2026-11-12 — oag-listend's HTTP carrier streams: ranges, HEAD, and the type the bytes imply
 
 **Repository:** `oag-listend`, commit `92395fa` on `master`; records in `open-agent-graph`.

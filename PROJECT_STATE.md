@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's HTTP carrier is self-describing.** `GET /audio` lists the content hashes (the
+  list operation, on HTTP), so a client that only fetches can discover what exists, and
+  `Expect: 100-continue` is answered before a large upload is read. 30 unit + 9 end-to-end tests;
+  verified by hand (`GET /audio` listed the hashes; a raw POST with `Expect` got `100 Continue`
+  then `201 Created`).
 - **oag-listend's HTTP carrier streams.** Range requests (206 with `Content-Range`, or 416 when
   unsatisfiable; multiple ranges ignored), HEAD (entity length, no body), and a content type
   derived from the bytes rather than a declared one -- a WAV posted as
