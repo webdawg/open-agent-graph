@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend caps the item bound by the frame cap.** `--max-bytes` defaults to 1 GiB, but no
+  carrier can move an item near that: a `Fetch` response at the frame cap would itself exceed the
+  frame cap and be rejected by the client's decoder. `servable_bound` caps the store bound by
+  `MAX_SERVABLE_BYTES`, and both `accept` and the directory load use it, so no accepted item is
+  unfetchable. 41 unit + 16 end-to-end tests.
 - **oag-listend rejects MP4 video by brand, not by major brand alone.** The sniff accepted any
   ISO BMFF file whose major brand was `isom` or `mp42` -- generic brands MP4 *video* uses -- so
   video was accepted as audio. It now reads the whole `ftyp` brand list and accepts only an audio
