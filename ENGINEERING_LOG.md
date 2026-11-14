@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-12 — paginate the listing so it always fits the frame cap
+
+**Repository:** `oag-listend`, commit `4e505d0` on `master`; records in `open-agent-graph`.
+
+**The defect.** `Request::List` took no parameters and the response carried every hash in one
+frame. A store with more than about a quarter of a million items would make the daemon send a frame
+its own client has to reject as `TooLong` -- the daemon violating its own protocol bound.
+
+**What changed.** `Request::List { offset, limit }`; `Response::Listing { content_hashes, total,
+offset }`. Stream carriers clamp the page to `protocol::MAX_LIST_LIMIT` (10,000); UDP clamps to
+`MAX_DATAGRAM_LIST_LIMIT` (900, about 59 KiB of body) so the page always fits a datagram. A client
+can walk the store with the reported `total`.
+
+**Tests executed.** `cargo test -p oag-listend`: 37 unit + 13 end-to-end, 0 failed (was 36 + 13).
+New `a_listing_is_a_bounded_page_with_a_total` covers pages at offset 0, 4, and 5, an over-cap limit
+being clamped, and the sorted order. The protocol round-trip tests cover the new fields.
+
+**Verified by hand.** A raw native client walked the four startup sounds in two pages of two:
+`offset=0 total=4 page=2`, `offset=2 total=4 page=2`, walked 4, unique 4, sorted.
+
+**Commit identifiers:** `oag-listend` `4e505d0`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** Continued hardening; a carrier that needs no external infrastructure.
+---
+
 ## 2026-11-12 — the load report counts what is held, not what was read
 
 **Repository:** `oag-listend`, commit `9fe0948` on `master`; records in `open-agent-graph`.

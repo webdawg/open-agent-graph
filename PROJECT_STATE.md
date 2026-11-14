@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's listing is paginated.** `List` returned every hash in one frame, so a store with
+  more than ~250k items would make the daemon send a frame its own client must reject as too long.
+  `List { offset, limit }` now returns one page plus the store's `total`; stream carriers cap the
+  page at `MAX_LIST_LIMIT`, UDP at a datagram-sized cap. 37 unit + 13 end-to-end tests; verified by
+  hand (four sounds walked in two pages of two, total 4, unique 4, sorted).
 - **oag-listend's load report is honest about eviction.** `LoadReport::loaded` counted entries
   accepted during a load, but a load exceeding the byte bound evicts older entries, so the number
   overstated what is served. The report now separates `loaded` (held), `skipped` (not read or
