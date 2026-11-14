@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend runs as a service and stops cleanly
+
+**Repository:** `oag-listend`, commit `995c9b5` on `master`; records in `open-agent-graph`.
+
+**What changed.** `main.rs` handles SIGTERM as well as SIGINT, so `systemctl stop` and `kill` take
+the clean path: the accept loops return, the Unix socket is removed, and the process exits 0.
+Previously only SIGINT was handled, so a service stop bypassed cleanup and left the socket for the
+next start to remove. Added `scripts/oag-listend.service` (all four carriers, persistent store,
+dedicated user, `Restart=on-failure`, `StateDirectory`/`RuntimeDirectory`) and a README section
+with the exact install and start commands.
+
+**Tests executed.** `cargo test -p oag-listend`: 32 unit + 12 end-to-end, 0 failed (unchanged; this
+is signal handling and an operational unit, not a protocol change).
+
+**Verified by hand.** Started the daemon with `--unix`, sent SIGTERM: exit code 0, socket removed,
+"oag-listend shutting down" printed. Repeated with SIGINT sent from a Python-spawned process (a
+background job in a non-interactive shell inherits SIG_IGN for SIGINT, which is a harness artifact,
+not the daemon): exit code 0, socket removed.
+
+**Commit identifiers:** `oag-listend` `995c9b5`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The remaining imagination carriers (IPFS, Reticulum), each reusing
+`AudioStore::accept` and adding no operations.
+---
+
 ## 2026-11-12 — oag-listend's listing order is reproducible across a restart
 
 **Repository:** `oag-listend`, commits `0f5b83f` and `41b30f3` on `master`; records in

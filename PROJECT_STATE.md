@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend runs as a service and stops cleanly.** It handled only SIGINT, so `systemctl stop`
+  and `kill` bypassed the clean path; SIGINT and SIGTERM now both return the accept loops, remove
+  the Unix socket, and exit 0. `scripts/oag-listend.service` runs all four carriers with a
+  persistent store, and the README documents the install/start commands. Verified by hand: both
+  signals gave exit 0 with the socket removed.
 - **oag-listend's listing order is reproducible across a restart.** `hashes()` returned insertion
   order, which a restart rebuilds in filesystem-dependent directory-iteration order; it is now
   sorted by content hash, so the walk a client sees is identical across a restart. 32 unit + 12
@@ -275,10 +280,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: the remaining carriers and a real address.** IPFS and Reticulum, each reusing
-   `AudioStore::accept` and adding no operations; then a documented one-command way to run the
-   daemon (an install target and a unit file, or equivalent), so "turn this thing on" is one
-   command rather than a `cargo run`.
+1. **oag-listend: the remaining carriers.** IPFS and Reticulum, each reusing
+   `AudioStore::accept` and adding no operations. The service unit and the clean SIGTERM stop are
+   done, so "turn this thing on" is `systemctl enable --now oag-listend`.
 2. **oag-listend: the remaining carriers and a real address.** The HTTP carrier now streams; the
    native and UDP carriers and persistence are done. IPFS and Reticulum, each reusing
    `AudioStore::accept` and adding no operations; then give the daemon a real listening address on
