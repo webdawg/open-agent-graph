@@ -18,7 +18,7 @@ mod tests;
 pub mod transfer;
 
 pub use auth::{authenticate, authenticate_read};
-pub use state::AppState;
+pub use state::{API_CONNECT_TIMEOUT, API_REQUEST_TIMEOUT, AppState};
 
 use axum::middleware;
 use axum::routing::{get, post};

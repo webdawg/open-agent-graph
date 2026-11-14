@@ -70,10 +70,22 @@ pub struct OpenAiCompatibleExtractor {
     model: String,
 }
 
+/// Outbound connect timeout. Operator-configured, but a crawler run must not hang on a server
+/// that never completes the handshake.
+pub const EXTRACTOR_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Outbound total request timeout. Generous because a chat-completions call against a slow
+/// self-hosted model can legitimately take tens of seconds, but not unbounded.
+pub const EXTRACTOR_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 impl OpenAiCompatibleExtractor {
     pub fn new(base_url: impl Into<String>, api_key: Option<String>, model: impl Into<String>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(EXTRACTOR_CONNECT_TIMEOUT)
+                .timeout(EXTRACTOR_REQUEST_TIMEOUT)
+                .build()
+                .expect("building a reqwest client with static timeout configuration cannot fail"),
             base_url: base_url.into(),
             api_key,
             model: model.into(),

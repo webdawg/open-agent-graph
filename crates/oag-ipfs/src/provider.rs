@@ -77,10 +77,22 @@ pub struct KuboHttpProvider {
     api_key: Option<String>,
 }
 
+/// Outbound connect timeout. Operator-configured, but `oag ipfs host-page` and
+/// `oag backup --pin` must not hang on a daemon that never completes the handshake.
+pub const KUBO_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Outbound total request timeout. Generous because pinning a large body can legitimately take
+/// seconds, but not unbounded.
+pub const KUBO_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 impl KuboHttpProvider {
     pub fn new(base_url: impl Into<String>, api_key: Option<String>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(KUBO_CONNECT_TIMEOUT)
+                .timeout(KUBO_REQUEST_TIMEOUT)
+                .build()
+                .expect("building a reqwest client with static timeout configuration cannot fail"),
             base_url: base_url.into(),
             api_key,
         }

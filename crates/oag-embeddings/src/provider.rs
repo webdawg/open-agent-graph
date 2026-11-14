@@ -54,10 +54,48 @@ pub struct OpenAiCompatibleProvider {
     model: String,
 }
 
+/// Outbound connect timeout. The embeddings call is an operator-configured integration, but it
+/// sits on the search path, so a peer that never completes the handshake must not hold a search
+/// open. `spec/18`'s carve-out for optional integrations was about the *attack surface*, not about
+/// whether a bound is needed -- the bound is needed either way.
+pub const EMBEDDINGS_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Outbound total request timeout. Generous because a large batch against a slow self-hosted
+/// model can legitimately take seconds, but not unbounded.
+pub const EMBEDDINGS_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 impl OpenAiCompatibleProvider {
     pub fn new(base_url: impl Into<String>, api_key: Option<String>, model: impl Into<String>) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(EMBEDDINGS_CONNECT_TIMEOUT)
+                .timeout(EMBEDDINGS_REQUEST_TIMEOUT)
+                .build()
+                .expect("building a reqwest client with static timeout configuration cannot fail"),
+            base_url: base_url.into(),
+            api_key,
+            model: model.into(),
+        }
+    }
+}
+
+impl OpenAiCompatibleProvider {
+    /// Like [`Self::new`], with explicit timeouts -- so a test can prove the bound holds without
+    /// waiting the production value out. Mirrors `oag_sync`'s `sync_client_with_timeouts`.
+    #[cfg(test)]
+    fn with_timeouts(
+        base_url: impl Into<String>,
+        api_key: Option<String>,
+        model: impl Into<String>,
+        connect_timeout: std::time::Duration,
+        request_timeout: std::time::Duration,
+    ) -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .connect_timeout(connect_timeout)
+                .timeout(request_timeout)
+                .build()
+                .expect("building a reqwest client with static timeout configuration cannot fail"),
             base_url: base_url.into(),
             api_key,
             model: model.into(),
@@ -138,6 +176,37 @@ mod tests {
         assert_eq!(embedding, vec![0.1, 0.2, 0.3]);
         assert_eq!(provider.provider_name(), "openai-compatible");
         assert_eq!(provider.model_name(), "test-model");
+    }
+
+    /// The embeddings provider sits on the search path, so a server that accepts but never
+    /// responds must be abandoned at the bound rather than holding the search open.
+    #[tokio::test]
+    async fn a_non_responding_server_is_abandoned_at_the_timeout() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else { break };
+                std::mem::forget(stream);
+            }
+        });
+
+        let provider = OpenAiCompatibleProvider::with_timeouts(
+            format!("http://{addr}"),
+            None,
+            "test-model",
+            std::time::Duration::from_millis(50),
+            std::time::Duration::from_millis(200),
+        );
+        let started = std::time::Instant::now();
+        let result = provider.embed("hello").await;
+        let elapsed = started.elapsed();
+
+        assert!(result.is_err(), "a non-responding server must produce an error, not hang");
+        assert!(
+            elapsed < std::time::Duration::from_secs(5),
+            "the request timeout should fire well before this, took {elapsed:?}"
+        );
     }
 
     #[tokio::test]

@@ -102,7 +102,12 @@ pub async fn peer_fetch(
 
     let graph = open_graph(data_dir).await?;
     let identity = graph.identity();
-    let http = reqwest::Client::new();
+    // A peer-to-peer fetch, so it carries the same bound as every other p2p client (`spec/18`).
+    let http = reqwest::Client::builder()
+        .connect_timeout(oag_api::API_CONNECT_TIMEOUT)
+        .timeout(oag_api::API_REQUEST_TIMEOUT)
+        .build()
+        .expect("building a reqwest client with static timeout configuration cannot fail");
 
     let verified = oag_api::transfer::fetch_and_verify(
         &http,

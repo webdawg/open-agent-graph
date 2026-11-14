@@ -123,14 +123,23 @@ an embedder supply its own transport.
 A timeout is an ordinary failed interaction, not a special case: the caller's existing error path
 handles it, and in the mesh a timed-out pull is recorded as a failed delivery for `link_quality`.
 
-### Still unbounded, deliberately
+### The operator-configured integrations are bounded too
 
-The operator-configured external integrations (the LLM extractor, the embeddings provider, the IPFS
-provider) also build their own clients without timeouts. They are a lower trust tier for the same
-reason `spec/18`'s size-cap section gives: each requires an operator to explicitly choose and
-enable the integration, unlike the peer-to-peer paths above, which are reachable by an
-already-admitted but otherwise unprivileged peer. Recorded here rather than fixed silently, because
-a hang in an optional integration is a different trade-off from a hang in replication.
+The operator-configured external integrations (the LLM extractor, the embeddings provider, the Kubo
+IPFS provider) used to build their own clients without timeouts. They were recorded as a deliberate
+carve-out: each requires an operator to explicitly choose and enable the integration, unlike the
+peer-to-peer paths, and a hang in an optional integration was judged a different trade-off from a
+hang in replication.
+
+That judgement did not hold. A timeout is not a trust decision -- it bounds the wait regardless of
+who configured the integration, and the embeddings provider sits on the search path, where a hung
+model server would hold a search open indefinitely. All three now carry named connect and request
+timeouts (`EXTRACTOR_CONNECT_TIMEOUT`/`EXTRACTOR_REQUEST_TIMEOUT`,
+`EMBEDDINGS_CONNECT_TIMEOUT`/`EMBEDDINGS_REQUEST_TIMEOUT`,
+`KUBO_CONNECT_TIMEOUT`/`KUBO_REQUEST_TIMEOUT`), and the peer-to-peer request paths carry
+`API_CONNECT_TIMEOUT`/`API_REQUEST_TIMEOUT` (the gateway quorum fan-out and the relayed transfer,
+which had been unbounded `reqwest::Client::new()`) and `SYNC_CONNECT_TIMEOUT`/
+`SYNC_REQUEST_TIMEOUT`. Every outbound HTTP client in the workspace is now bounded.
 
 ## Item-count caps
 

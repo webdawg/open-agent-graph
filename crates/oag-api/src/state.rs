@@ -7,6 +7,17 @@ use oag_sync::SyncService;
 
 use crate::rate_limit::RateLimiter;
 
+/// The API's outbound connect timeout. A peer that never completes the TCP handshake must not hold
+/// a gateway quorum fan-out or a relayed transfer open -- both are peer-to-peer request paths, not
+/// operator-configured integrations, so `spec/18`'s "still unbounded, deliberately" carve-out
+/// does not apply to them.
+pub const API_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The API's outbound total request timeout. A peer that accepts but never responds is abandoned
+/// rather than waited on. Matches `oag_sync`'s own bound (`SYNC_CONNECT_TIMEOUT` /
+/// `SYNC_REQUEST_TIMEOUT`) so the two peer-to-peer clients agree.
+pub const API_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 #[derive(Clone)]
 pub struct AppState {
     pub graph: Arc<GraphService>,
@@ -124,7 +135,13 @@ impl AppState {
             pinning_provider: None,
             transfer_rate_limiter: Arc::new(RateLimiter::default()),
             relay_peers: Arc::new(Vec::new()),
-            http_client: Arc::new(reqwest::Client::new()),
+            http_client: Arc::new(
+                reqwest::Client::builder()
+                    .connect_timeout(API_CONNECT_TIMEOUT)
+                    .timeout(API_REQUEST_TIMEOUT)
+                    .build()
+                    .expect("building a reqwest client with static timeout configuration cannot fail"),
+            ),
             gateway_query_peers: Arc::new(Vec::new()),
             gateway_relay_peers: Arc::new(Vec::new()),
             gateway_config: Arc::new(crate::gateway::GatewayConfig::default()),
