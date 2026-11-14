@@ -45,6 +45,30 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend's listing order is reproducible across a restart
+
+**Repository:** `oag-listend`, commits `0f5b83f` and `41b30f3` on `master`; records in
+`open-agent-graph`.
+
+**What changed.** `AudioStore::hashes()` returned insertion order, which is reproducible within a
+run but not across one: a restart rebuilds the store in directory-iteration order, which is
+filesystem-dependent. The listing is now sorted by content hash, so the walk a client sees is the
+same always. `SPEC.md` documents the order as part of the contract.
+
+**Tests executed.** `cargo test -p oag-listend`: 32 unit + 12 end-to-end, 0 failed (was 32 + 11).
+The server listing test now asserts a sorted listing rather than insertion order, and a new
+persistence test publishes four sounds, restarts, and asserts the walk is identical.
+
+**Verified by hand.** `GET /audio` before and after a restart produced the same four hashes in the
+same (sorted) order (`cmp` clean).
+
+**Commit identifiers:** `oag-listend` `0f5b83f`, `41b30f3` (the second corrects a test count in the
+README: 32 unit, not 33 -- the listing test was renamed, not added). This entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The remaining imagination carriers (IPFS, Reticulum) and a documented
+one-command way to run the daemon.
+---
+
 ## 2026-11-12 — oag-listend serves over a Unix domain socket
 
 **Repository:** `oag-listend`, commit `a1619ab` on `master`; records in `open-agent-graph`.
