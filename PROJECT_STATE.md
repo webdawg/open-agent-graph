@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend also serves over UDP.** The imagination seam's datagram transport: one datagram
+  is one request, the reply returns to the sender, and the frame codec is reused unchanged, so the
+  four operations and the inbound rule are identical. A response larger than 65,507 bytes is
+  refused, never truncated. `push_pull` now works over TCP and UDP. 25 unit + 5 end-to-end tests.
+  Verified by hand on both. Next: the store is still in-memory, so a restart loses the audio.
 - **oag-listend also serves over HTTP.** A hand-rolled HTTP/1.1 carrier shares the native
   carrier's store: `GET /audio/{hash}`, `POST /audio` through `AudioStore::accept`, 404 elsewhere.
   Verified by hand with curl -- a 1644-byte WAV came back byte-identical, empty and HTML bodies
@@ -238,10 +243,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: the next carrier.** Whatever the imagination layer's `Transport` seam already
-   offers -- UDP, IPFS, Reticulum. It must reuse `AudioStore::accept`, must not grow the operation
-   set, and must carry its own bounds. Then: persist the store (today it is in-memory only, so a
-   restart loses the audio) and give the daemon a real listening address on the operator's network.
+1. **oag-listend: persist the store.** Today it is in-memory, so a restart loses every sound --
+   the one property a serving daemon cannot have. Write each accepted item content-addressed under
+   a directory and load it at startup, through the same `accept` rule. Then the remaining
+   imagination carriers (IPFS, Reticulum), each reusing `AudioStore::accept` and adding no
+   operations.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

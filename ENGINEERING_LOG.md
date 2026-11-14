@@ -45,6 +45,32 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend adds the UDP carrier (the imagination seam's datagram transport)
+
+**Repository:** `oag-listend`, commit `8b669e3` on `master`; records in `open-agent-graph`.
+
+**What changed.** `udp.rs`: one datagram is one request, the reply returns to the sender. The frame
+codec is reused unchanged, so the four operations, the 16 MiB frame cap, and the inbound rule are
+identical to TCP; a datagram that is not the protocol gets a typed rejection rather than silence,
+and a fetch whose response exceeds 65,507 bytes is answered with a rejection rather than a silent
+truncation. `wav::generate_n` exposes a chosen sample count so a carrier bound can be tested with a
+real container. `examples/push_pull.rs` now works over TCP (`--addr`) and UDP (`--udp --addr`); its
+TCP path had double-decoded the frame, which is fixed. `main.rs` gained `--udp ADDR`.
+
+**Tests executed.** `cargo test -p oag-listend`: 25 unit + 5 end-to-end, 0 failed (was 20 + 4).
+`udp_carries_the_same_audio` runs a real socket: hello, publish a generated tone, fetch it back,
+refuse HTML, list. Unit tests prove a tone round-trips, a 40,000-sample recording is refused as too
+large for a datagram, and non-audio and non-protocol datagrams are rejected without storing.
+Verified by hand: `push_pull` over TCP and over UDP both fetched the tone and noise with
+`verified=true` and both refused HTML labelled `audio/wav`.
+
+**Commit identifiers:** `oag-listend` `8b669e3`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The store is still in-memory: a restart loses every sound. Persistence
+(content-addressed files under a directory, loaded at startup) is the top priority. The remaining
+imagination carriers (IPFS, Reticulum) come after.
+---
+
 ## 2026-11-12 — oag-listend adds HTTP, and a browser can now reach the audio
 
 **Repository:** `oag-listend`, commit `57c4c24` on `master`; records in `open-agent-graph`.
