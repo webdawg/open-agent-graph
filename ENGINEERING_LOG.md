@@ -6,6 +6,51 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-12 — EXP-024: the index ranks by a weaker signal than it stores
+
+**Repository:** `oag-collisions`
+**Files modified:** `crates/oag-collisions/src/lib.rs`,
+`crates/oag-collisions/examples/ranking_margin.rs`, `EXPERIMENTS.md`, `README.md`.
+
+**Question.** EXP-023 left open whether the thin margin limits the ranking. The question hides a
+distinction: the index ranks by **longest shared prefix** (the position of the first differing
+bit), while EXP-023 measured **Hamming distance** (the number of bits moved). A variant one bit
+away at the most significant position shares nothing; one bit away at the least significant
+position shares 63.
+
+**Measurement.** `examples/ranking_margin.rs`: an 800-token document, window 3, budget 200, 20
+variants at each edit distance from 2 to 256 tokens.
+
+| signal | Spearman with edit distance |
+|---|---|
+| Hamming distance | **+0.916** |
+| shared prefix (the index's ranking signal) | **-0.443** |
+
+The prefix ordering inverts **22.3%** of the 10,409 comparable pairs relative to the Hamming
+ordering (29.7% among the 62 candidates the prefix filter admits). The Hamming ordering inverts
+0%, by construction.
+
+**Fix.** `CollisionIndex::collide_by_hamming` (and `_text`) re-ranks the candidates by the
+full-hash Hamming distance. The index already stored every item's full hash and already held the
+candidate set in memory, so the re-rank is `O(candidates)` with no extra memory. `Collision` gains
+a `hamming` field alongside `shared_bits`. The candidate set is unchanged -- the prefix buckets
+still decide recall, and they exclude 61% of variants here (70% of 2-token variants are
+candidates; 5% of 256-token ones).
+
+**Result.** On the measured corpus the top-1 improves from a 4-token edit to the 2-token edit
+that is the closest detectable document.
+
+**Tests executed.** `cargo test -p oag-collisions`: 30 passed, 0 failed (was 29). New test
+`collide_by_hamming_orders_the_candidates_by_full_hash_distance`. `cargo build --examples`: clean.
+
+**Commit identifiers:** `e069c28`.
+**Push status:** pushed.
+**Remaining defects.** The recall limit of the prefix filter is described, not fixed: closing it
+would require scanning every item, which is the cost the index exists to avoid. The Spearman
+coefficients are over one synthetic corpus.
+
+---
+
 ## 2026-11-12 — EXP-023 finding 4: the margin is set by the edit, not the budget
 
 **Repository:** `oag-collisions`

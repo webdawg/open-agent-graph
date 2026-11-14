@@ -143,6 +143,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
   passes the cargo process's own start time as `--protect-after` and the pruner skips anything
   newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **EXP-024: the collision index now ranks by Hamming distance, not by first differing bit.** The
+  index ranked by the longest shared prefix, which is a weak proxy for the edit size: Spearman
+  +0.916 between edit distance and Hamming distance, but only -0.443 between edit distance and
+  shared prefix. The prefix ordering inverted 22.3% of comparable pairs (29.7% among the
+  candidates). `collide_by_hamming` re-ranks the same candidates by the full-hash distance, which
+  the index already stored and was not using, at `O(candidates)` and no extra memory. The
+  candidate set is unchanged -- the prefix filter still decides recall.
 - **EXP-023: collision detection measured as a distribution, not a peak.** The detection rate is a
   step function of the window stride, not the budget: budgets sharing a stride give identical rates
   (spread 0.0). The window scheme has a periodic blind spot of `(stride - window - 1)/stride` -- the
@@ -171,12 +178,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **Collisions: join the margin measurement to the ranking measurement.** EXP-023 established that
-   a detection is 1-2 bits at the common 2-token edit, so the longest-shared-prefix rank is 62-63
-   bits. Whether that is enough to order two near-duplicates at *different* distances is the
-   question EXP-004 raised and EXP-023 does not answer. The two measurements have not been joined:
-   a ranking experiment that reports the margin distribution per rank would show whether the thin
-   margin actually limits the ranking, or whether the prefix ladder resolves it.
+1. **Collisions: the recall limit of the prefix filter.** EXP-024 fixed the ranking signal but not
+   the candidate set: the prefix filter excludes 61% of variants in the measured corpus, and the
+   exclusion is steepest for the far near-duplicates (70% of 2-token variants are candidates; 5%
+   of 256-token ones). An item whose first differing bit is above bit 8 is invisible at every
+   level. The open question is whether the candidate set can be widened without a full scan -- a
+   multi-probe scheme (querying neighbouring prefixes) is the standard LSH answer and has not been
+   measured here.
 2. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
    a pull that updates several stores is still best-effort per store. Re-examine against
    `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
