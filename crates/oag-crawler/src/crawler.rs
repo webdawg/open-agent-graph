@@ -180,10 +180,14 @@ impl CrawlerService {
 
         // Best-effort enrichment: a pin failure (or a disabled provider,
         // the default) must never fail the crawl, same posture already
-        // established for malformed LLM-extraction responses. Only the
-        // primary page is pinned in Phase 1 (spec/29-ipfs-pinning.md) —
-        // the llms.txt/ARD/agent-card side-fetches below are metadata-
-        // discovery mechanisms, not primary content, and are left unpinned.
+        // established for malformed LLM-extraction responses.
+        //
+        // The main page *and* the llms.txt/ARD/agent-card side-fetches below are all
+        // pinned. An earlier version of this comment said only the main page was, on
+        // the reasoning that the side-fetches are "metadata-discovery mechanisms, not
+        // primary content"; that reasoning was overturned (spec/29, "Resolved later:
+        // the crawler's side-fetches are pinned too") because those responses are the
+        // evidence for every relationship extracted from them.
         let pinned_cid = self.pin_best_effort(&page.body, "crawled page").await;
 
         let page_evidence = EvidenceInput {
