@@ -75,6 +75,15 @@ fn load_or_create_keypair(repo_path: &Path) -> Result<Vec<u8>, IpfsError> {
 /// Helia bundle, so a browser loading `/ipfs-site/{cid}` can bitswap-fetch
 /// directly from this node once it has a dial address for it (see
 /// `dialable_multiaddrs`).
+/// Upper bound on a single content fetch.
+///
+/// Without it a fetch of a CID nobody can serve blocks indefinitely: measured directly, a fresh
+/// node asking for a CID it does not hold and cannot reach had not returned after 10 seconds. Every
+/// caller of `fetch` is a request path -- the crawler following a URL, a peer serving a transfer --
+/// so an unservable CID would otherwise hold a task and a connection open for as long as the
+/// requester waited. Same posture as the imagination carrier's `UPSTREAM_TIMEOUT`.
+pub const FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
 pub struct EmbeddedIpfsProvider {
     ipfs: Ipfs,
 }
@@ -157,6 +166,33 @@ impl EmbeddedIpfsProvider {
     }
 }
 
+impl EmbeddedIpfsProvider {
+    /// [`Self::fetch`] with an explicit bound, so a test can use one short enough to observe.
+    ///
+    /// The stream is wrapped as a whole rather than per chunk: a peer that trickles bytes slowly
+    /// is not the hazard, a peer (or a CID) that never produces any is.
+    pub async fn fetch_with_timeout(
+        &self,
+        cid: &str,
+        timeout: std::time::Duration,
+    ) -> Result<Vec<u8>, IpfsError> {
+        tokio::time::timeout(timeout, self.fetch_unbounded(cid)).await.map_err(|_| {
+            IpfsError::Embedded(format!("timed out after {}s fetching {cid}", timeout.as_secs()))
+        })?
+    }
+
+    async fn fetch_unbounded(&self, cid: &str) -> Result<Vec<u8>, IpfsError> {
+        let path: IpfsPath = cid.parse().map_err(|_| IpfsError::EmptyResponse)?;
+        let mut stream = self.ipfs.unixfs().cat(path);
+        let mut out = Vec::new();
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| IpfsError::Embedded(e.to_string()))?;
+            out.extend_from_slice(&chunk);
+        }
+        Ok(out)
+    }
+}
+
 #[async_trait::async_trait]
 impl PinningProvider for EmbeddedIpfsProvider {
     async fn pin(&self, content: &[u8]) -> Result<String, IpfsError> {
@@ -180,14 +216,7 @@ impl PinningProvider for EmbeddedIpfsProvider {
     }
 
     async fn fetch(&self, cid: &str) -> Result<Vec<u8>, IpfsError> {
-        let path: IpfsPath = cid.parse().map_err(|_| IpfsError::EmptyResponse)?;
-        let mut stream = self.ipfs.unixfs().cat(path);
-        let mut out = Vec::new();
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| IpfsError::Embedded(e.to_string()))?;
-            out.extend_from_slice(&chunk);
-        }
-        Ok(out)
+        self.fetch_with_timeout(cid, FETCH_TIMEOUT).await
     }
 
     async fn pin_directory(&self, files: &[(String, Vec<u8>)]) -> Result<String, IpfsError> {
@@ -267,6 +296,47 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    /// A fetch of a CID nobody can serve must return an error, not block forever.
+    ///
+    /// Measured before the bound: a fresh node asking for a CID it does not hold and cannot reach
+    /// had not returned after 10 seconds. Every caller of `fetch` is a request path, so an
+    /// unservable CID would hold a task and a connection open indefinitely.
+    #[tokio::test]
+    async fn fetching_a_cid_nobody_can_serve_times_out_instead_of_blocking() {
+        let minter_dir = std::env::temp_dir().join(format!(
+            "oag-ipfs-fetch-timeout-minter-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&minter_dir).unwrap();
+        let minter = EmbeddedIpfsProvider::new(minter_dir, vec![]).await.unwrap();
+        let cid = minter.pin(b"mint a real cid, then leave").await.unwrap();
+        minter.shutdown().await;
+
+        // A different directory: this node holds neither the CID nor the block, and has no peers.
+        let fresh_dir = std::env::temp_dir().join(format!(
+            "oag-ipfs-fetch-timeout-fresh-{}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        std::fs::create_dir_all(&fresh_dir).unwrap();
+        let provider = EmbeddedIpfsProvider::new(fresh_dir, vec![]).await.unwrap();
+
+        let started = std::time::Instant::now();
+        let error = provider
+            .fetch_with_timeout(&cid, std::time::Duration::from_millis(500))
+            .await
+            .expect_err("a CID nobody can serve must not fetch successfully");
+        assert!(
+            error.to_string().contains("timed out"),
+            "expected a timeout, got {error}"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(5),
+            "the bound must be honoured, took {:?}",
+            started.elapsed()
+        );
+        provider.shutdown().await;
     }
 
     #[tokio::test]
