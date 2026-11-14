@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend serves over a Unix domain socket.** `--unix PATH` serves the same frame protocol
+  over a filesystem socket: no port to allocate, permissions decide who connects. The TCP session
+  loop is generic over the stream, so the new carrier shares the protocol, bounds, and inbound rule
+  by construction. A stale socket from a killed daemon is removed on bind and shutdown.
+  32 unit + 11 end-to-end tests; verified by hand over AF_UNIX.
 - **oag-listend enforces its store bound on the way in.** Two unbounded paths are closed:
   `accept` no longer writes an item larger than `--max-bytes` and immediately evicts it (it refuses
   with `ListendError::TooLarge`), and a startup file larger than the bound is skipped without being
@@ -265,7 +270,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: the remaining carriers and a real address.** The HTTP carrier now streams; the
+1. **oag-listend: make the listing order survive a restart.** `hashes()` is insertion order within
+   a run, but a restart rebuilds it in directory-iteration order, which is filesystem-dependent --
+   so the walk a client sees can change across a restart. Sorting by hash would make it
+   reproducible; the contract should say which order is promised.
+2. **oag-listend: the remaining carriers and a real address.** The HTTP carrier now streams; the
    native and UDP carriers and persistence are done. IPFS and Reticulum, each reusing
    `AudioStore::accept` and adding no operations; then give the daemon a real listening address on
    the operator's network and a documented way to run it (a unit file or equivalent), so "turn this

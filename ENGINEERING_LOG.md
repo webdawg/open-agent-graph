@@ -45,6 +45,34 @@ format.
 
 ---
 
+## 2026-11-12 — oag-listend serves over a Unix domain socket
+
+**Repository:** `oag-listend`, commit `a1619ab` on `master`; records in `open-agent-graph`.
+
+**What changed.** `unix.rs`: `--unix PATH` serves the same frame protocol over a filesystem socket.
+`serve_session`, `read_frame`, and `write_response` in `server.rs` are now generic over
+`AsyncRead + AsyncWrite`, so the Unix carrier shares the TCP session loop -- same protocol, same
+bounds, same inbound rule -- by construction rather than by copying. A stale socket file from a
+killed daemon is removed on bind and on shutdown. `main.rs` gained `--unix PATH`.
+
+**Tests executed.** `cargo test -p oag-listend`: 32 unit + 11 end-to-end, 0 failed (was 32 + 9).
+New `a_unix_socket_serves_the_same_audio` (hello, publish, fetch, non-audio rejection, socket file
+removed on shutdown) and `the_unix_and_tcp_carriers_serve_one_store` (publish on the socket, fetch
+over TCP).
+
+**Verified by hand.** Over AF_UNIX: hello count, publish returned a 64-character hash, fetch
+returned the same bytes, HTML was rejected. A daemon restarted over a socket left by `kill -9`
+bound successfully. (The first hand attempt failed because my client declared a 10-byte type for
+the 9-byte string `audio/wav`; the server was correct to reject it.)
+
+**Commit identifiers:** `oag-listend` `a1619ab`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The listing order is insertion order within a run but
+directory-iteration order after a restart, so it is not reproducible across a restart; sorting by
+hash would fix it. Then the remaining imagination carriers (IPFS, Reticulum) and a documented
+one-command way to run the daemon.
+---
+
 ## 2026-11-12 — oag-listend enforces its store bound on the way in
 
 **Repository:** `oag-listend`, commit `1ef956d` on `master`; records in `open-agent-graph`.
