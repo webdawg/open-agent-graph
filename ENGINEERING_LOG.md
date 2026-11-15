@@ -45,6 +45,36 @@ format.
 
 ---
 
+## 2026-11-14 — the musical ping: "even pings are music"
+
+**Repository:** `oag-listend`, commit `84712a1` on `master`; records in `open-agent-graph`.
+
+**The directive.** `USER_INPUT_RECORD.md` Entry 3 (2026-11-14), verbatim: "even pings are music -
+start with twinkle twinkle little star". `SPEC.md` records it as an individual directive: a
+liveness answer must be audio, not a silent control plane beside the audio service.
+
+**What changed.** `wav::twinkle()` generates the opening phrase (C C G G A A G | F F E E D D C) as
+16-bit PCM WAV, deterministic and ramped per note, so every daemon answers with the same bytes and
+the same BLAKE3. The native protocol gained `Request::Ping` (op 0x05); `handle` answers it with
+`Response::Audio { content_hash, bytes }`. HTTP gained `GET /ping`, served as `audio/wav` with an
+`ETag` and a filename. `Hello` is unchanged, so compatibility is preserved. The canonical ping is
+appended to the startup set, so it is durable and fetchable by hash as well as answerable with a
+ping. The two `publish_generated` tests were updated for the fifth startup item.
+
+**Tests executed.** `cargo test -p oag-listend`: 47 unit + 21 end-to-end, 0 failed (was 46 + 19).
+New `the_canonical_ping_is_a_deterministic_wav` (same bytes twice, WAV, exact sample count, fits a
+frame), `a_native_ping_is_music` (non-empty, WAV, hash-verifiable), and
+`http_ping_serves_the_canonical_music` (200 audio/wav, ETag names the bytes, listed by hash).
+
+**Verified by hand.** The native `Ping` and `GET /ping` both returned the same 89,644-byte WAV with
+the same hash (`ebf415e3...`); the startup set printed five generated items.
+
+**Commit identifiers:** `oag-listend` `84712a1`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — serve a Content-Disposition with a real filename
 
 **Repository:** `oag-listend`, commit `7902c83` on `master`; records in `open-agent-graph`.

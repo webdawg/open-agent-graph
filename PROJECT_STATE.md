@@ -138,6 +138,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend implements the musical ping (operator directive, Entry 3).** "even pings are music
+  - start with twinkle twinkle little star." `wav::twinkle()` generates the opening phrase
+  deterministically; the native protocol's new `Ping` operation and HTTP's `GET /ping` both answer
+  with that audio item and its BLAKE3 hash; `Hello` is unchanged. The canonical ping is in the
+  startup set, so it is durable and fetchable by hash. 47 unit + 21 end-to-end tests; verified by
+  hand (native and HTTP both returned the same 89,644-byte WAV and hash).
 - **oag-listend serves a `Content-Disposition` with a real filename.** A browser or player saving
   `/audio/<hash>` got a bare hash; it now gets `<hash>.<ext>`, with the extension from the sniffed
   format. 46 unit + 19 end-to-end tests; verified with curl.
