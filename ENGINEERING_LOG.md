@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-14 — cap the generated sample count
+
+**Repository:** `oag-listend`, commits `20e6051` and `8bd56e8` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** `wav::generate_n` is public and took an unbounded sample count, so a caller passing a
+huge value could allocate without limit.
+
+**What changed.** `MAX_GENERATED_SAMPLES`, and `generate_n` clamps to it. The first commit set it to
+16,000 frames (32 KB); that is below one UDP datagram's payload, which broke
+`udp::tests::a_tone_fits_and_a_long_recording_does_not` -- its whole point is a recording too large
+for a datagram. The cap is now 40,000 frames (80 KB): still bounded, and deliberately above the
+datagram payload so the too-large path stays testable. That first commit was made despite a failing
+test because the shell chain did not stop on the test exit code; the corrective commit fixes it and
+the suite is green.
+
+**Tests executed.** `cargo test -p oag-listend`: 47 unit + 22 end-to-end, 0 failed. New
+`a_chosen_sample_count_is_capped` asserts a `usize::MAX` request yields exactly the cap.
+
+**Commit identifiers:** `oag-listend` `20e6051`, `8bd56e8`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — refuse to delete a non-socket at the Unix socket path
 
 **Repository:** `oag-listend`, commit `b1c7793` on `master`; records in `open-agent-graph`.

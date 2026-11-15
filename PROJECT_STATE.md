@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend caps the generated sample count.** `generate_n` was public and took an unbounded
+  count, so a caller could allocate without limit. It caps at `MAX_GENERATED_SAMPLES` (40,000
+  frames, 80 KB) -- bounded, and deliberately above one UDP datagram's payload so the
+  too-large-for-a-datagram path stays testable. 47 unit + 22 end-to-end tests.
 - **oag-listend refuses to delete a non-socket at the Unix socket path.** `bind_shared` removed
   whatever was at the path before binding, so `--unix` pointed at a regular file destroyed it.
   Only a socket is removed now; anything else is refused with `InvalidInput` and left intact.
