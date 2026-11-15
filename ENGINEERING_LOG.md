@@ -45,6 +45,27 @@ format.
 
 ---
 
+## 2026-11-14 — CLI argument errors are usage errors, not panics
+
+**Repository:** `oag-listend`, commit `82f4cba` (daemon) and the `push_pull` follow-up on `master`;
+records in `open-agent-graph`.
+
+**The defect.** A missing or invalid flag value (`--listen`, `--seed`, `--addr`, ...) used to
+`expect`/`panic`, exiting 101 with a backtrace hint instead of a usage error.
+
+**What changed.** `main.rs` gained `value`/`parse_value` helpers that print the usage and exit 2;
+`push_pull` gained `flag_value` and the same treatment for its `--addr`/`--seed`. Verified by hand:
+missing `--listen` -> exit 2, `--seed abc` -> exit 2, `--help`/`--version` -> exit 0.
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed (unchanged).
+
+**Commit identifiers:** `oag-listend` `82f4cba` plus the `push_pull` follow-up; this entry's commit
+pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — the crate is rustfmt-clean
 
 **Repository:** `oag-listend`, commit `367f35e` on `master`; records in `open-agent-graph`.

@@ -138,6 +138,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's CLI argument errors are usage errors, not panics.** A missing or invalid flag
+  value in the daemon binary and in `push_pull` used to panic (exit 101); both now print a message
+  and exit 2, like the unknown-argument path. 49 unit + 24 end-to-end tests.
 - **oag-listend is rustfmt-clean.** The crate had accumulated hand-wrapped lines; `cargo fmt` was
   run and `cargo fmt --check` is clean. Behaviour unchanged (49 unit + 24 end-to-end, hand-run
   acceptance path verified).
