@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-12 — bound each read and write syscall, not the whole transfer
+
+**Repository:** `oag-listend`, commit `dcc8065` on `master`; records in `open-agent-graph`.
+
+**The defect.** The 10 s read/write timeout was applied around the whole `write_all` / `read_exact`.
+A legitimate transfer of the largest item the store accepts (up to ~16 MiB) to a slow client takes
+far longer than 10 s, so it was cut off mid-transfer -- the client received a truncated file or a
+dropped connection.
+
+**What changed.** `server::read_exact_bounded` and `server::write_all_bounded` loop over the
+transfer and apply the timeout to each individual `read`/`write` syscall. A stalled client is still
+dropped after the timeout; a slow client that keeps making progress is not. The TCP and Unix
+carriers (via `serve_session`), the HTTP carrier's response and interim writes, all use them.
+
+**Tests executed.** `cargo test -p oag-listend`: 43 unit + 18 end-to-end, 0 failed (was 41 + 18).
+New `a_slow_but_progressing_read_is_not_cut_off` and `a_slow_but_progressing_write_is_not_cut_off`
+move 100 bytes at 10 ms each (~1 s, well past the 50 ms bound) over a `duplex` stream and succeed;
+a total bound of 50 ms would have failed.
+
+**Commit identifiers:** `oag-listend` `dcc8065`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — reject Ogg video by reading the codec header
 
 **Repository:** `oag-listend`, commit `0d1691f` on `master`; records in `open-agent-graph`.

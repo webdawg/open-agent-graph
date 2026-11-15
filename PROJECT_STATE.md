@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend bounds each I/O syscall, not the whole transfer.** The 10 s timeout wrapped the
+  whole `write_all`/`read_exact`, so a legitimate transfer of the largest item to a slow client was
+  cut off mid-transfer. `read_exact_bounded`/`write_all_bounded` apply the timeout per syscall.
+  43 unit + 18 end-to-end tests, including two slow-but-progressing transfers that exceed the bound
+  and succeed.
 - **oag-listend rejects Ogg video, not just MP4 video.** Any `OggS` container was accepted, but Ogg
   also carries Theora video -- the same false positive as the MP4 major-brand check. The
   beginning-of-stream page's codec header is now read; Vorbis/Opus/FLAC/Speex/PCM pass, anything
