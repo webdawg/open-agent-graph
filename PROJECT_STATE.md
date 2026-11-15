@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend restores a persisted file removed out of band.** The durable copy is the source of
+  truth, but a file deleted out of band left the in-memory item serving audio the next start would
+  lose. A republish of the same bytes now restores it; the existence check costs a syscall only on a
+  duplicate publish, never on the read path. 45 unit + 19 end-to-end tests.
 - **oag-listend's bare-run examples use a creatable socket path.** The README and SPEC examples used
   `/run/oag-listend/audio.sock`, which a non-root `cargo run` cannot create (only systemd's
   `RuntimeDirectory` does). Both now use `/tmp/oag-listend.sock`; the unit keeps `/run` and says

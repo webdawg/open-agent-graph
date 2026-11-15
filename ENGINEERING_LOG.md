@@ -45,6 +45,28 @@ format.
 
 ---
 
+## 2026-11-12 — restore a persisted file removed out of band
+
+**Repository:** `oag-listend`, commit `e14f4ea` on `master`; records in `open-agent-graph`.
+
+**The gap.** The directory is the durable copy and memory the cache, but a file deleted out of band
+(operator action, or a disk that dropped it) left the in-memory item serving audio that the next
+start would not have. Nothing detected the divergence.
+
+**What changed.** `accept`, on finding the hash already present in a persistent store, checks
+whether the file still exists and re-persists the item if it does not. The check is a `exists()` on
+the duplicate-publish path only, so the read path pays nothing.
+
+**Tests executed.** `cargo test -p oag-listend`: 45 unit + 19 end-to-end, 0 failed (was 44 + 19).
+New `a_republish_restores_a_file_deleted_out_of_band` deletes the file, republishes the same bytes,
+and asserts the file is restored and a restart still serves the item.
+
+**Commit identifiers:** `oag-listend` `e14f4ea`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — the bare-run examples use a creatable socket path
 
 **Repository:** `oag-listend`, commit `13877c3` on `master`; records in `open-agent-graph`.
