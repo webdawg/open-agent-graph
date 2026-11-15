@@ -138,6 +138,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend bounds the persistence sidecar read.** `read_sidecar` read the whole `<hash>.json`
+  file, so a hand-placed huge sidecar was pulled into memory on every load. A sidecar larger than
+  4 KiB is now ignored. 44 unit + 19 end-to-end tests.
 - **oag-listend bounds the whole HTTP connection.** `REQUEST_TIMEOUT` wrapped only the read, so a
   client that read the response slowly could hold a session slot for the entire transfer. The total
   now covers read, route, and response, symmetric with the native session bound. 43 unit + 19

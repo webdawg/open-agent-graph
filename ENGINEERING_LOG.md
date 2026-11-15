@@ -45,6 +45,26 @@ format.
 
 ---
 
+## 2026-11-12 — bound the persistence sidecar read
+
+**Repository:** `oag-listend`, commit `8d79d16` on `master`; records in `open-agent-graph`.
+
+**The gap.** `read_sidecar` read the entire `<hash>.json` file with no size bound. A media type is a
+few dozen bytes; a hand-placed multi-megabyte sidecar would be read into memory on every load.
+
+**What changed.** `MAX_SIDECAR_BYTES = 4096`; a sidecar larger than that is ignored (the item still
+loads, with no media type) rather than read.
+
+**Tests executed.** `cargo test -p oag-listend`: 44 unit + 19 end-to-end, 0 failed (was 43 + 19).
+New `an_oversized_sidecar_is_ignored` writes a 100 KB sidecar and asserts the item loads with
+`media_type == None`.
+
+**Commit identifiers:** `oag-listend` `8d79d16`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — bound the whole HTTP connection, not just the read
 
 **Repository:** `oag-listend`, commit `f2f2275` on `master`; records in `open-agent-graph`.
