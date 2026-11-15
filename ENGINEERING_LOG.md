@@ -45,6 +45,28 @@ format.
 
 ---
 
+## 2026-11-12 — a fetch no longer holds the store mutex during the byte copy
+
+**Repository:** `oag-listend`, commit `1e8140e` on `master`; records in `open-agent-graph`.
+
+**The defect.** `Request::Fetch` cloned `item.bytes` while the store mutex guard was alive, so a
+large fetch stalled every other store operation for the duration of a multi-megabyte copy.
+
+**What changed.** `AudioStore` holds `Arc<AudioItem>`; `serve` returns a cloned `Arc` (a hash lookup
+plus an atomic increment under the lock). The TCP, HTTP, and UDP carriers clone the handle, release
+the guard, and only then copy the bytes or slice the range. `SPEC.md` documents the mutex scope.
+
+**Tests executed.** `cargo test -p oag-listend`: 41 unit + 18 end-to-end, 0 failed (unchanged; the
+store test compares through the Arc). Verified by hand: `push_pull` fetched both sounds
+`verified=true` and `GET /` reported `items: 6`, `bytes: 6184 / 1073741824`.
+
+**Commit identifiers:** `oag-listend` `1e8140e` plus the README count correction; this entry's
+commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers and a documented one-command run.
+---
+
 ## 2026-11-12 — the persistence write is asynchronous
 
 **Repository:** `oag-listend`, commits `1185102` and the SPEC follow-up on `master`; records in

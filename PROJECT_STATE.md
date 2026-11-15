@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's fetch no longer holds the store mutex during the byte copy.** `Fetch` cloned the
+  item's bytes under the lock, so a large fetch stalled every other store operation for a
+  multi-megabyte copy. `AudioStore` now holds `Arc<AudioItem>` and `serve` returns a cloned handle;
+  the carriers copy after releasing the lock. 41 unit + 18 end-to-end tests; verified by hand.
 - **oag-listend's persistence write no longer blocks the executor.** `accept` did a blocking
   `std::fs::write` while holding the async store mutex, so a slow disk stalled every carrier.
   `accept`/`persist` are now async and use `tokio::fs`; the write still completes before the item
