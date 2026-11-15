@@ -45,6 +45,25 @@ format.
 
 ---
 
+## 2026-11-12 — bound the whole HTTP connection, not just the read
+
+**Repository:** `oag-listend`, commit `f2f2275` on `master`; records in `open-agent-graph`.
+
+**The gap.** `REQUEST_TIMEOUT` wrapped only `read_request`. A client that read the response slowly
+could hold one of the 64 session slots for the whole transfer, which is the same slow-client hold
+the total was added to prevent on the read side.
+
+**What changed.** `serve_connection` wraps `serve_connection_inner` (read, route, response) in
+`REQUEST_TIMEOUT`. The per-syscall read/write bounds are unchanged.
+
+**Tests executed.** `cargo test -p oag-listend`: 43 unit + 19 end-to-end, 0 failed (unchanged).
+
+**Commit identifiers:** `oag-listend` `f2f2275`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — refuse to steal a live Unix socket
 
 **Repository:** `oag-listend`, commit `d91ffe9` on `master`; records in `open-agent-graph`.

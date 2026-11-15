@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend bounds the whole HTTP connection.** `REQUEST_TIMEOUT` wrapped only the read, so a
+  client that read the response slowly could hold a session slot for the entire transfer. The total
+  now covers read, route, and response, symmetric with the native session bound. 43 unit + 19
+  end-to-end tests.
 - **oag-listend refuses to steal a live Unix socket.** `bind_shared` deleted an existing socket
   file before binding, so a second daemon on the same path silently stole it and clients split
   between the two. A socket still being served is now refused with `AddrInUse`; a stale socket from
