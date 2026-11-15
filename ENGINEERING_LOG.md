@@ -45,6 +45,25 @@ format.
 
 ---
 
+## 2026-11-14 — a HEAD range refusal carries no body
+
+**Repository:** `oag-listend`, commit `b93b8fa` on `master`; records in `open-agent-graph`.
+
+**The defect.** The 416 branch on both range routes (`GET /audio/{hash}` and `GET /ping`) built a
+body and did not clear it for `HEAD`, so `HEAD` with an unsatisfiable range would have sent a body
+-- violating HEAD's contract.
+
+**What changed.** Both 416 branches clear the body and advertise its length when `head_only`.
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed. The range test
+now asserts a HEAD 416 has an empty body.
+
+**Commit identifiers:** `oag-listend` `b93b8fa`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — refuse a chunked upload clearly, without losing the response
 
 **Repository:** `oag-listend`, commit `27e7d07` on `master`; records in `open-agent-graph`.

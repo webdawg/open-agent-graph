@@ -138,6 +138,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's HEAD range refusals carry no body.** The 416 branch on both range routes built a
+  body and did not clear it for `HEAD`, so a HEAD with an unsatisfiable range would have sent one.
+  49 unit + 24 end-to-end tests.
 - **oag-listend refuses a chunked upload clearly, without losing the response.** A
   `Transfer-Encoding: chunked` POST was read as zero bytes and rejected as "not audio", and closing
   with the body unread made TCP send a reset that could discard the 400. It now refuses with a
