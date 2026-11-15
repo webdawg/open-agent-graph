@@ -410,16 +410,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: a carrier that does not need external infrastructure.** IPFS needs a Kubo node
-   or an embedded libp2p node and Reticulum needs a physical interface, so both are recorded as
+1. **oag-listend: a carrier that does not need external infrastructure.** TCP, HTTP, UDP, and the
+   Unix socket are done, all sharing one store and all serving the musical ping. IPFS needs a Kubo
+   node or an embedded libp2p node and Reticulum needs a physical interface, so both are recorded as
    deliberately not built. The honest next carrier is one that can be tested from this repository.
    The service unit and clean SIGTERM stop are done, so "turn this thing on" is
    `systemctl enable --now oag-listend`.
-2. **oag-listend: the remaining carriers and a real address.** The HTTP carrier now streams; the
-   native and UDP carriers and persistence are done. IPFS and Reticulum, each reusing
-   `AudioStore::accept` and adding no operations; then give the daemon a real listening address on
-   the operator's network and a documented way to run it (a unit file or equivalent), so "turn this
-   thing on" is one command rather than a `cargo run`.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
