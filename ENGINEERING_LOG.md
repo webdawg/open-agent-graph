@@ -45,6 +45,23 @@ format.
 
 ---
 
+## 2026-11-14 — the crate is rustfmt-clean
+
+**Repository:** `oag-listend`, commit `367f35e` on `master`; records in `open-agent-graph`.
+
+**What changed.** Ran `cargo fmt` across the crate and examples. The code had accumulated
+hand-wrapped lines over many increments; `cargo fmt --check` is now clean.
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed (unchanged).
+Verified by hand after formatting: native publish/fetch `verified=true`, non-audio refused,
+`GET /ping` returned 44,844 bytes.
+
+**Commit identifiers:** `oag-listend` `367f35e`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — a HEAD range refusal carries no body
 
 **Repository:** `oag-listend`, commit `b93b8fa` on `master`; records in `open-agent-graph`.
