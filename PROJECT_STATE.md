@@ -138,6 +138,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's HTTP listing releases the store lock before building its body.** The page was
+  copied under the lock but the body was built while still holding it, contrary to the documented
+  mutex scope. 41 unit + 18 end-to-end tests.
 - **oag-listend has `--check` and `--version`, and the service user is documented.** `--check`
   opens the store and prints the load report and effective item bound without serving, so a store
   can be verified before the service starts. `--version` prints the binary and frame-protocol

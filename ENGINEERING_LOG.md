@@ -45,6 +45,24 @@ format.
 
 ---
 
+## 2026-11-12 — the HTTP listing releases the store lock before building its body
+
+**Repository:** `oag-listend`, commit `b3d6534` on `master`; records in `open-agent-graph`.
+
+**What changed.** `GET /audio` copied the page under the lock and then built the response body
+while still holding it -- the same head-of-line pattern fixed for `Fetch`, in the one place it
+remained. The page is now copied under the lock and the body built after release. Also documented
+on `AudioStore::publish` that the caller owns `servable_bound` (the production paths enforce it),
+and made `--check` take the lock once instead of twice.
+
+**Tests executed.** `cargo test -p oag-listend`: 41 unit + 18 end-to-end, 0 failed (unchanged).
+
+**Commit identifiers:** `oag-listend` `b3d6534`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — `--check`, `--version`, and the service user
 
 **Repository:** `oag-listend`, commit `f2fef88` on `master`; records in `open-agent-graph`.
