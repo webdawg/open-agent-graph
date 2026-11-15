@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's persistence write no longer blocks the executor.** `accept` did a blocking
+  `std::fs::write` while holding the async store mutex, so a slow disk stalled every carrier.
+  `accept`/`persist` are now async and use `tokio::fs`; the write still completes before the item
+  is answerable, so a failure is still a refusal. The eviction unlink stays synchronous
+  (metadata-only). 41 unit + 18 end-to-end tests.
 - **oag-listend's store is tested under concurrency.** The store is one mutex and the persistent
   `accept` does a blocking file write while holding it; neither had a concurrent test. Two bounded
   tests: 16 tasks x 20 publish+fetch against one in-memory store (320 distinct verified hashes, all

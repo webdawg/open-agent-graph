@@ -45,6 +45,33 @@ format.
 
 ---
 
+## 2026-11-12 — the persistence write is asynchronous
+
+**Repository:** `oag-listend`, commits `1185102` and the SPEC follow-up on `master`; records in
+`open-agent-graph`.
+
+**The limitation.** `AudioStore::accept` did a blocking `std::fs::write` while holding the async
+store mutex. On local disk that is milliseconds, but on a slow share it would stall every carrier's
+executor thread, not just the publish that caused it.
+
+**What changed.** `accept` and `persist` are `async` and use `tokio::fs::create_dir_all` /
+`tokio::fs::write`. The write still completes before the item is answerable, so a write failure is
+still a `Persist` refusal -- the guarantee is unchanged, only the executor is no longer blocked.
+Callers in the TCP, HTTP, and UDP carriers and in `publish_generated` await it. The eviction unlink
+stays synchronous: it is metadata-only, and detaching it would race the tests that assert the file
+is gone immediately after eviction.
+
+**Tests executed.** `cargo test -p oag-listend`: 41 unit + 18 end-to-end, 0 failed (unchanged
+count). Six store tests and the persistence listing test moved to `#[tokio::test]`; the concurrent
+persistent-publish test (8 tasks x 10, then a restart, all 80 served) still passes.
+
+**Commit identifiers:** `oag-listend` `1185102` plus the SPEC follow-up; this entry's commit
+pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers and a documented one-command run.
+---
+
 ## 2026-11-12 — the store under concurrent publishers
 
 **Repository:** `oag-listend`, commit `33f58c8` on `master`; records in `open-agent-graph`.
