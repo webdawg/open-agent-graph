@@ -45,6 +45,25 @@ format.
 
 ---
 
+## 2026-11-12 — serve a Content-Disposition with a real filename
+
+**Repository:** `oag-listend`, commit `7902c83` on `master`; records in `open-agent-graph`.
+
+**What changed.** `AudioFormat::file_extension()` maps each format to an extension, and the HTTP
+carrier adds `Content-Disposition: inline; filename="<hash>.<ext>"` to a served item. A browser or
+player that saves the audio now gets a usable name instead of a bare hash.
+
+**Tests executed.** `cargo test -p oag-listend`: 46 unit + 19 end-to-end, 0 failed. The caching
+test asserts the header; the media-type test asserts the extension has no dot.
+
+**Verified by hand with curl.** `Content-Disposition: inline; filename="<hash>.wav"`.
+
+**Commit identifiers:** `oag-listend` `7902c83`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — the self-heal attempts a restore on an error too
 
 **Repository:** `oag-listend`, commit `d0f593f` on `master`; records in `open-agent-graph`.
