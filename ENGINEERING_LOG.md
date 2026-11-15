@@ -62,7 +62,8 @@ and README document the new report field.
 New `a_load_is_capped_and_reports_the_truncation` seeds three items, loads with a cap of two, and
 asserts `truncated` and that only two were considered.
 
-**Commit identifiers:** `oag-listend` `bb82865`; this entry's commit pending.
+**Commit identifiers:** `oag-listend` `bb82865`, `78c6058` (prints the truncation flag, which the
+report computed but the startup line did not show); this entry's commit pending.
 **Push status:** `oag-listend` pushed to `master`; this entry pending.
 **Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
 imagination carriers.
