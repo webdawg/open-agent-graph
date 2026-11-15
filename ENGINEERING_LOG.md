@@ -45,6 +45,34 @@ format.
 
 ---
 
+## 2026-11-14 — the ping fits every carrier, including UDP
+
+**Repository:** `oag-listend`, commits `0e8cc46` and the SPEC follow-up on `master`; records in
+`open-agent-graph`.
+
+**The defect.** The first rendition was the full two-phrase melody, 89,644 bytes -- larger than one
+UDP datagram. The datagram carrier therefore could not answer a ping with the music; `handle`
+replaced the response with a rejection, which is exactly the "empty pong" the directive forbids.
+
+**What changed.** `wav::twinkle()` now generates the opening phrase only (C C G G A A G), 44,844
+bytes, which the directive actually specifies ("start with twinkle twinkle little star"). The wav
+test asserts the ping fits a frame *and* a UDP datagram. The UDP and Unix carrier tests now assert
+the musical ping, so all four carriers are covered.
+
+**Tests executed.** `cargo test -p oag-listend`: 47 unit + 21 end-to-end, 0 failed.
+
+**Verified by hand.** Native `Ping`, `GET /ping`, and a UDP `Ping` all returned the same 44,844-byte
+WAV; the UDP reply was `op 0x11`, 44,844 bytes, `RIFF`/`WAVE`. (A first UDP hand-check timed out
+because the client read the datagram with a 4-byte buffer, which truncates it; the daemon was
+correct.)
+
+**Commit identifiers:** `oag-listend` `0e8cc46` plus the SPEC follow-up; this entry's commit
+pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — the musical ping: "even pings are music"
 
 **Repository:** `oag-listend`, commit `84712a1` on `master`; records in `open-agent-graph`.
