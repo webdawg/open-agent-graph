@@ -138,13 +138,18 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend refuses a chunked upload clearly, without losing the response.** A
+  `Transfer-Encoding: chunked` POST was read as zero bytes and rejected as "not audio", and closing
+  with the body unread made TCP send a reset that could discard the 400. It now refuses with a
+  message saying to send `Content-Length`, and drains the unread body after a half-close.
+  49 unit + 24 end-to-end tests.
 - **oag-listend ranges `GET /ping`.** The liveness sound is served audio, so it now ranges like
   `/audio/{hash}`: 206 with `Content-Range`, 416 when unsatisfiable, `Accept-Ranges` on the full
-  response. 49 unit + 23 end-to-end tests.
+  response. 49 unit + 24 end-to-end tests.
 - **oag-listend bounds and reports the directory entries a load considers.** A store directory is
   an operator-controlled path; a mistake or a symlink to somewhere huge must not make startup
   process an unbounded number of entries. The load stops at `MAX_LOAD_ENTRIES` (100,000) and reports
-  `truncated` instead of silently ignoring the rest. 49 unit + 23 end-to-end tests.
+  `truncated` instead of silently ignoring the rest. 49 unit + 24 end-to-end tests.
 - **oag-listend's startup set is one of each kind plus the ping.** `sounds()` cycles three kinds, so
   four seeded sounds produced silence twice while the docs said "silence, tone, noise".
   `STARTUP_SOUNDS` is now 3, giving exactly silence, tone, noise, plus the canonical ping (four
@@ -152,7 +157,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 - **oag-listend caps the generated sample count.** `generate_n` was public and took an unbounded
   count, so a caller could allocate without limit. It caps at `MAX_GENERATED_SAMPLES` (40,000
   frames, 80 KB) -- bounded, and deliberately above one UDP datagram's payload so the
-  too-large-for-a-datagram path stays testable. 49 unit + 23 end-to-end tests.
+  too-large-for-a-datagram path stays testable. 49 unit + 24 end-to-end tests.
 - **oag-listend refuses to delete a non-socket at the Unix socket path.** `bind_shared` removed
   whatever was at the path before binding, so `--unix` pointed at a regular file destroyed it.
   Only a socket is removed now; anything else is refused with `InvalidInput` and left intact.

@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-14 — refuse a chunked upload clearly, without losing the response
+
+**Repository:** `oag-listend`, commit `27e7d07` on `master`; records in `open-agent-graph`.
+
+**The defect.** A `POST` with `Transfer-Encoding: chunked` was read as a zero-length body and
+rejected as "input is not audio" -- confusing, since the client did send audio. Worse, closing the
+socket with the body unread made TCP send a reset, which could discard the 400 the client needed.
+
+**What changed.** `read_request` records the transfer encoding and whether the body was unread. A
+chunked `POST /audio` is refused with `400` and "chunked transfer encoding is not supported; send
+Content-Length". After writing a response to a request with an unread body, the carrier half-closes
+and drains up to `MAX_BODY_BYTES` before closing, so the response arrives intact instead of being
+reset away.
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed (was 49 + 23).
+New `a_chunked_upload_is_refused_with_a_clear_message`.
+
+**Verified by hand.** A raw chunked POST returned `HTTP/1.1 400 Bad Request` with the message, whole.
+
+**Commit identifiers:** `oag-listend` `27e7d07`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — GET /ping supports Range
 
 **Repository:** `oag-listend`, commit `2a13ecc` on `master`; records in `open-agent-graph`.
