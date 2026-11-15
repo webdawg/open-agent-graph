@@ -45,6 +45,30 @@ format.
 
 ---
 
+## 2026-11-12 — a total bound on a session and an HTTP request
+
+**Repository:** `oag-listend`, commit `f8c19e7` on `master`; records in `open-agent-graph`.
+
+**The gap.** Every network timeout was per read. A client that sent a byte every few seconds could
+therefore hold a session open indefinitely, and 64 such clients would exhaust the session cap and
+deny service to everyone else. A per-read timeout bounds one read, not the request.
+
+**What changed.** `server::SESSION_TIMEOUT` and `http::REQUEST_TIMEOUT`, both 30 minutes, wrap the
+whole session loop and the whole `read_request` (headers and body) respectively. The value is
+generous because a legitimate client may be uploading the largest item the store accepts over a
+slow link; it is still finite. The Unix carrier inherits the session bound; UDP is a single
+datagram and needs no total.
+
+**Tests executed.** `cargo test -p oag-listend`: 41 unit + 18 end-to-end, 0 failed (unchanged).
+The bound is not hand-tested at 30 minutes; the per-read timeout it composes with is covered by the
+existing tests.
+
+**Commit identifiers:** `oag-listend` `f8c19e7`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — the HTTP listing releases the store lock before building its body
 
 **Repository:** `oag-listend`, commit `b3d6534` on `master`; records in `open-agent-graph`.

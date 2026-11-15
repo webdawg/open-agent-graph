@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend bounds the total length of a session and an HTTP request.** The timeouts were per
+  read, so a client dribbling a byte every few seconds could hold a session open indefinitely, and
+  64 of them would exhaust the session cap. Each session and each HTTP request now also has a total
+  bound of 30 minutes -- generous enough for a large upload over a slow link, but finite.
 - **oag-listend's HTTP listing releases the store lock before building its body.** The page was
   copied under the lock but the body was built while still holding it, contrary to the documented
   mutex scope. 41 unit + 18 end-to-end tests.
