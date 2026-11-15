@@ -64,8 +64,9 @@ New `a_chunked_upload_is_refused_with_a_clear_message`.
 
 **Verified by hand.** A raw chunked POST returned `HTTP/1.1 400 Bad Request` with the message, whole.
 
-**Commit identifiers:** `oag-listend` `27e7d07`, plus the follow-up that drains the body on the
-oversized-length refusal too; this entry's commit pending.
+**Commit identifiers:** `oag-listend` `27e7d07`, `0241ecd` (drains the body on the oversized-length
+refusal), `a70b2fd` (drains on the head-cap and bad-request-line refusals too); this entry's commit
+pending.
 **Push status:** `oag-listend` pushed to `master`; this entry pending.
 **Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
 imagination carriers.
