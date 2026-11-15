@@ -45,6 +45,32 @@ format.
 
 ---
 
+## 2026-11-12 — refuse to steal a live Unix socket
+
+**Repository:** `oag-listend`, commit `d91ffe9` on `master`; records in `open-agent-graph`.
+
+**The defect.** `UnixCarrier::bind_shared` removed any existing socket file before binding. A
+stale socket from a killed daemon must be removed, but a socket that is still being served belongs
+to a live daemon: removing it and binding a new one split clients silently between two daemons.
+
+**What changed.** Before removing the file, `bind_shared` tries `UnixStream::connect` on it. If the
+connect succeeds, another daemon is live and the bind fails with `AddrInUse` and a clear message.
+If it fails (stale socket), the file is removed and the bind proceeds.
+
+**Tests executed.** `cargo test -p oag-listend`: 43 unit + 19 end-to-end, 0 failed (was 43 + 18).
+New `a_second_daemon_refuses_to_steal_a_live_socket` binds one carrier, asserts a second bind on
+the same path errors, then shuts down cleanly.
+
+**Verified by hand.** With a daemon listening on `/tmp/oag-steal.sock`, a second daemon exited 1
+with `cannot bind unix /tmp/oag-steal.sock: "..." is already being served`. A socket left by
+`kill -9` was still removed and reused.
+
+**Commit identifiers:** `oag-listend` `d91ffe9`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — bound each read and write syscall, not the whole transfer
 
 **Repository:** `oag-listend`, commit `dcc8065` on `master`; records in `open-agent-graph`.

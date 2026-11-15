@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend refuses to steal a live Unix socket.** `bind_shared` deleted an existing socket
+  file before binding, so a second daemon on the same path silently stole it and clients split
+  between the two. A socket still being served is now refused with `AddrInUse`; a stale socket from
+  a killed daemon is still removed and reused. 43 unit + 19 end-to-end tests; verified by hand
+  (second daemon exits 1 with "is already being served"; SIGKILL'd socket reused).
 - **oag-listend bounds each I/O syscall, not the whole transfer.** The 10 s timeout wrapped the
   whole `write_all`/`read_exact`, so a legitimate transfer of the largest item to a slow client was
   cut off mid-transfer. `read_exact_bounded`/`write_all_bounded` apply the timeout per syscall.
