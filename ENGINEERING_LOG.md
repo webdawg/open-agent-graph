@@ -45,6 +45,27 @@ format.
 
 ---
 
+## 2026-11-14 — the startup set is one of each kind plus the ping
+
+**Repository:** `oag-listend`, commit `37f72ef` on `master`; records in `open-agent-graph`.
+
+**The oddity.** `wav::sounds` cycles three kinds, so `STARTUP_SOUNDS = 4` produced silence twice
+(silence, tone, noise, silence) while the README and SPEC said "silence, tone, noise".
+
+**What changed.** `STARTUP_SOUNDS = 3`, giving exactly silence, tone, noise, plus the canonical ping
+appended by `publish_generated` -- four items. The two `publish_generated` tests were updated for the
+new count.
+
+**Tests executed.** `cargo test -p oag-listend`: 48 unit + 22 end-to-end, 0 failed.
+
+**Verified by hand.** The daemon printed four generated items.
+
+**Commit identifiers:** `oag-listend` `37f72ef`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — cap the generated sample count
 
 **Repository:** `oag-listend`, commits `20e6051` and `8bd56e8` on `master`; records in

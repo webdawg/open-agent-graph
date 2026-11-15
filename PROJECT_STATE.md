@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's startup set is one of each kind plus the ping.** `sounds()` cycles three kinds, so
+  four seeded sounds produced silence twice while the docs said "silence, tone, noise".
+  `STARTUP_SOUNDS` is now 3, giving exactly silence, tone, noise, plus the canonical ping (four
+  items). Verified by hand.
 - **oag-listend caps the generated sample count.** `generate_n` was public and took an unbounded
   count, so a caller could allocate without limit. It caps at `MAX_GENERATED_SAMPLES` (40,000
   frames, 80 KB) -- bounded, and deliberately above one UDP datagram's payload so the
