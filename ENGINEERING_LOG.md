@@ -45,6 +45,29 @@ format.
 
 ---
 
+## 2026-11-12 — `--check`, `--version`, and the service user
+
+**Repository:** `oag-listend`, commit `f2fef88` on `master`; records in `open-agent-graph`.
+
+**What changed.** `--check` opens the store and prints the item count, bytes held, the store bound,
+and the effective item bound (`servable_bound`) without binding a socket, so an operator can verify
+a store before starting the service. `--version` prints `oag-listend <version> (frame protocol
+<n>)`. The systemd unit runs as `oag`; the install instructions never created that user, so a fresh
+install would fail to start -- the README and the unit comment now create it.
+
+**Tests executed.** `cargo test -p oag-listend`: 41 unit + 18 end-to-end, 0 failed (unchanged; the
+flags are argument handling and an ops path, not protocol).
+
+**Verified by hand.** `--version` printed `oag-listend 0.1.0 (frame protocol 1)`. `--check --dir
+/tmp/oag-check --max-bytes 1000000` printed `store ok: 4 items, 4976 bytes (bound 1000000, item
+bound 1000000)` and exited 0.
+
+**Commit identifiers:** `oag-listend` `f2fef88`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — a fetch no longer holds the store mutex during the byte copy
 
 **Repository:** `oag-listend`, commit `1e8140e` on `master`; records in `open-agent-graph`.

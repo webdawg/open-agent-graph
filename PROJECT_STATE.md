@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend has `--check` and `--version`, and the service user is documented.** `--check`
+  opens the store and prints the load report and effective item bound without serving, so a store
+  can be verified before the service starts. `--version` prints the binary and frame-protocol
+  versions. The systemd unit runs as `oag` but the install steps never created it, so a fresh
+  install would fail; the README and unit comment now create it. Verified by hand.
 - **oag-listend's fetch no longer holds the store mutex during the byte copy.** `Fetch` cloned the
   item's bytes under the lock, so a large fetch stalled every other store operation for a
   multi-megabyte copy. `AudioStore` now holds `Arc<AudioItem>` and `serve` returns a cloned handle;
