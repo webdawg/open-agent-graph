@@ -45,6 +45,27 @@ format.
 
 ---
 
+## 2026-11-14 — full-surface re-read: no further defect
+
+**Repository:** records only (`open-agent-graph`); no code change this entry.
+
+**What was done.** A line-by-line re-read of every module after the rustfmt pass: `lib.rs`
+(`AudioItem`, `AudioFormat::sniff` incl. the `ftyp` brand list and the Ogg codec header,
+`AudioStore` accept/publish/serve/hashes/persist/forget, the load report and its entry cap),
+`protocol.rs` (frame codec, reader/writer, limits), `wav.rs` (generator, cap, twinkle),
+`server.rs` (session loop, bounded reads/writes, ping, startup generation), `http.rs`
+(request parsing, every route, ranges, caching, drain), `udp.rs`, `unix.rs`, and `main.rs`.
+No new defect found; the previous entries' fixes are all in place.
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed;
+`cargo fmt --check` clean; 0 compiler warnings.
+
+**Commit identifiers:** none (records only).
+**Push status:** this entry's commit pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the
+remaining imagination carriers, which stay deliberately unbuilt.
+---
+
 ## 2026-11-14 — a HEAD revalidation reports the entity length
 
 **Repository:** `oag-listend`, commit `27e9548` on `master`; records in `open-agent-graph`.
