@@ -45,6 +45,24 @@ format.
 
 ---
 
+## 2026-11-14 — a HEAD revalidation reports the entity length
+
+**Repository:** `oag-listend`, commit `27e9548` on `master`; records in `open-agent-graph`.
+
+**The defect.** A `304 Not Modified` has no body, but the branch set `Content-Length: 0`
+unconditionally. A `HEAD` revalidation describes the entity, so it should report the item's length.
+
+**What changed.** The 304 branch sets `Content-Length` to the item's length when `head_only`.
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed. The caching test
+now asserts a HEAD revalidation is 304 with `content-length: <len>` and an empty body.
+
+**Commit identifiers:** `oag-listend` `27e9548`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — push_pull has a --help
 
 **Repository:** `oag-listend`, commit `c561264` on `master`; records in `open-agent-graph`.
