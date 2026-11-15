@@ -45,6 +45,29 @@ format.
 
 ---
 
+## 2026-11-14 — bound and report the directory entries a load considers
+
+**Repository:** `oag-listend`, commit `bb82865` on `master`; records in `open-agent-graph`.
+
+**The gap.** `with_directory` iterated every entry in the directory. A store directory is an
+operator-controlled path, so a mistake -- or a symlink to somewhere huge -- would make startup
+process an unbounded number of entries.
+
+**What changed.** `MAX_LOAD_ENTRIES = 100_000`. `with_directory` delegates to a private
+`Self::load_dir(dir, max_bytes, max_entries)` so the cap is testable with a small value; the load
+stops at the cap and sets `LoadReport::truncated` rather than silently ignoring the rest. The SPEC
+and README document the new report field.
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 23 end-to-end, 0 failed (was 48 + 23).
+New `a_load_is_capped_and_reports_the_truncation` seeds three items, loads with a cap of two, and
+asserts `truncated` and that only two were considered.
+
+**Commit identifiers:** `oag-listend` `bb82865`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — refuse an oversized body before the 100 Continue
 
 **Repository:** `oag-listend`, commit `fda67a3` on `master`; records in `open-agent-graph`.
