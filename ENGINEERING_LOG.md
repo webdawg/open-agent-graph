@@ -61,8 +61,9 @@ datagram payload so the too-large path stays testable. That first commit was mad
 test because the shell chain did not stop on the test exit code; the corrective commit fixes it and
 the suite is green.
 
-**Tests executed.** `cargo test -p oag-listend`: 47 unit + 22 end-to-end, 0 failed. New
-`a_chosen_sample_count_is_capped` asserts a `usize::MAX` request yields exactly the cap.
+**Tests executed.** `cargo test -p oag-listend`: 48 unit + 22 end-to-end, 0 failed. New
+`a_chosen_sample_count_is_capped` asserts a `usize::MAX` request yields exactly the cap. (The README
+and this log first said 47; the new test makes it 48, corrected in `0906c66` and `4a135f1`.)
 
 **Commit identifiers:** `oag-listend` `20e6051`, `8bd56e8`; this entry's commit pending.
 **Push status:** `oag-listend` pushed to `master`; this entry pending.
