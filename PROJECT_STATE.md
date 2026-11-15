@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's reader reports a length-prefixed string that runs past the remaining bytes as a
+  bad string.** The pre-check compared against the whole buffer rather than the bytes remaining, so
+  a length one past the end reported `Truncated` while a longer one reported `BadString`.
+  49 unit + 24 end-to-end tests.
 - **oag-listend's HEAD revalidation reports the entity length.** A `304` has no body, but a `HEAD`
   still describes the entity, so its `Content-Length` is the item's length rather than zero.
   49 unit + 24 end-to-end tests.

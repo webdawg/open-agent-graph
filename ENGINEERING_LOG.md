@@ -45,6 +45,26 @@ format.
 
 ---
 
+## 2026-11-14 — a length past the remaining bytes is a bad string
+
+**Repository:** `oag-listend`, commit `759b7c5` on `master`; records in `open-agent-graph`.
+
+**The inconsistency.** `Reader::string`/`opt_string` pre-checked a length-prefixed string's length
+against `self.buf.len()` (the whole message) rather than the bytes remaining. A length exactly one
+past the end therefore fell through to `take` and reported `Truncated`, while a longer one
+reported `BadString` -- the same condition named two different errors.
+
+**What changed.** Both methods compare against a new `remaining()`; a test pins the distinction
+(`[OP_PUBLISH, 0x00, 0x03, b'a', b'b']` is `BadString`).
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed.
+
+**Commit identifiers:** `oag-listend` `759b7c5`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — full-surface re-read: no further defect
 
 **Repository:** records only (`open-agent-graph`); no code change this entry.
