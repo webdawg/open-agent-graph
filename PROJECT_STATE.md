@@ -138,6 +138,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend rejects Ogg video, not just MP4 video.** Any `OggS` container was accepted, but Ogg
+  also carries Theora video -- the same false positive as the MP4 major-brand check. The
+  beginning-of-stream page's codec header is now read; Vorbis/Opus/FLAC/Speex/PCM pass, anything
+  else (including Theora) does not. 41 unit + 18 end-to-end tests; verified by hand (vorbis 201,
+  opus 201, theora 400, unknown 400).
 - **oag-listend bounds the total length of a session and an HTTP request.** The timeouts were per
   read, so a client dribbling a byte every few seconds could hold a session open indefinitely, and
   64 of them would exhaust the session cap. Each session and each HTTP request now also has a total

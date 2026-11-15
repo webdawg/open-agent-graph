@@ -45,6 +45,33 @@ format.
 
 ---
 
+## 2026-11-12 — reject Ogg video by reading the codec header
+
+**Repository:** `oag-listend`, commit `0d1691f` on `master`; records in `open-agent-graph`.
+
+**The defect.** `AudioFormat::sniff` accepted any `OggS` container. Ogg is a container, not a codec:
+the same marker wraps Vorbis, Opus, and FLAC audio, and also Theora video. This is the same class of
+false positive as the MP4 major-brand check fixed earlier.
+
+**What changed.** `sniff_ogg_codec` parses the beginning-of-stream page (header type `0x02`,
+`page_segments` at offset 26) and reads the codec identification header at the start of its payload.
+Vorbis (`vorbis`), Opus (`OpusHead`), FLAC (`FLAC`), Speex, and PCM pass; anything else --
+including Theora (`theora`) -- is rejected. The `AudioFormat` docs and the inbound-rule spec
+record the rule.
+
+**Tests executed.** `cargo test -p oag-listend`: 41 unit + 18 end-to-end, 0 failed (unchanged count).
+The inbound-rule test now builds a real Ogg BOS page and covers Vorbis and Opus accepted and Theora
+rejected.
+
+**Verified by hand.** Correctly-built Ogg pages posted over HTTP: `vorbis.ogg` -> 201,
+`opus.ogg` -> 201, `theora.ogg` -> 400, an unknown codec -> 400.
+
+**Commit identifiers:** `oag-listend` `0d1691f`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — a total bound on a session and an HTTP request
 
 **Repository:** `oag-listend`, commit `f8c19e7` on `master`; records in `open-agent-graph`.
