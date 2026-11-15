@@ -59,7 +59,9 @@ reported `BadString` -- the same condition named two different errors.
 
 **Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed.
 
-**Commit identifiers:** `oag-listend` `759b7c5`; this entry's commit pending.
+**Commit identifiers:** `oag-listend` `759b7c5`, `7518347` (the response decoder's audio and
+listing branches had the same weak whole-buffer pre-check; both now use `remaining()`); this
+entry's commit pending.
 **Push status:** `oag-listend` pushed to `master`; this entry pending.
 **Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
 imagination carriers.
