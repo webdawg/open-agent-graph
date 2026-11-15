@@ -45,6 +45,21 @@ format.
 
 ---
 
+## 2026-11-14 — push_pull has a --help
+
+**Repository:** `oag-listend`, commit `c561264` on `master`; records in `open-agent-graph`.
+
+**What changed.** `examples/push_pull.rs` gained `--help`/`-h`, printing its usage and exiting 0,
+matching the daemon binary. (Its argument errors already exit 2 from the previous increment.)
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 24 end-to-end, 0 failed.
+
+**Commit identifiers:** `oag-listend` `c561264`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — CLI argument errors are usage errors, not panics
 
 **Repository:** `oag-listend`, commit `82f4cba` (daemon) and the `push_pull` follow-up on `master`;

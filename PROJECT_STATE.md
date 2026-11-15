@@ -138,6 +138,8 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's `push_pull` has a `--help`.** The daemon binary had one; the operator's client did
+  not. It prints its usage and exits 0.
 - **oag-listend's CLI argument errors are usage errors, not panics.** A missing or invalid flag
   value in the daemon binary and in `push_pull` used to panic (exit 101); both now print a message
   and exit 2, like the unknown-argument path. 49 unit + 24 end-to-end tests.
