@@ -45,6 +45,27 @@ format.
 
 ---
 
+## 2026-11-14 — refuse an oversized body before the 100 Continue
+
+**Repository:** `oag-listend`, commit `fda67a3` on `master`; records in `open-agent-graph`.
+
+**The defect.** A `POST` carrying `Expect: 100-continue` and a `Content-Length` above the body cap
+was answered with `100 Continue` and only then with `400`. The server told the client to commit an
+upload it was about to reject, wasting the client's bandwidth and its own.
+
+**What changed.** The `content_length > MAX_BODY_BYTES` check now runs before the interim response.
+The interim write also uses `write_all_bounded`, like every other write.
+
+**Tests executed.** `cargo test -p oag-listend`: 48 unit + 23 end-to-end, 0 failed (was 48 + 22).
+New `an_oversized_expect_continue_gets_no_interim` sends the headers and asserts the first response
+is `HTTP/1.1 400`, not `100`.
+
+**Commit identifiers:** `oag-listend` `fda67a3`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — the startup set is one of each kind plus the ping
 
 **Repository:** `oag-listend`, commit `37f72ef` on `master`; records in `open-agent-graph`.
