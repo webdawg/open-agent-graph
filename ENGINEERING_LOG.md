@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-12 — skip non-regular files when loading the store
+
+**Repository:** `oag-listend`, commit `ea895cf` on `master`; records in `open-agent-graph`.
+
+**The hazard.** `with_directory` read every entry whose name looked like a content hash. A FIFO or
+device node named like a hash would make `std::fs::read` block forever during startup; a directory
+would error. The startup path had no bound against a special file.
+
+**What changed.** The entry's metadata (which follows symlinks) is taken first; only
+`metadata.is_file()` entries are read. A symlink to a regular file still loads; a FIFO, device, or
+directory is counted in `skipped`.
+
+**Tests executed.** `cargo test -p oag-listend`: 46 unit + 19 end-to-end, 0 failed (was 45 + 19).
+New `a_non_regular_file_named_like_a_hash_is_skipped_not_read`.
+
+**Verified by hand.** A directory named like a hash is skipped. A FIFO named like a hash previously
+made `oag-listend --check` hang (killed at 10 s); after the fix it prints
+`loaded 0 skipped 1` and exits 0.
+
+**Commit identifiers:** `oag-listend` `ea895cf`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — restore a persisted file removed out of band
 
 **Repository:** `oag-listend`, commit `e14f4ea` on `master`; records in `open-agent-graph`.

@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend skips non-regular files when loading the store.** A FIFO or device named like a
+  content hash would make `std::fs::read` block forever during startup; a directory would error.
+  Only regular files are read now (symlinks to regular files still load). 46 unit + 19 end-to-end
+  tests; verified by hand (a FIFO named like a hash no longer blocks `--check`).
 - **oag-listend restores a persisted file removed out of band.** The durable copy is the source of
   truth, but a file deleted out of band left the in-memory item serving audio the next start would
   lose. A republish of the same bytes now restores it; the existence check costs a syscall only on a
