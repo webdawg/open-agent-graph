@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's bare-run examples use a creatable socket path.** The README and SPEC examples used
+  `/run/oag-listend/audio.sock`, which a non-root `cargo run` cannot create (only systemd's
+  `RuntimeDirectory` does). Both now use `/tmp/oag-listend.sock`; the unit keeps `/run` and says
+  why. Verified by hand: the example binds with no `mkdir`.
 - **oag-listend bounds the persistence sidecar read.** `read_sidecar` read the whole `<hash>.json`
   file, so a hand-placed huge sidecar was pulled into memory on every load. A sidecar larger than
   4 KiB is now ignored. 44 unit + 19 end-to-end tests.

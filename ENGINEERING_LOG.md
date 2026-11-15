@@ -45,6 +45,27 @@ format.
 
 ---
 
+## 2026-11-12 — the bare-run examples use a creatable socket path
+
+**Repository:** `oag-listend`, commit `13877c3` on `master`; records in `open-agent-graph`.
+
+**The defect.** The README and SPEC "turn it on" examples passed
+`--unix /run/oag-listend/audio.sock`. A non-root `cargo run` cannot create `/run/oag-listend`;
+only systemd's `RuntimeDirectory=` does. The documented command therefore failed for anyone not
+using the unit.
+
+**What changed.** Both examples use `/tmp/oag-listend.sock`, whose parent exists. The systemd unit
+keeps `/run/oag-listend/audio.sock` and the SPEC notes that the unit creates it.
+
+**Tests executed.** Unchanged (documentation). Verified by hand: the example command binds the Unix
+socket with no preceding `mkdir`.
+
+**Commit identifiers:** `oag-listend` `13877c3`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — bound the persistence sidecar read
 
 **Repository:** `oag-listend`, commit `8d79d16` on `master`; records in `open-agent-graph`.
