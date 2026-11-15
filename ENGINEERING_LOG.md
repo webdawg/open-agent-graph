@@ -45,6 +45,24 @@ format.
 
 ---
 
+## 2026-11-14 — GET /ping supports Range
+
+**Repository:** `oag-listend`, commit `2a13ecc` on `master`; records in `open-agent-graph`.
+
+**What changed.** The musical liveness sound is served audio, so `GET /ping` now honours
+`Range: bytes=...`: 206 with `Content-Range`, 416 when unsatisfiable, and `Accept-Ranges: bytes` on
+the full response -- matching `GET /audio/{hash}`. `HEAD /ping` still returns the headers with no
+body.
+
+**Tests executed.** `cargo test -p oag-listend`: 49 unit + 23 end-to-end, 0 failed. The ping test
+now also asserts `bytes=0-9` returns 206 with the first ten bytes and the right `Content-Range`.
+
+**Commit identifiers:** `oag-listend` `2a13ecc`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — bound and report the directory entries a load considers
 
 **Repository:** `oag-listend`, commit `bb82865` on `master`; records in `open-agent-graph`.

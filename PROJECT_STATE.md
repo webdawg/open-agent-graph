@@ -138,6 +138,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend ranges `GET /ping`.** The liveness sound is served audio, so it now ranges like
+  `/audio/{hash}`: 206 with `Content-Range`, 416 when unsatisfiable, `Accept-Ranges` on the full
+  response. 49 unit + 23 end-to-end tests.
 - **oag-listend bounds and reports the directory entries a load considers.** A store directory is
   an operator-controlled path; a mistake or a symlink to somewhere huge must not make startup
   process an unbounded number of entries. The load stops at `MAX_LOAD_ENTRIES` (100,000) and reports
