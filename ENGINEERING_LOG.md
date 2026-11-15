@@ -45,6 +45,25 @@ format.
 
 ---
 
+## 2026-11-12 — the self-heal attempts a restore on an error too
+
+**Repository:** `oag-listend`, commit `d0f593f` on `master`; records in `open-agent-graph`.
+
+**The gap.** The out-of-band self-heal treated a `try_exists` error as "present", so a missing store
+directory was not recreated and the republished item stayed without a durable copy.
+
+**What changed.** An error is treated as absent, so the restore is attempted; `persist` recreates a
+missing directory with `create_dir_all` and fails loudly if it cannot. The self-heal test now also
+removes the whole directory and asserts it is recreated.
+
+**Tests executed.** `cargo test -p oag-listend`: 46 unit + 19 end-to-end, 0 failed.
+
+**Commit identifiers:** `oag-listend` `d0f593f`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-12 — skip non-regular files when loading the store
 
 **Repository:** `oag-listend`, commit `ea895cf` on `master`; records in `open-agent-graph`.

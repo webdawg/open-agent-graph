@@ -138,6 +138,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend's self-heal attempts a restore on an error too.** `try_exists` errors were treated
+  as "present", so a deleted store directory was not recreated and the item stayed without a durable
+  copy. An error is now treated as absent: `persist` recreates the directory or fails loudly.
 - **oag-listend skips non-regular files when loading the store.** A FIFO or device named like a
   content hash would make `std::fs::read` block forever during startup; a directory would error.
   Only regular files are read now (symlinks to regular files still load). 46 unit + 19 end-to-end
