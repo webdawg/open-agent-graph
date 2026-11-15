@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend refuses to delete a non-socket at the Unix socket path.** `bind_shared` removed
+  whatever was at the path before binding, so `--unix` pointed at a regular file destroyed it.
+  Only a socket is removed now; anything else is refused with `InvalidInput` and left intact.
+  47 unit + 22 end-to-end tests; verified by hand.
 - **oag-listend implements the musical ping (operator directive, Entry 3).** "even pings are music
   - start with twinkle twinkle little star." `wav::twinkle()` generates the opening phrase
   deterministically; the native protocol's new `Ping` operation and HTTP's `GET /ping` both answer

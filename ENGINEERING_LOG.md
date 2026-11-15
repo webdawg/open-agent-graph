@@ -45,6 +45,31 @@ format.
 
 ---
 
+## 2026-11-14 — refuse to delete a non-socket at the Unix socket path
+
+**Repository:** `oag-listend`, commit `b1c7793` on `master`; records in `open-agent-graph`.
+
+**The hazard.** `UnixCarrier::bind_shared` removed whatever was at the path before binding. A
+stale socket must be removed, but a regular file or directory at the path is not a stale socket --
+deleting it would destroy something the operator put there.
+
+**What changed.** The path's metadata is checked first: only `file_type().is_socket()` entries are
+eligible for removal. Anything else is refused with `InvalidInput` and left untouched. Also added
+`Cache-Control: public, max-age=31536000, immutable` to `GET /ping`, matching served audio.
+
+**Tests executed.** `cargo test -p oag-listend`: 47 unit + 22 end-to-end, 0 failed (was 47 + 21).
+New `a_non_socket_path_is_refused_not_deleted` writes a file at the path, asserts the bind fails
+with `InvalidInput`, and asserts the file is intact.
+
+**Verified by hand.** `oag-listend --unix /tmp/oag-notasocket` printed
+`cannot bind unix ... exists and is not a socket` and the file still read `precious`.
+
+**Commit identifiers:** `oag-listend` `b1c7793`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — the ping fits every carrier, including UDP
 
 **Repository:** `oag-listend`, commits `0e8cc46` and the SPEC follow-up on `master`; records in
