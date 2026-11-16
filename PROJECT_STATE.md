@@ -138,6 +138,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend takes the eviction unlink off the lock.** Eviction unlinked the file
+  synchronously while holding the store mutex; it now records the paths and `accept` drains them
+  asynchronously after the publish, so a slow disk delays the answer instead of stalling every
+  other client's executor thread. A load drains inline. 51 unit + 24 end-to-end tests.
 - **oag-listend resolves an uppercased content hash.** The hash validation accepted uppercase hex
   but the lookup was case-sensitive, so an uppercased hash was accepted and then reported missing.
   The reader and the HTTP route now normalise to lowercase. 51 unit + 24 end-to-end tests.

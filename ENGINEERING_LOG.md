@@ -45,6 +45,29 @@ format.
 
 ---
 
+## 2026-11-14 — take the eviction unlink off the lock
+
+**Repository:** `oag-listend`, commit `f2ed4ae` on `master`; records in `open-agent-graph`.
+
+**The limitation.** `AudioStore::forget` unlinked the evicted file synchronously while holding the
+store mutex. An unlink is metadata-only, but on a slow disk it would stall every other client's
+executor thread for its duration. This was the top recorded limitation.
+
+**What changed.** `AudioStore` gained an `evicted: Vec<PathBuf>`. `forget` records the audio and
+sidecar paths instead of unlinking. `accept` drains the list with `tokio::fs::remove_file` after
+the publish returns, so the unlink happens off the lock and the executor is never blocked. A load
+drains inline, since startup has no lock to protect. A failed unlink is best-effort, exactly as the
+synchronous version was; the item is gone from the index either way.
+
+**Tests executed.** `cargo test -p oag-listend`: 51 unit + 24 end-to-end, 0 failed. The eviction
+test still asserts the file is gone after `accept`.
+
+**Commit identifiers:** `oag-listend` `f2ed4ae`; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The remaining imagination carriers (IPFS, Reticulum), which stay
+deliberately unbuilt.
+---
+
 ## 2026-11-14 — resolve an uppercased content hash
 
 **Repository:** `oag-listend`, commits `8ad3d19` and the README count on `master`; records in
