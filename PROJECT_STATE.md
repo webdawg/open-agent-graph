@@ -464,6 +464,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    node and Reticulum needs a physical interface, so both are recorded as deliberately not built --
    neither can be tested against a real network from this repository. The service unit and clean
    SIGTERM stop are done, so "turn this thing on" is `systemctl enable --now oag-listend`.
+   Since the last update the operator surface has been closed out and the bounds made observable:
+   the binary itself (`--version`, `--help`, usage exit codes, start/serve/stop) and `--check`
+   (load a content-addressed store, report loaded/skipped, skip a corrupted file) are automated;
+   eviction, the per-frame cap, and native listing pagination are each exercised over the wire; the
+   HTTP carrier answers 413 for too-large audio as its docs always claimed; and SPEC.md's
+   constants were checked against the code rather than trusted. Current bar: 52 unit + 31
+   end-to-end tests, 0 failed.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
