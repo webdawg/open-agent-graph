@@ -47,6 +47,26 @@ format.
 
 ---
 
+---
+
+## 2026-11-14 — drop dead deps, verify the operator CLI and the tooling invariant
+
+**Repository:** `oag-listend`, commit on `master`; records in `open-agent-graph`.
+
+**Dead dependencies.** `serde` and `serde_json` were declared in the workspace and crate manifests but
+used in no file. Removed from both; build and all tests unchanged (52 unit + 24 end-to-end, 0
+failed after the subsequent load-cap fix).
+
+**Operator CLI verified by hand.** `--version` -> `oag-listend 0.1.0 (frame protocol 1)`; `--help` ->
+the usage; `--check --dir <store> --max-bytes N` -> the load report and the store's item count, bytes
+held, and effective item bound. Missing `--listen` exits 2; an invalid `--seed` exits 2.
+
+**Tooling invariant.** The three scripts (`prune-target.py`, `rustc-wrapper.sh`,
+`test_prune_target.py`) are byte-identical across all five repositories, one distinct hash per script.
+`test_prune_target.py` passes 16 tests in oag-listend.
+
+**Commit identifiers:** `oag-listend` commit pending (this entry's commit follows the load-cap fix).
+
 ## 2026-11-14 — count only audio entries toward the load cap
 
 **Repository:** `oag-listend`, commit `4f6ef04` on `master`; records in `open-agent-graph`.
