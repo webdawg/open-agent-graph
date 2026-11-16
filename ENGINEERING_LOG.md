@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — prove the HTTP header cap refuses a flood
+
+**Repository:** `oag-listend`, commit `9dbce2c` on `master`; records in `open-agent-graph`.
+
+**The gap.** `MAX_HEAD_BYTES` exists so a header flood cannot make the daemon allocate, but no test
+measured it. It was the last documented bound without coverage.
+
+**What changed.** New `an_oversized_header_block_is_refused`: send a valid request line followed by
+padding headers past the cap with **no blank line ending the head** -- which would wait forever
+without a cap -- then assert `400 Bad Request` and an empty store. The client half-closes after
+sending, so the post-refusal drain sees an end rather than waiting out its timeout.
+
+**Why the test is trustworthy.** Raising `MAX_HEAD_BYTES` to 16 MiB makes the server keep reading
+until its IO timeout and answer nothing, so the test fails (12.4 s); restoring the real value makes it
+pass.
+
+**Tests executed.** `cargo test -p oag-listend`: 56 unit + 37 end-to-end, 0 failed; 0 warnings.
+README corrected from "plus 36" to "plus 37".
+
+**Commit identifiers:** `oag-listend` `9dbce2c`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — prove the session cap is enforced
 
 **Repository:** `oag-listend`, commit `10ddda3` on `master`; records in `open-agent-graph`.
