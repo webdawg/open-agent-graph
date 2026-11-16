@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — carry the CID on fetch, so clients can reach IPFS
+
+**Repository:** `oag-listend`, commit `de5aa23` on `master`; records in `open-agent-graph`.
+
+**The gap.** The mirror recorded CIDs and printed them at shutdown, but a client that *fetched*
+audio could not learn where else it lives. SPEC's own follow-up list named this.
+
+**What changed.**
+- `Response::Audio` gains an optional trailing `cid`. It is appended after the bytes, so a decoder
+  that stops after the declared length ignores it, and a reply from a daemon that predates the field
+  still decodes -- no protocol version change, because nothing that worked stops working.
+- HTTP exposes `X-IPFS-CID` on the item route.
+- `AudioStore` remembers CID by content hash (`content_id`) and drops the entry on eviction.
+- `handle` on TCP/Unix and UDP look the CID up under a short lock, keeping the byte copy outside it.
+
+**Tests executed.** `cargo test -p oag-listend`: **61 unit + 45 end-to-end, 0 failed**. New: a
+with-CID reply round-trips; a hand-built reply without the field decodes to `cid: None` (proving
+backward compatibility rather than asserting it); and end to end a mirrored item fetches with its
+CID over both TCP and HTTP.
+
+**Commit identifiers:** `oag-listend` `de5aa23`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — mirror the stored library on startup
 
 **Repository:** `oag-listend`, commit `2dd386e` on `master`; records in `open-agent-graph`.
