@@ -1,11 +1,11 @@
 # PROJECT_STATE — OAG mission state
 
-Authoritative current state of the whole Project OAG mission across its three repositories. This
+Authoritative current state of the whole Project OAG mission across its five repositories. This
 file describes *where the mission stands*. The reasoning behind individual design decisions lives
 in each repository's own `OPEN_QUESTIONS.md` and `spec/`; raw user prompts live in each repo's
 `USER_INPUT_RECORD.md` where one exists.
 
-Last updated: 2026-11-09.
+Last updated: 2026-11-14.
 
 ## Repositories
 
@@ -15,6 +15,7 @@ Last updated: 2026-11-09.
 | 1 | `oag-mesh` | `/home/webdawg/DATA/CODE/oag-mesh` | a mesh of peers — clusters, federated trust, onion routing |
 | 2 | `oag-collisions` | `/home/webdawg/DATA/CODE/oag-collisions` | inference by collision -- a similarity mechanism built on locality-sensitive hashing |
 | 1 (parallel) | `oag-imagination-random-data-compute` | `/home/webdawg/DATA/CODE/oag-imagination-random-data-compute` | synthetic data — dreams from verifiable randomness |
+| serving | `oag-listend` | `/home/webdawg/DATA/CODE/oag-listend` | the global daemon that serves audio and accepts nothing else |
 
 These state files live in `rust-ai` because it is the foundational layer, but they describe the
 mission as a whole.
@@ -26,8 +27,10 @@ mission as a whole.
 | `open-agent-graph` | 435 | 123 | 01–32 |
 | `oag-mesh` | 188 | 43 | 01–15 |
 | `oag-imagination-random-data-compute` | 48 | 31 | 01–03 |
+| `oag-collisions` | — | 44 | `SPEC.md` |
+| `oag-listend` | 94 | 103 | `SPEC.md` |
 
-All three working trees are clean and pushed as of the last update.
+All five working trees are clean and pushed as of the last update.
 
 ## Completed capabilities
 
@@ -91,6 +94,28 @@ All three working trees are clean and pushed as of the last update.
   (in a separate `oag-imagination-reticulum` crate, so the layer keeps no `reticulum` dependency).
 - Target resolvers: local/store, URL, CID-over-gateway, peer transfer with receipt verification.
 - The node adapter reads its pad and peers from `oag`'s own storage; nothing is configured.
+
+### oag-listend (the serving surface)
+The perpetual-directive repository: one stable audio surface behind pluggable carriers.
+- Four live carriers share one store: native length-prefixed frames over TCP, HTTP/1.1, UDP datagrams,
+  and a Unix domain socket.
+- Inbound rule at the surface, on the bytes and never on a declared type: WAV, AIFF, FLAC, Ogg
+  (Vorbis/Opus/FLAC, not Theora), MP3 (ID3 or raw frame), M4A by brand list (not generic
+  `isom`/`mp42` video). Everything else is refused before it is stored, and a refusal never echoes
+  the refused bytes.
+- Content-addressed under BLAKE3; `--dir` persists and every entry is re-verified on load
+  (`loaded`/`skipped`/`evicted`/`truncated`, never silent).
+- Generated sound (silence, tone, noise) plus the canonical musical ping -- "even pings are music",
+  the opening phrase of Twinkle Twinkle Little Star -- seeded only into an empty store, on every
+  carrier.
+- Bounds all measured: per-syscall read/write timeouts, session and connection totals, the
+  16 MiB frame cap, the store byte bound with eviction and off-lock unlink, the 64-session cap,
+  lock release before byte copies, and the HTTP head/body caps.
+- Operator surface: `oag-listend` binary (`--version`, `--help`, usage errors exit 2, clean
+  SIGINT/SIGTERM stop), `--check` to verify a store without serving it, and `push_pull` as the
+  smallest honest client. systemd unit included.
+- IPFS and Reticulum carriers deliberately not built: both need infrastructure this repository
+  cannot test against.
 
 ## Standing decisions
 
@@ -464,13 +489,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    node and Reticulum needs a physical interface, so both are recorded as deliberately not built --
    neither can be tested against a real network from this repository. The service unit and clean
    SIGTERM stop are done, so "turn this thing on" is `systemctl enable --now oag-listend`.
-   Since the last update the operator surface has been closed out and the bounds made observable:
-   the binary itself (`--version`, `--help`, usage exit codes, start/serve/stop) and `--check`
-   (load a content-addressed store, report loaded/skipped, skip a corrupted file) are automated;
-   eviction, the per-frame cap, and native listing pagination are each exercised over the wire; the
-   HTTP carrier answers 413 for too-large audio as its docs always claimed; and SPEC.md's
-   constants were checked against the code rather than trusted. Current bar: 52 unit + 31
-   end-to-end tests, 0 failed.
+   Since the last update the operator surface has been closed out and every documented bound made
+   observable: the binary itself (`--version`, `--help`, usage exit codes, start/serve/stop) and
+   `--check` (load a content-addressed store, report loaded/skipped, skip a corrupted file) are
+   automated; eviction, the per-frame cap, native listing pagination, per-format recognition and
+   per-format content types are each exercised over the wire; SIGTERM is proven a clean exit 0 that
+   removes the Unix socket; the 64-session cap, lock release before copying, the HTTP head/body caps,
+   and the UDP listing page are each measured by a test that was checked to **fail** when its
+   property is broken. Current bar: 56 unit + 38 end-to-end tests, 0 failed.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
