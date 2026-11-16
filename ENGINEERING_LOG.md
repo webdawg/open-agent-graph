@@ -47,6 +47,31 @@ format.
 
 ---
 
+## 2026-11-14 — mirror the stored library on startup
+
+**Repository:** `oag-listend`, commit `2dd386e` on `master`; records in `open-agent-graph`.
+
+**The gap.** Found by the follow-up list added with the IPFS mirror. A restart with `--ipfs-api`
+mirrored only audio published *after* it started; everything already in `--dir` would never reach
+IPFS, despite the flag being described as offering every accepted item.
+
+**What changed.**
+- `AudioStore::mirror_existing(budget)` offers every held item through the same best-effort path the
+  per-publish mirror uses.
+- Bounded **as a whole** by `STARTUP_MIRROR_BUDGET` (30 s), so a large store cannot hold startup open
+  behind a slow mirror; each item still keeps its own per-call bound, and an item that does not finish
+  is simply left for its next change.
+- `main.rs` calls it after attaching the publisher and prints how many of the held items were offered.
+- The per-publish mirror was factored into one `offer_to_ipfs` helper so both paths are identical.
+
+**Tests executed.** `cargo test -p oag-listend`: **60 unit + 44 end-to-end, 0 failed**. New: a
+two-item store is fully offered (and the stub receives both); a stub that accepts but never answers
+stops at a 200 ms budget rather than waiting out each call's 10 s timeout.
+
+**Commit identifiers:** `oag-listend` `2dd386e`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — add an IPFS mirror behind `--ipfs-api`
 
 **Repository:** `oag-listend`, commit `4846a01` on `master`; records in `open-agent-graph`.
