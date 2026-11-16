@@ -47,6 +47,31 @@ format.
 
 ---
 
+## 2026-11-14 — a binary-level test for the operator entry point
+
+**Repository:** `oag-listend`, commit `e4bc5dd` on `master`; records in `open-agent-graph`.
+
+**The gap.** Directive step 7 is the operator's binary, and `main.rs` was the one path no automated
+test reached: `--version`, `--help`, usage exit codes, and actually starting the daemon were verified
+by hand only.
+
+**What changed.** New `tests/binary.rs`. It spawns the real binary via `CARGO_BIN_EXE_oag-listend`,
+waits for its own `listening on` line instead of sleeping on a fixed delay, exchanges audio over TCP
+(Hello, then publish + BLAKE3 verify), and stops it. A second test asserts `--version` prints the
+package version and protocol version, `--help` documents `--listen`, and a bad `--seed`, a bad
+`--max-bytes`, or an unknown flag exits **2** with a message and never panics.
+
+**Finding along the way.** Omitting `--listen` is *not* a usage error: the documented default is
+`0.0.0.0:7100`, so that case starts the daemon (README lines 107-108). The test was corrected rather
+than the default changed, since the default is deliberate and documented.
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 29 end-to-end, 0 failed; 0 warnings.
+README corrected from "plus 27" to "plus 29".
+
+**Commit identifiers:** `oag-listend` `e4bc5dd`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — an end-to-end native listing-pagination test
 
 **Repository:** `oag-listend`, commit `284bd64` on `master`; records in `open-agent-graph`.
