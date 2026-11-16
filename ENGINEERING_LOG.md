@@ -47,6 +47,35 @@ format.
 
 ---
 
+## 2026-11-14 — clean-state acceptance run (all four carriers)
+
+**Repository:** `oag-listend`, no code change; records in `open-agent-graph`.
+
+**Why.** Every documented bound now has a test, so this invocation ran the directive's acceptance
+sentence once from an empty store instead of adding more coverage.
+
+**Command.** `oag-listend --listen 127.0.0.1:7801 --http 127.0.0.1:7802 --udp 127.0.0.1:7803 --unix
+<dir>/audio.sock --dir <dir>/store --seed 20261114`, then `push_pull` over TCP and UDP, then curl
+over HTTP, then a restart, then SIGTERM.
+
+**Observed.**
+- Startup: store `loaded 0 skipped 0 evicted 0`; four generated items (silence, tone, noise, the
+  canonical ping); `held 48816`.
+- TCP and UDP both: ping 44,844 bytes `verified=true`; published tone 1,164 B and noise 1,324 B each
+  came back `same-hash ... verified=true`; HTML labelled `audio/wav` returned a typed
+  `Rejected { reason: "input is not audio; only audio is accepted" }`.
+- HTTP: POST 201 with a 64-char hash; GET 200 `audio/wav` 8,044 bytes **byte-identical** to the
+  posted file; `Range: 0-1023` -> 206; `HEAD` -> 200 with headers and no body; unknown hash -> 404;
+  `<html>` labelled `audio/wav` -> 400; `/ping` -> 44,844 bytes.
+- Restart: `loaded 7 skipped 0 evicted 0`, and the startup set was **not** regenerated (the store
+  already held audio). Held 59,348.
+- SIGTERM: clean stop, exit 0, socket removed (the first `wait` reported 127 only because that
+  daemon was not a child of the shell running `wait`; the second, waited-on-as-a-child, exited 0).
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — record the fifth repository in PROJECT_STATE
 
 **Repository:** `open-agent-graph`, commit `9579399` on `main`; records in the same file.
