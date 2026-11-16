@@ -47,6 +47,31 @@ format.
 
 ---
 
+## 2026-11-14 — record the fifth repository in PROJECT_STATE
+
+**Repository:** `open-agent-graph`, commit `9579399` on `main`; records in the same file.
+
+**The defect.** `PROJECT_STATE.md` is the authoritative cross-project record the directive says to
+keep current, and it did not know the mission's own repository existed: the header said "across its
+**three** repositories", the table listed four, `oag-listend` was absent from both the repository
+table and the measured table, the closing line said "all three working trees", and the date was five
+days stale. A reader could not learn from it that the perpetual-directive work was happening at all.
+
+**What changed.** Header corrected to five repositories with today's date; `oag-listend` added to the
+repository table and to the measured table with figures taken from the checkout (94 tests, 103
+commits); `oag-collisions` added with its factual commit count and an honest dash for a test count
+this file has not measured; the closing line now says five working trees; and a capabilities section
+for the serving surface added under Completed capabilities. The next-priorities entry's stale
+"52 unit + 31 end-to-end" bar was refreshed to the real 56 + 38, and its list of what is now measured
+was brought up to date.
+
+**Tests executed.** No code change; `cargo test -p oag-listend` remains 56 unit + 38 end-to-end,
+0 failed.
+
+**Commit identifiers:** `open-agent-graph` `9579399`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — prove the UDP listing page fits a datagram
 
 **Repository:** `oag-listend`, commit `cf9d3c7` on `master`; records in `open-agent-graph`.
