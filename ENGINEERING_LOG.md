@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — record integrity and repository hygiene
+
+**Repository:** `open-agent-graph`; no code change.
+
+**Checked.**
+- `ENGINEERING_LOG.md` is reverse-chronological with **no duplicate headings** (an earlier pass had
+  left two near-identical entries and a stray separator; both are gone).
+- `oag-listend`'s tracked file set is exactly the intended sources, tests, scripts, and docs:
+  **zero** `target/` entries, working tree clean, nothing unpushed.
+- All five checkouts clean and pushed on their correct branches (`main`, `main`, `master`,
+  `master`, `master`).
+- `cargo test -p oag-listend`: 56 unit + 38 end-to-end, 0 failed.
+
+**Not changed.** No defect found, so nothing was modified beyond this entry. `PROJECT_STATE.md`
+already reflects the current bar (56 + 38) and the closed operator surface; its next priorities are
+current, with the IPFS/Reticulum carriers the only open items and the IPFS assessment now recorded in
+SPEC.
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — record what the IPFS carrier would actually take
 
 **Repository:** `oag-listend`, commit `0e74ccf` on `master`; records in `open-agent-graph`.
