@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — document `--seed` and `--no-generate`
+
+**Repository:** `oag-listend`, commit `93486d1` on `master`; records in `open-agent-graph`.
+
+**The gap.** Checked every flag the binary accepts against the README: all ten others appear, but
+`--seed` occurred only inside an example command line with no explanation, and `--no-generate` not at
+all. An operator reading the README could not learn that startup generation can be disabled or
+re-seeded.
+
+**What changed.** One paragraph after the startup-set description: `--seed U64` chooses the generated
+sounds (default from the clock and process id, matching `default_seed()`), and `--no-generate` skips
+them for an operator who wants the daemon to serve only what it is given.
+
+**Tests executed.** No code change; `cargo test -p oag-listend`: 56 unit + 38 end-to-end, 0 failed.
+(The binary test already asserts `--help` lists all eleven flags.)
+
+**Commit identifiers:** `oag-listend` `93486d1`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — verify the release artifact, not just the debug build
 
 **Repository:** `oag-listend`, no code change.
