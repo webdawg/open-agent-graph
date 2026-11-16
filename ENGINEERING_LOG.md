@@ -47,6 +47,33 @@ format.
 
 ---
 
+## 2026-11-14 — prove the UDP listing page fits a datagram
+
+**Repository:** `oag-listend`, commit `cf9d3c7` on `master`; records in `open-agent-graph`.
+
+**The gap.** SPEC: "The page is bounded ... a smaller cap on UDP -- because an unbounded listing would
+eventually exceed the frame cap". Nothing measured it, and with a handful of items no cap is
+observable at all.
+
+**What changed.** New `the_udp_listing_page_is_capped_at_what_a_datagram_can_carry`. It fills the
+store directly with **1,100 distinct sounds** -- past the ~990 hashes a 65,507-byte datagram can carry
+-- then asks for everything (`limit: u32::MAX`) and asserts exactly `MAX_DATAGRAM_LIST_LIMIT` come
+back, that `total` still reports all 1,100, and that the first page is the head of the sorted walk.
+Noise rather than tones, because a tone's pitch repeats every 620 seeds and would silently publish
+duplicates.
+
+**Why the test is trustworthy.** Raising `MAX_DATAGRAM_LIST_LIMIT` to 2000 makes the response exceed a
+datagram, so the carrier correctly refuses it and the test fails; restoring 900 makes it pass. A
+first draft used only 950 items, where even a wrong cap still fit a datagram -- that version proved
+nothing about the property, so the count was raised past the boundary.
+
+**Tests executed.** `cargo test -p oag-listend`: 56 unit + 38 end-to-end, 0 failed; 0 warnings.
+README corrected from "plus 37" to "plus 38".
+
+**Commit identifiers:** `oag-listend` `cf9d3c7`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — prove the HTTP header cap refuses a flood
 
 **Repository:** `oag-listend`, commit `9dbce2c` on `master`; records in `open-agent-graph`.
