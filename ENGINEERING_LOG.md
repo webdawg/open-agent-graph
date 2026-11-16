@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — fix the daemon's own --help text
+
+**Repository:** `oag-listend`, commit `230ee5b` on `master`; records in `open-agent-graph`.
+
+**The defect.** The operator's `--help` was malformed and incomplete. The usage line listed only
+`[--listen] [--http] [--seed] [--max-bytes] [--no-generate]`, omitting `--udp`, `--unix`, `--dir`,
+`--check`, and `--help`. And the flag descriptions were wrong: `--http`'s line ran straight into
+`--udp` (no newline between them), while `--udp`/`--unix`/`--dir`/`--check` carried eleven spaces of
+stray indentation because those lines used literal newlines in the source where their neighbours used
+`\<newline>` continuations.
+
+**What changed.** `usage()` rewritten as a single multi-line literal, so the spacing an operator reads
+is exactly the spacing written; the usage line now lists every accepted flag. The binary test is
+strengthened from "contains `--listen`" to asserting that all eleven flags appear **and** that each
+flag's description sits on its own line, which is precisely the invariant that broke.
+
+**Tests executed.** `cargo test -p oag-listend`: 56 unit + 33 end-to-end, 0 failed; 0 warnings.
+
+**Commit identifiers:** `oag-listend` `230ee5b`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — verify the generated WAV containers are playable, not just sniffable
 
 **Repository:** `oag-listend`, commit `178de8e` on `master`; records in `open-agent-graph`.
