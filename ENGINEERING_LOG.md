@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — verify the generated WAV containers are playable, not just sniffable
+
+**Repository:** `oag-listend`, commit `178de8e` on `master`; records in `open-agent-graph`.
+
+**The gap.** Directive step 5 requires "valid WAV". The header test checked tags, channels, and bit
+depth, but never the size fields. A file whose RIFF or `data` size disagrees with its actual bytes is
+accepted by a magic-bytes sniff, served happily by the daemon, and rejected by every real player --
+so "valid" was asserted more weakly than it should have been.
+
+**What changed.** New unit tests: `the_container_sizes_agree_with_the_bytes` walks all three kinds and
+asserts the RIFF size covers the file, the fmt chunk is 16 bytes of PCM, the byte rate and block align
+match 16-bit mono at 8 kHz, the data size covers exactly the payload, and the sample count matches the
+seed's duration; `the_canonical_ping_container_sizes_agree` does the same for the ping, which every
+carrier serves.
+
+**Tests executed.** `cargo test -p oag-listend`: 56 unit + 33 end-to-end, 0 failed; 0 warnings.
+README corrected from "54 unit plus 33" to "56 unit plus 33".
+
+**Commit identifiers:** `oag-listend` `178de8e`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — serve every recognised format under its own HTTP content type
 
 **Repository:** `oag-listend`, commit `fc9ba98` on `master`; records in `open-agent-graph`.
