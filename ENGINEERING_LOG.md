@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — prove the session cap is enforced
+
+**Repository:** `oag-listend`, commit `10ddda3` on `master`; records in `open-agent-graph`.
+
+**The gap.** SPEC documents "at most 64 sessions served at once per carrier". Nothing measured it,
+so a future change that dropped or bypassed the semaphore would have gone unnoticed.
+
+**What changed.** New `a_client_past_the_session_cap_waits_for_a_free_slot`: fill every slot with a
+session that has *proven* it is live (each sends Hello and reads the answer, which can only happen
+after the permit is acquired), then show a further client's connection is completed by the kernel but
+goes unanswered for 700 ms, and is served promptly once one session is released.
+
+**Why the test is trustworthy.** It was checked both ways. Raising `MAX_CONNECTIONS` is *not* a valid
+probe -- the test holds exactly that many slots by construction -- so the guard was validated against
+an effectively unbounded cap (`usize::MAX / 4`), which makes it fail; restoring the real code makes it
+pass.
+
+**Tests executed.** `cargo test -p oag-listend`: 56 unit + 36 end-to-end, 0 failed; 0 warnings.
+README corrected from "plus 35" to "plus 36".
+
+**Commit identifiers:** `oag-listend` `10ddda3`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — prove a stalled reader does not stall other clients
 
 **Repository:** `oag-listend`, commit `d0d67b7` on `master`; records in `open-agent-graph`.
