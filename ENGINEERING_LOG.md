@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — verify the release artifact, not just the debug build
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** The systemd unit ships `cargo build --release`, and the release binary had last been checked
+before the `--help` fix, the SIGTERM test, and the later work. The artifact an operator actually runs
+is the one worth verifying.
+
+**Observed** (`target/release/oag-listend`, 992,352 bytes; `target/release/examples/push_pull`), with
+all four carriers on one store:
+- TCP: tone and noise published then fetched `same-hash ... verified=true`; HTML labelled
+  `audio/wav` -> typed `Rejected`.
+- UDP: same, `verified=true`.
+- HTTP: POST 201; GET 200 `audio/wav` **8,044 bytes byte-identical** to the posted file; `Range:
+  0-99` -> 206.
+- SIGTERM: clean stop, **exit 0**.
+
+**Commit identifiers:** none (no code change). `cargo test -p oag-listend` remains 56 unit +
+38 end-to-end, 0 failed.
+
+---
+
 ## 2026-11-14 — record integrity and repository hygiene
 
 **Repository:** `open-agent-graph`; no code change.
