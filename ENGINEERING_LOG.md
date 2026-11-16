@@ -47,6 +47,19 @@ format.
 
 ---
 
+## 2026-11-14 — correct the README's unit test count
+
+**Repository:** `oag-listend`, commit `1e67844` on `master`; records in `open-agent-graph`.
+
+**What changed.** The README said "51 unit tests"; the load-cap test took it to 52. Fixed so the
+document matches what `cargo test -p oag-listend` actually reports.
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 24 end-to-end, 0 failed.
+
+**Commit identifiers:** `oag-listend` `1e67844`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — a tuned release profile
 
 **Repository:** `oag-listend`, commit `2dbe521` on `master`; records in `open-agent-graph`.
