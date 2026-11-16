@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — make the module docs match what the code does
+
+**Repository:** `oag-listend`, commit `d9801c7` on `master`; records in `open-agent-graph`.
+
+**The gap.** Extended the flag-vs-README check to each module's own header claims and compared them
+with the code:
+
+- `http.rs` listed three routes, but `route()` handles five. `GET /ping` -- the headline "even pings
+  are music" directive -- and `GET /audio` (the paginated listing) were both missing, as was
+  `OPTIONS`.
+- `protocol.rs` said the operations were "exactly: identify, publish audio, fetch audio, list
+  audio", which contradicts `OP_PING`, the `Ping` request/response variants, and SPEC's stated five.
+
+**What changed.** Both headers rewritten to enumerate what the code actually accepts. The other
+module headers (`lib.rs`, `server.rs`, `udp.rs`, `unix.rs`) were checked and make no exhaustive claim
+that omits anything.
+
+**Tests executed.** No behaviour change; `cargo test -p oag-listend`: 56 unit + 38 end-to-end,
+0 failed; 0 warnings.
+
+**Commit identifiers:** `oag-listend` `d9801c7`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — document `--seed` and `--no-generate`
 
 **Repository:** `oag-listend`, commit `93486d1` on `master`; records in `open-agent-graph`.
