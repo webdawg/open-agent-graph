@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — an end-to-end eviction test
+
+**Repository:** `oag-listend`, commit `cc0a6ac` on `master`; records in `open-agent-graph`.
+
+**The gap.** Eviction was covered only by unit tests inside `lib.rs`. The directive names bounds and
+eviction as hardening work, and a carrier that cannot observe the bound proves nothing about the
+service.
+
+**What changed.** New `tests/eviction.rs`: a store bounded to exactly the larger tone's size; publish
+the larger tone, then the smaller. Over the wire: the older hash is `NotFound`, the newer still
+returns its bytes and verifies, and the evicted item's file is unlinked while the survivor's remains.
+The test picks two differently sized generated tones at runtime rather than hard-coding sizes.
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 25 end-to-end, 0 failed; 0 warnings.
+README corrected from "plus 24" to "plus 25".
+
+**Commit identifiers:** `oag-listend` `cc0a6ac`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — correct the README's unit test count
 
 **Repository:** `oag-listend`, commit `1e67844` on `master`; records in `open-agent-graph`.
