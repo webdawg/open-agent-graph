@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — an end-to-end native frame-cap test
+
+**Repository:** `oag-listend`, commit `ac63ce1` on `master`; records in `open-agent-graph`.
+
+**The gap.** The single-frame cap was covered only by a unit test of `decode_frame`. Nothing showed
+that the running daemon refuses an oversized length prefix without reading or allocating a body.
+
+**What changed.** New test in `tests/back_and_forth.rs`: connect, send a four-byte prefix declaring
+`MAX_FRAME_BYTES + 1` with no body, assert the session closes promptly rather than waiting for a
+body, then reconnect and assert `Hello` still answers -- the refusal ends one frame, not the service.
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 26 end-to-end, 0 failed. README corrected
+from "plus 25" to "plus 26".
+
+**Commit identifiers:** `oag-listend` `ac63ce1`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — an end-to-end eviction test
 
 **Repository:** `oag-listend`, commit `cc0a6ac` on `master`; records in `open-agent-graph`.
