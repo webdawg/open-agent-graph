@@ -47,6 +47,41 @@ format.
 
 ---
 
+## 2026-11-14 — add an IPFS mirror behind `--ipfs-api`
+
+**Repository:** `oag-listend`, commit `4846a01` on `master`; records in `open-agent-graph`.
+
+**What it is.** Audio the daemon accepts can now also be offered to a Kubo node, so it reaches a
+network whose clients never have to connect here. This is the named next carrier work.
+
+**Design decisions, and why.**
+- A *mirror*, not a carrier and not a new operation: the frame protocol permits only publish /
+  fetch-by-hash / list / hello (+ ping), so IPFS cannot add a way to ask for something, and the
+  BLAKE3 content hash remains the identity. The CID is an additional address for the same bytes.
+- It lives in `AudioStore::accept` -- the one surface all four carriers call -- because mirroring per
+  carrier would fork the behaviour.
+- **Best-effort.** The durable write happens first; a mirror failure is recorded, never propagated,
+  because losing a copy must not lose the audio. The last 64 outcomes are retained and printed at
+  shutdown with their CIDs (`ipfs mirror: N mirrored, M failed`, then one line each).
+- No new dependency: the client hand-rolls `POST /api/v0/add` as multipart form data (the crate
+  already hand-rolls its own HTTP server and carries no framework), with a 10 s bound per read and
+  write and a 64 KiB cap on the reply.
+
+**Honest limitation.** Tested end to end against a stub mimicking Kubo's add endpoint, through the
+real binary and flag. **Not tested against a real Kubo node**, and it does not decode chunked replies.
+Both stated in SPEC and README rather than left to be discovered.
+
+**Tests executed.** `cargo test -p oag-listend`: **60 unit + 42 end-to-end, 0 failed**. New: four
+client unit tests (CID extraction, non-2xx, missing Hash, unreachable API); three store-level tests
+(mirrored outcome carries the CID and the posted body carries the audio; a 500 records a failure and
+still serves the audio; an unreachable API is reported, not fatal); one binary test that starts the
+daemon with `--ipfs-api`, publishes, and asserts the stub was called exactly once and the shutdown
+report reads `1 mirrored, 0 failed`. README and SPEC updated; README flag coverage is complete.
+
+**Commit identifiers:** `oag-listend` `4846a01`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — make the module docs match what the code does
 
 **Repository:** `oag-listend`, commit `d9801c7` on `master`; records in `open-agent-graph`.
