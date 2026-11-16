@@ -47,6 +47,19 @@ format.
 
 ---
 
+## 2026-11-14 — a tuned release profile
+
+**Repository:** `oag-listend`, commit `2dbe521` on `master`; records in `open-agent-graph`.
+
+**What changed.** Added `[profile.release]` with `lto = true`, `codegen-units = 1`, `strip = true`.
+The systemd unit builds with `cargo build --release`, which until now used the default
+profile. The shipped binary is ~1 MB (992,352 bytes).
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 24 end-to-end, 0 failed. Verified
+by hand with the release binary: the root reports `oag-listend`, and a range request returns 206.
+
+**Commit identifiers:** `oag-listend` `2dbe521`; this entry's commit pending.
+
 ---
 
 ## 2026-11-14 — drop dead deps, verify the operator CLI and the tooling invariant
@@ -83,25 +96,6 @@ all three load under a cap of three.
 
 **Commit identifiers:** `oag-listend` `4f6ef04`; this entry's commit pending.
 
-## 2026-11-14 — housekeeping: dead deps, operator CLI, tooling invariant
-
-**Repository:** `oag-listend`, commit for the serde removal on `master`; records in
-`open-agent-graph`.
-
-**Dead dependencies.** `serde` and `serde_json` were declared in the workspace and crate
-manifests but used in no file. Removed from both; build and all tests unchanged (51 unit +
-24 end-to-end, 0 failed).
-
-**Operator CLI verified by hand.** `--version` -> `oag-listend 0.1.0 (frame protocol 1)`;
-`--help` -> the usage; `--check --dir <store> --max-bytes N` -> the load report and the
-store's item count, bytes held, and effective item bound. Missing `--listen` exits 2, an
-invalid `--seed` exits 2.
-
-**Tooling invariant.** The three scripts (`prune-target.py`, `rustc-wrapper.sh`,
-`test_prune_target.py`) are byte-identical across all five repositories (3 distinct hashes,
-one per script). `scripts/test_prune_target.py` passes 16 tests in oag-listend.
-
-**Tests executed.** `cargo test -p oag-listend`: 51 unit + 24 end-to-end, 0 failed.
 ---
 
 ## 2026-11-14 — oag-listend's .gitignore matches the other four
