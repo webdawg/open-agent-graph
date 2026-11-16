@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — answer 413 for too-large audio, as documented
+
+**Repository:** `oag-listend`, commit `f8da5cb` on `master`; records in `open-agent-graph`.
+
+**The defect.** `http.rs`'s module doc promised "POST /audio -- publish a body (413 if too large)",
+but the carrier never emitted 413: an oversized declared body was refused as a generic bad request
+(400), and so was audio that passed sniff but exceeded the store's `--max-bytes`. The docs and the
+behaviour disagreed, and 400 was the wrong status for a well-formed body that is merely too big.
+
+**What changed.** `HttpRequest` carries a `too_large` flag set only at the content-length check; the
+BAD path now answers `413 Payload Too Large`. The POST arm maps `ListendError::TooLarge` to 413 as
+well, so a client reacts to one status whether the body exceeds the frame cap or the store bound.
+README and SPEC corrected from 400 to 413.
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 31 end-to-end, 0 failed. The existing
+oversized test now asserts 413 (and asserts it is neither 100 nor 400); a new test posts audio above
+the store's own bound and asserts 413 with the store still empty.
+
+**Commit identifiers:** `oag-listend` `f8da5cb`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — test `--check` against a real store
 
 **Repository:** `oag-listend`, commit `7ec9a52` on `master`; records in `open-agent-graph`.
