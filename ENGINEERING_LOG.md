@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — fix a SPEC self-contradiction about the eviction unlink
+
+**Repository:** `oag-listend`, commit `444c59c` on `master`; records in `open-agent-graph`.
+
+**The defect.** SPEC.md said two opposite things about the eviction unlink: that it "stays
+synchronous, being metadata-only", and later that it is "taken off the lock and done asynchronously
+after the publish returns". The code does the latter -- `drain_evicted` uses `tokio::fs::remove_file`,
+off the lock, awaited inside `accept`. The first sentence was stale from before the off-lock change.
+
+**What changed.** Corrected the stale sentence to match the code and reflowed the paragraph. While
+auditing the document against the implementation, verified these claims are accurate:
+`DEFAULT_MAX_BYTES` 1 GiB, `MAX_DATAGRAM_BYTES` 65,507, `SESSION_TIMEOUT`/`REQUEST_TIMEOUT` 30 min,
+`MAX_LOAD_ENTRIES` 100,000, `MAX_SIDECAR_BYTES` 4 KiB, `MAX_CONNECTIONS` 64 per carrier,
+`normalize_limit` treating `limit: 0` as the default page, SIGINT/SIGTERM clean stop, and the twinkle
+at 44,844 bytes (fetched over HTTP).
+
+**Tests executed.** No code change; `cargo test -p oag-listend` remains 52 unit + 31 end-to-end,
+0 failed.
+
+**Commit identifiers:** `oag-listend` `444c59c`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — answer 413 for too-large audio, as documented
 
 **Repository:** `oag-listend`, commit `f8da5cb` on `master`; records in `open-agent-graph`.
