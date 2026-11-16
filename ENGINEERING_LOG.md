@@ -47,6 +47,25 @@ format.
 
 ---
 
+## 2026-11-14 — an end-to-end native listing-pagination test
+
+**Repository:** `oag-listend`, commit `284bd64` on `master`; records in `open-agent-graph`.
+
+**The gap.** The native `list known hashes` operation was exercised end to end only for a single item;
+its paging was covered solely by a unit test inside `server.rs`.
+
+**What changed.** New test in `tests/back_and_forth.rs`: publish three tones, sort the hashes the way
+the store does, then walk the listing -- the whole store, one page of one, a page whose limit runs past
+the end (must stop there), and an offset beyond the store (must answer empty with the clamped offset,
+not wrap or repeat).
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 27 end-to-end, 0 failed. README corrected
+from "plus 26" to "plus 27".
+
+**Commit identifiers:** `oag-listend` `284bd64`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — an end-to-end native frame-cap test
 
 **Repository:** `oag-listend`, commit `ac63ce1` on `master`; records in `open-agent-graph`.
