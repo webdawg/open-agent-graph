@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — correct push_pull's own --help text
+
+**Repository:** `oag-listend`, commit `f59919b` on `master`; records in `open-agent-graph`.
+
+**The defect.** The operator client's `--help` disagreed with itself: the usage line omitted
+`--version` and `--help` even though both are accepted, and the closing line said only "Sends a ping"
+when the example also publishes a tone and a noise, fetches both back and verifies their BLAKE3, and
+proves the inbound rule by sending non-audio.
+
+**What changed.** Both lines now match what the example actually does. Verified by hand against a live
+daemon over both carriers: TCP and UDP each report `verified=true` for the ping (44,844 bytes), the
+tone, and the noise, and a typed `Rejected` for HTML.
+
+**Tests executed.** No code change beyond the help text; `cargo test -p oag-listend` remains
+52 unit + 31 end-to-end, 0 failed.
+
+**Commit identifiers:** `oag-listend` `f59919b`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — fix a SPEC self-contradiction about the eviction unlink
 
 **Repository:** `oag-listend`, commit `444c59c` on `master`; records in `open-agent-graph`.
