@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — test `--check` against a real store
+
+**Repository:** `oag-listend`, commit `7ec9a52` on `master`; records in `open-agent-graph`.
+
+**The gap.** `--check` is documented for operators as "open the store, print the load report, and
+exit", but no automated test exercised it, so nothing proved it loads or verifies a directory.
+
+**What changed.** Added to `tests/binary.rs`: write one genuine item (audio plus its media-type
+sidecar) under its own BLAKE3 name, run `--check --dir <dir>`, and assert `loaded 1`, `skipped 0`,
+`evicted 0`, and that the store's size and bound are reported. Then corrupt the file out of band and
+assert the reload reports `loaded 0`, `skipped 1` -- a file whose bytes no longer match its name is
+never loaded or served.
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 30 end-to-end, 0 failed. README corrected
+from "plus 29" to "plus 30".
+
+**Commit identifiers:** `oag-listend` `7ec9a52`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — a binary-level test for the operator entry point
 
 **Repository:** `oag-listend`, commit `e4bc5dd` on `master`; records in `open-agent-graph`.
