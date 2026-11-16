@@ -93,7 +93,8 @@ synchronous version was; the item is gone from the index either way.
 **Tests executed.** `cargo test -p oag-listend`: 51 unit + 24 end-to-end, 0 failed. The eviction
 test still asserts the file is gone after `accept`.
 
-**Commit identifiers:** `oag-listend` `f2ed4ae`; this entry's commit pending.
+**Commit identifiers:** `oag-listend` `f2ed4ae`, `490a768` (gives `push_pull` a
+`--version`, matching the daemon's `--version`/`--help` pair); this entry's commit pending.
 **Push status:** `oag-listend` pushed to `master`; this entry pending.
 **Remaining defects / next.** The remaining imagination carriers (IPFS, Reticulum), which stay
 deliberately unbuilt.
