@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — test that SIGTERM is a clean stop
+
+**Repository:** `oag-listend`, commit `37ef3fa` on `master`; records in `open-agent-graph`.
+
+**The gap.** SPEC and README both claim the daemon "handles SIGINT and SIGTERM ... exits 0, the Unix
+socket is removed", but every automated test stopped it with `Child::kill()` -- SIGKILL. The signal
+`systemctl stop` actually sends was verified only by hand.
+
+**What changed.** New `sigterm_is_a_clean_stop`: start the daemon with `--unix`, wait for its own
+"listening on" announcement, send SIGTERM, then assert it exits **0**, prints that it is shutting
+down, and removes the socket file so the next start does not trip over a stale path. The stdout
+announcement wait is factored into an `announce` helper shared with the serving test.
+
+**Tests executed.** `cargo test -p oag-listend`: 56 unit + 34 end-to-end, 0 failed; 0 warnings.
+README corrected from "plus 33" to "plus 34".
+
+**Commit identifiers:** `oag-listend` `37ef3fa`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — bring SPEC's status paragraph in line with what is tested
 
 **Repository:** `oag-listend`, commit `e3ca5f3` on `master`; records in `open-agent-graph`.
