@@ -45,6 +45,16 @@ format.
 
 ---
 
+## 2026-11-14 — oag-listend's .gitignore matches the other four
+
+Running `scripts/test_prune_target.py` left `scripts/__pycache__` untracked in
+oag-listend; the other four repos already ignore Python test bytecode. Added the
+same rules (`__pycache__/`, `*.pyc`) to oag-listend's `.gitignore` and removed
+the stray directory. Commit `8179849` on `master`.
+
+**Tests executed.** Unchanged: 51 unit + 24 end-to-end, 0 failed.
+---
+
 ## 2026-11-14 — take the eviction unlink off the lock
 
 **Repository:** `oag-listend`, commit `f2ed4ae` on `master`; records in `open-agent-graph`.
