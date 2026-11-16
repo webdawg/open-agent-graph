@@ -47,6 +47,34 @@ format.
 
 ---
 
+## 2026-11-14 — prove a stalled reader does not stall other clients
+
+**Repository:** `oag-listend`, commit `d0d67b7` on `master`; records in `open-agent-graph`.
+
+**The gap.** SPEC's concurrency section claims the store lock is released before byte copies, so one
+slow client cannot stall the others. Nothing measured it; every test either stopped the daemon or used
+small items that fit in kernel buffers.
+
+**What changed.** New `a_client_stalled_mid_fetch_does_not_stall_another`: publish an 8 MiB item,
+have a client with a **1 KiB receive buffer** ask for it and then stop reading, and assert a second
+client still gets its answer within three seconds. The size is deliberate -- large enough that no
+combination of socket buffers absorbs it, so the stall is real rather than absorbed by the kernel.
+Also corrected a stale doc comment on the persistence test: the path writes through `tokio::fs`, not
+a blocking `std::fs::write`.
+
+**Why the test is trustworthy.** A regression test that passes on the bug is worthless, so the guard
+was verified both ways: temporarily holding the store lock across the network write makes it fail
+with "a second client must be served while another is stalled: Elapsed"; restoring the real code
+makes it pass. (Holding the lock only across the clone does not trip it -- that is milliseconds --
+which is exactly why the write, not the clone, is what the test pins.)
+
+**Tests executed.** `cargo test -p oag-listend`: 56 unit + 35 end-to-end, 0 failed; 0 warnings.
+README corrected from "plus 34" to "plus 35".
+
+**Commit identifiers:** `oag-listend` `d0d67b7`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — test that SIGTERM is a clean stop
 
 **Repository:** `oag-listend`, commit `37ef3fa` on `master`; records in `open-agent-graph`.
