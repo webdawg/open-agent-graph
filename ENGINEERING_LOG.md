@@ -45,6 +45,27 @@ format.
 
 ---
 
+## 2026-11-14 — housekeeping: dead deps, operator CLI, tooling invariant
+
+**Repository:** `oag-listend`, commit for the serde removal on `master`; records in
+`open-agent-graph`.
+
+**Dead dependencies.** `serde` and `serde_json` were declared in the workspace and crate
+manifests but used in no file. Removed from both; build and all tests unchanged (51 unit +
+24 end-to-end, 0 failed).
+
+**Operator CLI verified by hand.** `--version` -> `oag-listend 0.1.0 (frame protocol 1)`;
+`--help` -> the usage; `--check --dir <store> --max-bytes N` -> the load report and the
+store's item count, bytes held, and effective item bound. Missing `--listen` exits 2, an
+invalid `--seed` exits 2.
+
+**Tooling invariant.** The three scripts (`prune-target.py`, `rustc-wrapper.sh`,
+`test_prune_target.py`) are byte-identical across all five repositories (3 distinct hashes,
+one per script). `scripts/test_prune_target.py` passes 16 tests in oag-listend.
+
+**Tests executed.** `cargo test -p oag-listend`: 51 unit + 24 end-to-end, 0 failed.
+---
+
 ## 2026-11-14 — oag-listend's .gitignore matches the other four
 
 Running `scripts/test_prune_target.py` left `scripts/__pycache__` untracked in
