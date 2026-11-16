@@ -45,6 +45,27 @@ format.
 
 ---
 
+## 2026-11-14 — resolve an uppercased content hash
+
+**Repository:** `oag-listend`, commits `8ad3d19` and the README count on `master`; records in
+`open-agent-graph`.
+
+**The inconsistency.** Hash validation accepted uppercase hex (`is_ascii_hexdigit`), but
+`AudioStore::serve` is case-sensitive, so a client that uppercased a hash was told the hash was
+valid and then that it was missing.
+
+**What changed.** `Reader::hash` and the HTTP `/audio/{hash}` route normalise to lowercase before
+lookup. Tests pin both: a native `Fetch` with an uppercased hash resolves, and an HTTP GET with an
+uppercased hash returns 200 with the same bytes.
+
+**Tests executed.** `cargo test -p oag-listend`: 51 unit + 24 end-to-end, 0 failed.
+
+**Commit identifiers:** `oag-listend` `8ad3d19` plus the README count; this entry's commit pending.
+**Push status:** `oag-listend` pushed to `master`; this entry pending.
+**Remaining defects / next.** The eviction unlink is recorded as synchronous. Then the remaining
+imagination carriers.
+---
+
 ## 2026-11-14 — a length past the remaining bytes is a bad string
 
 **Repository:** `oag-listend`, commit `759b7c5` on `master`; records in `open-agent-graph`.

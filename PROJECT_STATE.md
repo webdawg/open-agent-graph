@@ -138,6 +138,9 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Completed recently
 
+- **oag-listend resolves an uppercased content hash.** The hash validation accepted uppercase hex
+  but the lookup was case-sensitive, so an uppercased hash was accepted and then reported missing.
+  The reader and the HTTP route now normalise to lowercase. 51 unit + 24 end-to-end tests.
 - **oag-listend's reader reports a length-prefixed string that runs past the remaining bytes as a
   bad string.** The pre-check compared against the whole buffer rather than the bytes remaining, so
   a length one past the end reported `Truncated` while a longer one reported `BadString`.
