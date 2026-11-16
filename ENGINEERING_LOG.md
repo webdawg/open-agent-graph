@@ -45,6 +45,24 @@ format.
 
 ---
 
+---
+
+## 2026-11-14 — count only audio entries toward the load cap
+
+**Repository:** `oag-listend`, commit `4f6ef04` on `master`; records in `open-agent-graph`.
+
+**The defect.** `load_dir` applied `max_entries` to every directory entry, including the `<hash>.json`
+sidecars, which are not audio. A directory with many sidecars could therefore truncate the audio load
+even when the audio itself fit under the cap.
+
+**What changed.** The cap check now runs after the sidecar skip, so it counts audio entries only.
+
+**Tests executed.** `cargo test -p oag-listend`: 52 unit + 24 end-to-end, 0 failed. New
+`sidecars_do_not_count_toward_the_load_cap` writes three audio entries plus their sidecars and asserts
+all three load under a cap of three.
+
+**Commit identifiers:** `oag-listend` `4f6ef04`; this entry's commit pending.
+
 ## 2026-11-14 — housekeeping: dead deps, operator CLI, tooling invariant
 
 **Repository:** `oag-listend`, commit for the serde removal on `master`; records in
