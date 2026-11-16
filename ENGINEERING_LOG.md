@@ -47,6 +47,33 @@ format.
 
 ---
 
+## 2026-11-14 — record what the IPFS carrier would actually take
+
+**Repository:** `oag-listend`, commit `0e74ccf` on `master`; records in `open-agent-graph`.
+
+**Why.** SPEC named IPFS and Reticulum as deliberately unbuilt but gave no reason, so each invocation
+re-investigated them from zero. That investigation is now recorded where the next reader will find it.
+
+**What it concludes.** Reticulum needs a physical interface and `oag-storage` -- nothing can be written
+or run here. IPFS has a client half already in the imagination layer (`HttpIpfsPublisher` posting
+multipart to Kubo's `/api/v0/add`), but building it here would mean adding an HTTP *client* to a crate
+that deliberately hand-rolls its own server and carries no framework, plus hand-built multipart. Two
+constraints make it more than a new file: the frame protocol permits only publish / fetch-by-hash /
+list / hello (+ ping), so IPFS must be a *mirror* of accepted audio rather than a new operation; and a
+network call on the accept path couples the store's durability guarantee to an external service,
+which is a design change to settled code.
+
+**Decision.** Still not built. A fake-endpoint test would prove the client logic but cannot prove
+real-IPFS behaviour, so the honest status remains "not built". The entry records how to build it
+behind `--ipfs-api ADDR`, best-effort, labelled untested against real IPFS, if the operator wants it.
+
+**Tests executed.** No code change; `cargo test -p oag-listend` remains 56 unit + 38 end-to-end,
+0 failed.
+
+**Commit identifiers:** `oag-listend` `0e74ccf`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — clean-state acceptance run (all four carriers)
 
 **Repository:** `oag-listend`, no code change; records in `open-agent-graph`.
