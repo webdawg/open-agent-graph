@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — serve every recognised format under its own HTTP content type
+
+**Repository:** `oag-listend`, commit `fc9ba98` on `master`; records in `open-agent-graph`.
+
+**The gap.** "HTTP serves the bytes with an audio content type" was proven only for WAV. A FLAC or an
+MP3 whose served header was wrong would silently fail to play in a browser, and nothing would catch
+it.
+
+**What changed.** New `every_recognised_format_is_served_with_its_own_content_type`: each of the six
+recognised formats is posted labelled `application/x-www-form-urlencoded` -- so only the bytes can
+decide -- then fetched back and asserted to carry its own `audio/*` type (`audio/wav`, `audio/aiff`,
+`audio/flac`, `audio/ogg`, `audio/mpeg`, `audio/mp4`) with a byte-identical body.
+
+**Tests executed.** `cargo test -p oag-listend`: 54 unit + 33 end-to-end, 0 failed; 0 warnings.
+README corrected from "plus 32" to "plus 33".
+
+**Commit identifiers:** `oag-listend` `fc9ba98`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — test every named audio signature, on both sides of the sniff
 
 **Repository:** `oag-listend`, commit `e89eef4` on `master`; records in `open-agent-graph`.
