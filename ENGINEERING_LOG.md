@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — bring SPEC's status paragraph in line with what is tested
+
+**Repository:** `oag-listend`, commit `e3ca5f3` on `master`; records in `open-agent-graph`.
+
+**The defect.** The status paragraph enumerated the end-to-end coverage but had fallen behind the
+suite: it did not mention eviction, the per-frame cap, native listing pagination, per-format
+recognition or per-format content types, the operator binary, or `--check`, and it stated no test
+count. A reader could not tell what was actually proven.
+
+**What changed.** Rewritten to state the current suite -- 56 unit + 33 end-to-end, all green -- and
+enumerate what it covers: the native back-and-forth (publish, fetch, verify, reject non-audio,
+not-found); eviction under the byte bound; the per-frame cap refusing an oversized length before any
+body is read; native listing pagination; each of the six named audio signatures in both directions
+over the wire; HTTP serving every format under its own content type; HTTP refusal, streaming,
+ranges, HEAD, validators and CORS; the shared store across carriers; UDP; the Unix socket;
+persistence across a restart; concurrency; the operator binary and `--check`; and the musical ping on
+every carrier.
+
+**Tests executed.** No code change; `cargo test -p oag-listend`: 56 unit + 33 end-to-end, 0 failed.
+
+**Commit identifiers:** `oag-listend` `e3ca5f3`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — fix the daemon's own --help text
 
 **Repository:** `oag-listend`, commit `230ee5b` on `master`; records in `open-agent-graph`.
