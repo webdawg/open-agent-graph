@@ -47,6 +47,31 @@ format.
 
 ---
 
+## 2026-11-14 — test every named audio signature, on both sides of the sniff
+
+**Repository:** `oag-listend`, commit `e89eef4` on `master`; records in `open-agent-graph`.
+
+**The gap.** Directive step 3 names WAV, AIFF, FLAC, Ogg, MP3, and M4A, but only M4A and Ogg had
+direct recognition tests. WAV, AIFF, FLAC, and MP3 were never asserted, so a regression in
+`AudioFormat::sniff` would have refused valid audio (or admitted near-misses) with nothing to catch
+it.
+
+**What changed.**
+- `every_named_signature_is_recognised_from_its_bytes`: RIFF/WAVE, FORM/AIFF, FORM/AIFC, the FLAC
+  marker, an ID3v2 tag, a raw MPEG-1 Layer III frame header, and Vorbis/Opus/FLAC-in-Ogg from the
+  beginning-of-stream page.
+- `near_miss_signatures_are_not_audio`: RIFF/AVI, FORM/8SVX, an MPEG header with the reserved version
+  field set, one with a zero bitrate field, Theora inside Ogg, plain text, and empty input.
+- End to end: publish AIFF, FLAC, MP3/ID3, Ogg/Opus, and M4A over TCP and fetch each back
+  byte-identical under its own BLAKE3 -- the sniff is only useful if the wire agrees with it.
+
+**Tests executed.** `cargo test -p oag-listend`: 54 unit + 32 end-to-end, 0 failed; 0 warnings.
+README corrected from "52 unit plus 31" to "54 unit plus 32".
+
+**Commit identifiers:** `oag-listend` `e89eef4`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — correct push_pull's own --help text
 
 **Repository:** `oag-listend`, commit `f59919b` on `master`; records in `open-agent-graph`.
