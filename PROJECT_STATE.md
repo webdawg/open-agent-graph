@@ -127,6 +127,8 @@ The perpetual-directive repository: one stable audio surface behind pluggable ca
   SIGINT/SIGTERM stop), `--check` (a store verification that does not serve and does not contact
   IPFS), `--seed`, `--no-generate`, and `push_pull` as the smallest honest client. systemd unit
   included.
+- Quality gates all green: `cargo fmt --check`, `cargo clippy --all-targets` (0 warnings),
+  `RUSTDOCFLAGS="-D warnings" cargo doc`, and 115 tests in debug and release.
 - Reticulum remains deliberately unbuilt: it needs a physical interface.
 
 ## Standing decisions
