@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — hunt for flakiness in the timing-sensitive suites
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** The concurrency, robustness, binary and IPFS tests are timing-sensitive by design -- session
+cap waits, a stalled reader against an 8 MiB item, a hung mirror, a header flood -- and each had only
+ever been observed once per change. A guard that passes once and fails intermittently is not a
+guard.
+
+**Method.** Eight consecutive runs of `--test concurrency --test robustness --test binary
+--test ipfs_mirror` (25 tests each).
+
+**Result.** 8/8 clean, 200 executions, zero failures, stable pass count every run.
+
+**Commit identifiers:** none (no change needed).
+
+---
+
 ## 2026-11-14 — refresh PROJECT_STATE's bar and gates
 
 **Repository:** `open-agent-graph`, commit `97c0e13` on `main`; records in the same file.
