@@ -47,6 +47,33 @@ format.
 
 ---
 
+## 2026-11-14 — fuzz the codec and carriers for panic-safety
+
+**Repository:** `oag-listend`, commit `ba7d58f` on `master`; records in `open-agent-graph`.
+
+**Why.** Every guard so far checks a *property*; none checked that hostile input cannot take the
+daemon down. A panic in a request path is an availability bug, and the parsers were only ever fed
+well-formed or deliberately-malformed-but-designed inputs.
+
+**What changed.** New `tests/robustness.rs`, fully deterministic (fixed-seed LCG, so any failure
+reproduces):
+- `random_bodies_never_panic_the_codec`: 5,000 random bodies through `decode_frame`,
+  `decode_request`, `decode_response`, and `AudioFormat::sniff`, plus declared lengths at the cap
+  boundary (`MAX_FRAME_BYTES`), just past it, and `u32::MAX`.
+- `garbage_on_the_wire_leaves_the_daemon_serving`: 100 validly-framed random bodies to the native
+  carrier and 100 terminated random heads to HTTP -- sized so nothing blocks -- then asserts the
+  daemon still answers `Hello` and accepts a publish with a verifying hash.
+
+**Result.** Both green on the first run: no panics, no unexpected error variants, and the daemon
+served normally immediately after 200 hostile connections.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 54 end-to-end, 0 failed**; clippy and
+rustfmt clean.
+
+**Commit identifiers:** `oag-listend` `ba7d58f`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — put `#![forbid(unsafe_code)]` on the two files that lacked it
 
 **Repository:** `oag-listend`, commit `6d87c5b` on `master`; records in `open-agent-graph`.
