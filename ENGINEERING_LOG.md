@@ -47,6 +47,25 @@ format.
 
 ---
 
+## 2026-11-14 — test the operator client's own CLI
+
+**Repository:** `oag-listend`, commit `4368dbf` on `master`; records in `open-agent-graph`.
+
+**The gap.** `push_pull` is a shipped artefact and its `--help` had already drifted once (the usage
+line omitted `--version`/`--help`), but unlike the daemon binary it had **no automated coverage** --
+only hand verification.
+
+**What changed.** A test locates the built example relative to the test binary and asserts every option
+is documented (`--addr`, `--udp`, `--unix`, `--seed`, `--version`, `--help`), that `--version`
+succeeds, and that an unknown flag exits 2 rather than panicking. The same guard the daemon binary has.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 52 end-to-end, 0 failed**; clippy, rustdoc
+and rustfmt clean.
+
+**Commit identifiers:** `oag-listend` `4368dbf`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — give `push_pull` a `--unix` option
 
 **Repository:** `oag-listend`, commit `7bb4df7` on `master`; records in `open-agent-graph`.
