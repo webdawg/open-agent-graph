@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — bring SPEC's status paragraph up to date
+
+**Repository:** `oag-listend`, commit `311d268` on `master`; records in `open-agent-graph`.
+
+**The defect.** Following the directive's own start-up steps, I read SPEC's status line for the first
+time in a while: it claimed **56 unit + 33 end-to-end** (actual: **64 + 58**) and its coverage list
+predated the entire IPFS surface, the hostile-input fuzzing, the release verification, the
+`--unix` client, and `scripts/check.sh`. A reader would have learned almost nothing true about what is
+actually proven.
+
+**What changed.** Rewritten against what the suite covers today: the back-and-forth, eviction and its
+CID sidecar, the frame cap and lying lengths, listing pagination, all six signatures both ways,
+per-format HTTP types, every refusal path, shared store, persistence, concurrency including the hung
+mirror, the two-way IPFS mirror with its idempotence guarantees, the musical ping on every carrier,
+the robustness fuzzing, and both shipped binaries' CLIs. Also states that `./scripts/check.sh` holds
+the whole bar.
+
+**Tests executed.** `cargo test -p oag-listend`: 64 unit + 58 end-to-end, 0 failed;
+`./scripts/check.sh` green.
+
+**Commit identifiers:** `oag-listend` `311d268`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — write the CID sidecar off the store lock
 
 **Repository:** `oag-listend`, commit `afde29d` on `master`; records in `open-agent-graph`.
