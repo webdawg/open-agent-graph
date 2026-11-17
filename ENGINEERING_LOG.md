@@ -47,6 +47,27 @@ format.
 
 ---
 
+## 2026-11-14 — test that eviction removes the recorded CID sidecar
+
+**Repository:** `oag-listend`, commit `b315a10` on `master`; records in `open-agent-graph`.
+
+**The gap.** The persisted-CID work claimed eviction takes the `.cid` with the audio, but nothing
+tested it. A sidecar left behind would be actively wrong: a later restart would load a CID for audio
+that is no longer held and skip re-adding it, so an evicted item could silently vanish from IPFS.
+
+**What changed.** New `eviction_removes_the_recorded_cid`: a store bounded to one sound, publish two,
+assert the evicted audio *and* its `.cid` are gone while the survivor keeps its own.
+
+**Discriminating.** Leaving the sidecar behind (removing the unlink) makes the test fail; restoring
+it passes.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 58 end-to-end, 0 failed**;
+`./scripts/check.sh` green.
+
+**Commit identifiers:** `oag-listend` `b315a10`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — persist the CID index so restarts stop re-adding
 
 **Repository:** `oag-listend`, commit `b7715d6` on `master`; records in `open-agent-graph`.
