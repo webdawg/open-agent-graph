@@ -47,6 +47,33 @@ format.
 
 ---
 
+## 2026-11-14 — do not re-add audio that is already on IPFS
+
+**Repository:** `oag-listend`, commit `e357b82` on `master`; records in `open-agent-graph`.
+
+**How it was found.** Reading the acceptance output rather than just its pass/fail: the same bytes
+came back under three different CIDs, one per carrier. `accept` returns early for a duplicate content
+hash -- but `accept_and_mirror` mirrored *unconditionally* afterwards, so every repeated publish, and
+every restart via `mirror_existing` (same path), rewrote the whole library to IPFS.
+
+**What changed.** Both mirror paths now skip a content hash that already has a recorded CID. Mirroring
+is idempotent; a restart no longer re-uploads what it already holds. SPEC states this.
+
+**The test nearly passed vacuously twice**, which is the more useful lesson:
+1. Its stub accepted exactly one connection, so a redundant add was answered by nothing and never
+   counted. Raising the accept count exposed a `Connection refused` instead.
+2. The robust evidence is the **mirror log**: a redundant attempt is logged even if the network call
+   fails. The assertion is now `mirror_log().len() == 1`.
+
+Verified discriminating: removing the guard makes the test fail; restoring it passes.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 56 end-to-end, 0 failed**;
+`./scripts/check.sh` green across fmt, clippy, rustdoc, tests, and the systemd unit.
+
+**Commit identifiers:** `oag-listend` `e357b82`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — confirm the tooling invariant after adding a script
 
 **Repositories:** all five; records in `open-agent-graph`.
