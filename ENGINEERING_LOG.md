@@ -47,6 +47,31 @@ format.
 
 ---
 
+## 2026-11-14 — verify refused startup generation through the binary
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** SPEC promises "a generated sound the store refuses is printed as a rejection rather than
+dropped", which was covered only by a unit test of `publish_generated`. This exercises it through the
+shipped binary.
+
+**Observed with `--max-bytes 100`** (every generated sound exceeds the bound):
+
+```
+generated sound rejected: audio is 1324 bytes, larger than the 100 byte store bound
+generated sound rejected: audio is 1484 bytes, ...
+generated sound rejected: audio is 844 bytes, ...
+generated sound rejected: audio is 44844 bytes, ...
+oag-listend listening on 127.0.0.1:7895   held 0
+```
+
+All four refusals reported with their sizes; the daemon still starts and serves (unknown hash -> 404);
+new audio is refused 413 with nothing stored (`items: 0`); SIGTERM exits 0.
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — sweep for leftovers and unwind paths in the crate
 
 **Repository:** `oag-listend`, no code change.
