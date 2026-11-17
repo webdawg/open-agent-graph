@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — have `push_pull` report each item's IPFS CID
+
+**Repository:** `oag-listend`, commit `d15ece8` on `master`; records in `open-agent-graph`.
+
+**The gap.** The shipped client is the "smallest honest demonstration" of audio back and forth, but
+it discarded the CID the daemon now returns. An operator running against a mirroring daemon could
+only learn CIDs from the daemon's shutdown report.
+
+**What changed.** Each fetched item prints `ipfs=<cid>` when one is known; the example's own `--help`
+says so. Verified with release binaries against a stub Kubo:
+
+```
+fetched tone:  f3cc52cb94cfb6dc same-hash 1484 bytes verified=true ipfs=bafyrelay1
+fetched noise: 70ae79d80760f361 same-hash  844 bytes verified=true ipfs=bafyrelay2
+```
+
+**Tests executed.** `cargo test -p oag-listend`: 64 unit + 51 end-to-end, 0 failed; clippy and rustdoc
+clean.
+
+**Commit identifiers:** `oag-listend` `d15ece8`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — rustdoc clean under denied warnings
 
 **Repository:** `oag-listend`, commit `a16f3b4` on `master`; records in `open-agent-graph`.
