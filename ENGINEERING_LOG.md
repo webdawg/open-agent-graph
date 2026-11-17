@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — `scripts/check.sh`: the whole bar in one command
+
+**Repository:** `oag-listend`, commit `d44d880` on `master`; records in `open-agent-graph`.
+
+**The gap.** The repository is now held to four gates -- `cargo fmt --check`, `cargo clippy
+--all-targets`, `RUSTDOCFLAGS="-D warnings" cargo doc`, and the suite in debug *and* release -- but
+they existed only as knowledge in prior entries. A future invocation had to remember all of them.
+
+**What changed.** New executable `scripts/check.sh`: runs the gates in order, stops at the first
+failure, prints `all gates passed`. `--release` adds the release suite; any other argument exits 2
+with usage. README's Build section documents both forms.
+
+**Bugs caught while writing it.** `set -u` plus an unset `RELEASE` aborted the script at the test
+step after three gates had already run; initialised explicitly.
+
+**Verified.** `./scripts/check.sh` exit 0, `./scripts/check.sh --release` exit 0 (release suite
+included), `./scripts/check.sh --bogus` exit 2 with usage.
+
+**Commit identifiers:** `oag-listend` `d44d880`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — test an oversized body without `Expect`
 
 **Repository:** `oag-listend`, commit `9233b84` on `master`; records in `open-agent-graph`.
