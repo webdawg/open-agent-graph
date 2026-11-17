@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — document the non-pruning files in `scripts/`
+
+**Repository:** `oag-listend`, commit `840a946` on `master`; records in `open-agent-graph`.
+
+**The gap.** `scripts/README.md` is titled around pruning and documented only the three pruner
+scripts, while `check.sh` and `oag-listend.service` sit in the same directory undocumented -- an
+operator listing the directory sees files nothing explains.
+
+**What changed.** A short "Other files in this directory" section covering both, and stating why they
+are *not* copied to the other four repositories (there is no audio daemon there to check), so the
+"copy a change to the other four" rule is not misread as covering them.
+
+**Tests executed.** Documentation only; `./scripts/check.sh` remains green.
+
+**Commit identifiers:** `oag-listend` `840a946`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — hunt for flakiness in the timing-sensitive suites
 
 **Repository:** `oag-listend`, no code change.
