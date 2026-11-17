@@ -47,6 +47,33 @@ format.
 
 ---
 
+## 2026-11-14 — persist the CID index so restarts stop re-adding
+
+**Repository:** `oag-listend`, commit `b7715d6` on `master`; records in `open-agent-graph`.
+
+**How it was found.** Reading my own claim against reality: the README said "a repeated publish, and
+every restart, adds what is already recorded exactly once", but idempotence lived only in memory.
+Two runs against a counting stub showed the same two content hashes under four different CIDs -- run
+2 re-uploaded everything.
+
+**What changed.**
+- The CID recorded for a content hash is written beside the audio as `<hash>.cid`, validated on read
+  (small, plausible identifier), and reloaded when the directory loads, populating both index maps.
+- Eviction removes the sidecar along with the audio and media-type sidecars.
+- `mirror_existing` now returns the number of **offers made**, not items considered, so the
+  operator's `offered N of M stored item(s)` line cannot overstate work done. SPEC states the
+  persistence and that a lost sidecar costs one redundant add, never audio.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 57 end-to-end, 0 failed**;
+`./scripts/check.sh` green. New `a_restart_does_not_readd_what_the_store_recorded` proves it two ways
+-- no outcome logged and no request reaching the node -- because a redundant add could fail to connect
+and still be an attempt. Verified discriminating by ignoring the persisted CID: fails without it,
+passes with it.
+
+**Commit identifiers:** `oag-listend` `b7715d6`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — inspection only; no further increment available
 
 **Repositories:** all five, no code change.
