@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — full gate run on current HEAD (closing verification)
+
+**Repositories:** all five, no code change.
+
+**Result.** `./scripts/check.sh --release` exit 0: fmt, clippy `--all-targets`, rustdoc with warnings
+denied, **120 tests in release**, and `systemd-analyze verify` on the shipped unit.
+
+All five checkouts clean and pushed on their correct branches (`main`, `main`, `master`, `master`,
+`master`).
+
+**What is still not serving.** Nothing in oag-listend. The three items that remain need resources
+this machine does not have or a protocol decision from the operator:
+
+- Reticulum -- needs a physical interface and `oag-storage`.
+- Real-Kubo testing of both IPFS halves -- needs a running node; everything so far is tested against
+  stubs and says so in SPEC.
+- A native-protocol read by CID -- would be a sixth frame operation, which SPEC deliberately excludes.
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — document the non-pruning files in `scripts/`
 
 **Repository:** `oag-listend`, commit `840a946` on `master`; records in `open-agent-graph`.
