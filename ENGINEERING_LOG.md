@@ -47,6 +47,22 @@ format.
 
 ---
 
+## 2026-11-14 — run the whole suite in release mode
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** Several guards are timing-sensitive by design -- the session cap (700 ms of expected
+silence), the stalled reader (a 1 KiB receive buffer against an 8 MiB item), the hung mirror, and the
+header flood -- and until now they had only ever been run in debug. Operators run release, so any
+optimisation-sensitive fragility would surface there first.
+
+**Result.** `cargo test --release -p oag-listend`: **115 passed, 0 failed**, across all twelve test
+targets, with the timing-sensitive tests comfortably inside their bounds.
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — record the two-way IPFS surface in PROJECT_STATE
 
 **Repository:** `open-agent-graph`, commit `284070a` on `main`; records in the same file.
