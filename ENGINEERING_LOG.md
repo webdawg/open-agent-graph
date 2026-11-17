@@ -47,6 +47,25 @@ format.
 
 ---
 
+## 2026-11-14 — complete SPEC's HTTP route list
+
+**Repository:** `oag-listend`, commit `dc5c00c` on `master`; records in `open-agent-graph`.
+
+**The gap.** Reading the HTTP carrier section against the router, as the directive's step 4 suggests:
+it listed every route **except `GET /ipfs/{cid}`** -- the read half of the IPFS surface -- and still
+said `POST /audio` goes through `AudioStore::accept` when it now goes through `accept_and_mirror`,
+like every other carrier.
+
+**What changed.** One sentence adding the CID route (local-first for held audio, otherwise fetched from
+Kubo, under the same sniff rule, with `X-Content-Hash` and immutable caching), and a correction to
+name the real entry point.
+
+**Tests executed.** No behaviour change; `./scripts/check.sh` green (64 unit + 58 end-to-end).
+
+**Commit identifiers:** `oag-listend` `dc5c00c`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — bring SPEC's status paragraph up to date
 
 **Repository:** `oag-listend`, commit `311d268` on `master`; records in `open-agent-graph`.
