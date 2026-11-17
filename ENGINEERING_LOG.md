@@ -47,6 +47,31 @@ format.
 
 ---
 
+## 2026-11-14 — drop an unused IPFS accessor; flag-interaction matrix checked
+
+**Repository:** `oag-listend`, commit `3a66325` on `master`; records in `open-agent-graph`.
+
+**Cleanup.** Audited every public item added with the mirror for actual use. `is_mirroring()` had
+zero callers; removed so the surface matches what the daemon and tests call. Everything else
+(`mirror_log`, `mirror_summary`, `content_id`, `record_mirror_outcome`, `set_ipfs`,
+`accept_and_mirror`, `STARTUP_MIRROR_BUDGET`, `MirrorOutcome`) is used.
+
+**Flag interactions checked by hand**, since the `--check --ipfs-api` defect was exactly that kind:
+
+| Combination | Behaviour |
+|---|---|
+| `--check --unix /nonexistent/...` | exits 0, touches nothing |
+| `--check --no-generate` | store report only |
+| `--check --max-bytes 0` | reports bound 0 / item bound 0, exit 0 |
+| `--max-bytes 0` serving | POST -> 413 |
+| `--ipfs-api --check` | fixed earlier this session; no node contacted |
+
+**Tests executed.** `cargo test -p oag-listend`: 62 unit + 47 end-to-end, 0 failed; 0 warnings.
+
+**Commit identifiers:** `oag-listend` `3a66325`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — keep `--check` a store verification, not a mirror run
 
 **Repository:** `oag-listend`, commit `bace3a3` on `master`; records in `open-agent-graph`.
