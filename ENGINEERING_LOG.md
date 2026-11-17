@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — extend the panic-safety fuzz to UDP and the Unix socket
+
+**Repository:** `oag-listend`, commit `aef6f73` on `master`; records in `open-agent-graph`.
+
+**The gap.** The new guard covered the native and HTTP receive paths. UDP decodes datagrams through
+its own function, and the Unix carrier accepts through its own path, so a panic specific to either
+would have been missed.
+
+**What changed.** Both carriers now take 100 validly-framed garbage bodies before the daemon must
+still answer `Hello` and accept a publish. The test binds all four carriers around one store.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 54 end-to-end, 0 failed**; clippy and
+rustfmt clean.
+
+**Commit identifiers:** `oag-listend` `aef6f73`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — fuzz the codec and carriers for panic-safety
 
 **Repository:** `oag-listend`, commit `ba7d58f` on `master`; records in `open-agent-graph`.
