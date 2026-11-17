@@ -47,6 +47,18 @@ format.
 
 ---
 
+## 2026-11-14 — verify the non-loopback warning and serving on a real interface
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** SPEC promises "when a carrier binds a non-loopback address the daemon says so" and the systemd unit binds `0.0.0.0`; both had only ever been read, never run.
+
+**Observed.** Binding `0.0.0.0`, the note is printed once per non-loopback carrier (native, HTTP, UDP). Serving over the host's actual address (`10.0.181.6`) rather than loopback: HTTP `GET /` -> 200, `POST /audio` -> 201, native publish/fetch `verified=true`, HTML refused, SIGTERM exit 0.
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — verify refused startup generation through the binary
 
 **Repository:** `oag-listend`, no code change.
