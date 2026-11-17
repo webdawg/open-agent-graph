@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — finish reconciling SPEC with the code
+
+**Repository:** `oag-listend`, commits `97d99ee` and `0cb16ba` on `master`; records in
+`open-agent-graph`.
+
+**Method.** Continued the directive's own step 4 -- read SPEC section by section against the router,
+the store, and the session loops -- rather than trusting memory of what was built.
+
+**Drift found and corrected.**
+- The native carrier section omitted `push_pull --unix` from its examples, and still said publishes go
+  through `AudioStore::accept` when every carrier now goes through `accept_and_mirror`.
+- The persistence section described the content-addressed directory without `<hash>.cid`, did not say
+  a `.cid` sidecar must be a plausible identifier within 128 bytes, and did not note that sidecars do
+  not count toward the entry cap or are removed on eviction.
+- The IPFS client's test coverage was described as "a stub that mimics Kubo's add endpoint"; both
+  halves are stub-tested.
+
+**Tests executed.** No behaviour change; `./scripts/check.sh` green (64 unit + 58 end-to-end).
+
+**Commit identifiers:** `oag-listend` `97d99ee`, `0cb16ba`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — complete SPEC's HTTP route list
 
 **Repository:** `oag-listend`, commit `dc5c00c` on `master`; records in `open-agent-graph`.
