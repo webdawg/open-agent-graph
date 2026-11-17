@@ -47,6 +47,35 @@ format.
 
 ---
 
+## 2026-11-14 — verify the IPFS path with the release binary; a stale-artifact trap
+
+**Repository:** `oag-listend`, no code change.
+
+**The trap.** The first attempt to verify the shipped artifact failed with `unknown argument
+--ipfs-api` -- and correctly so: `target/release/oag-listend` was timestamped 14:09, hours old, while
+`target/debug` was current. An earlier `cargo build --release -p oag-listend --examples` had left the
+release *binary* stale even though it compiled successfully. Building the bin explicitly refreshed it
+(992,352 -> 1,035,544 bytes, flag present). Lesson recorded: verify an artifact by its content, not by
+having run a build.
+
+**Verified with the fresh release binary** (`push_pull` also release-built), against a Python stub
+mimicking `/api/v0/add`:
+- Startup prints `offering accepted audio to IPFS at 127.0.0.1:7902 (best-effort)`; store
+  `loaded 0 skipped 0 evicted 0`; four generated items.
+- TCP publish/fetch verified byte-for-byte; HTML labelled `audio/wav` -> typed `Rejected`.
+- Shutdown after SIGTERM (exit 0):
+  ```
+  ipfs mirror: 6 mirrored, 0 failed
+    3c16fc2d5862d8ce -> bafyverify1
+    ...
+    3d065856e46d39e7 -> bafyverify6
+  ```
+  Six = the four startup sounds plus the tone and noise published during the run.
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — refuse a TLS Kubo endpoint instead of sending audio in clear
 
 **Repository:** `oag-listend`, commit `13ce5bb` on `master`; records in `open-agent-graph`.
