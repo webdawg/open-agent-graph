@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — confirm the tooling invariant after adding a script
+
+**Repositories:** all five; records in `open-agent-graph`.
+
+**Why.** The directive states that `prune-target.py`, `rustc-wrapper.sh`, and
+`test_prune_target.py` are byte-identical across all five repositories, and that a change to one is
+copied to the other four. This invocation added `scripts/check.sh` to oag-listend, so the invariant
+was re-measured rather than assumed.
+
+**Result -- holds.** One hash per script across all five checkouts:
+`prune-target.py` `e9235a0c9fb268af`, `rustc-wrapper.sh` `db7326a7f865c7aa`,
+`test_prune_target.py` `e456fa76baced4d3`.
+
+**Scope note.** `check.sh` is deliberately *not* in that set: it runs gates for the audio daemon, which
+only exists in oag-listend. Copying it elsewhere would fail.
+
+**Commit identifiers:** none (no change needed).
+
+---
+
 ## 2026-11-14 — include the systemd unit in `scripts/check.sh`
 
 **Repository:** `oag-listend`, commit `2480f5f` on `master`; records in `open-agent-graph`.
