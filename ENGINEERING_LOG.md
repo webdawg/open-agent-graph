@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — write the CID sidecar off the store lock
+
+**Repository:** `oag-listend`, commit `afde29d` on `master`; records in `open-agent-graph`.
+
+**The defect.** Reading back the persisted-CID code I had just written found a blocking
+`std::fs::write` executed while the store mutex was held -- precisely the pattern this crate removes
+everywhere else (`persist` uses `tokio::fs` for exactly this reason). A slow disk would have stalled
+every other client behind one 180-byte sidecar write.
+
+**What changed.** The directory is read under a short lock, the sidecar written asynchronously with
+no lock held via a `persist_cid` helper, then the lock retaken for the in-memory record. The startup
+mirror pass uses the same helper.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 58 end-to-end, 0 failed**;
+`./scripts/check.sh` green.
+
+**Commit identifiers:** `oag-listend` `afde29d`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — test that eviction removes the recorded CID sidecar
 
 **Repository:** `oag-listend`, commit `b315a10` on `master`; records in `open-agent-graph`.
