@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — verify idempotent mirroring on the release binary, and release gates
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** The idempotence fix was unit-tested; this confirms it through the operator path on the
+artifact that ships, and re-runs the whole gate set in release, which had not happened since the
+fuzzing and mirror work landed.
+
+**Observed.**
+- Three identical HTTP publishes against a daemon with `--ipfs-api` produced exactly one mirror:
+  ```
+  oag-listend shutting down
+    ipfs mirror: 1 mirrored, 0 failed
+      5e0e16cd1ccf54c9 -> bafyrelay1
+  ```
+  Before the fix each publish would have added again.
+- `./scripts/check.sh --release`: exit 0 across fmt, clippy, rustdoc `-D warnings`, the full suite in
+  release, and the systemd unit.
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — do not re-add audio that is already on IPFS
 
 **Repository:** `oag-listend`, commit `e357b82` on `master`; records in `open-agent-graph`.
