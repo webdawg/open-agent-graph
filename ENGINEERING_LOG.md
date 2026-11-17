@@ -47,6 +47,25 @@ format.
 
 ---
 
+## 2026-11-14 — verify licence compliance across all five repositories
+
+**Repositories:** all five, by remote; records in `open-agent-graph`.
+
+**Why.** The directive states the licence requirement explicitly ("GNU Affero General Public License,
+version 3 or any later version ... Do not relicense"), so it should be checked rather than assumed.
+
+**Result -- compliant, nothing changed.**
+- All five `LICENSE` files carry the GNU AGPL **Version 3** text.
+- All manifests declare `license = "AGPL-3.0-or-later"` (`license.workspace = true` in the crates).
+- No conflicting headers anywhere in `crates/` or `scripts/`: no MIT, BSD, Apache-2.0, GPL-2, or SPDX
+  identifiers in `oag-listend`.
+- `README.md` and `SPEC.md` state the licence in the directive's own terms.
+
+**Commit identifiers:** none (no change needed). `cargo test -p oag-listend` remains 64 unit +
+52 end-to-end, 0 failed.
+
+---
+
 ## 2026-11-14 — verify the systemd unit and document the IPFS option in it
 
 **Repository:** `oag-listend`, commit `f673912` on `master`; records in `open-agent-graph`.
