@@ -47,6 +47,34 @@ format.
 
 ---
 
+## 2026-11-14 — serve audio by CID over HTTP
+
+**Repository:** `oag-listend`, commit `b452fc5` on `master`; records in `open-agent-graph`.
+
+**The gap.** SPEC's last functional item. The mirror could *publish* and a client could learn a CID,
+but nothing could read one back: a client holding only a CID still needed this daemon (or its own
+IPFS node) to get bytes that were not in the local store.
+
+**What changed.**
+- `IpfsPublisher::cat(cid)` -- the read half, calling `/api/v0/cat` with the same per-read/write
+  bounds as `add` and a response cap of `MAX_SERVABLE_BYTES` plus the reply-head allowance.
+- `GET /ipfs/{cid}` on the HTTP carrier. It applies exactly the audio rule every other inbound path
+  applies: non-audio is refused with **nothing echoed and nothing stored**, an implausible identifier
+  is refused before any request is sent (so a crafted path cannot become query injection), an
+  unreachable node answers `502`, and with no mirror configured the route does not exist (`404`).
+- Documented honestly: the crate carries no multihash implementation, so it identifies what comes
+  back by the CID the caller asked for rather than verifying the bytes hash to it.
+- No new frame operation -- this is a carrier-level route, so the protocol stays at five operations.
+
+**Tests executed.** `cargo test -p oag-listend`: **63 unit + 50 end-to-end, 0 failed**. New: a
+served object carries the right content type and `ETag: "<cid>"`; a non-audio object is refused
+without being echoed; the no-mirror/unreachable/bad-identifier cases give 404/502/502; and a bad CID
+is refused with no network call at all.
+
+**Commit identifiers:** `oag-listend` `b452fc5`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — bring PROJECT_STATE's oag-listend record up to date
 
 **Repository:** `open-agent-graph`, commit `6b3047c` on `main`; records in the same file.
