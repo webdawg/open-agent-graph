@@ -496,7 +496,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: Reticulum, and testing IPFS against a real node.** TCP, HTTP, UDP, and the Unix
+1. **oag-listend: Reticulum, and testing IPFS against a real node.** The imagination `Transport`
+   seam is now fully accounted for: TCP, UDP, HTTP, and IPFS are implemented here, Reticulum is
+   hardware-bound, and the HTTP CONNECT tunnel is a *client-side* wrapper (`ProxiedTransport`) that
+   needs no server code -- recorded so it is not re-investigated as missing. TCP, HTTP, UDP, and the Unix
    socket are done, all sharing one store and all serving the musical ping, plus an IPFS mirror
    behind `--ipfs-api`. Reticulum still needs a physical interface and is honestly unbuilt; the IPFS
    mirror is tested only against a stub, never a real Kubo node. The service unit and clean SIGTERM
