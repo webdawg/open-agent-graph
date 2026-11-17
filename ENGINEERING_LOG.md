@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — refresh PROJECT_STATE's bar and gates
+
+**Repository:** `open-agent-graph`, commit `97c0e13` on `main`; records in the same file.
+
+**The drift.** The measured table said 115 tests (now 120), and the capabilities section did not
+mention `scripts/check.sh` or the panic-safety fuzzing added since.
+
+**What changed.** Table updated to 120; capabilities now state that every gate is one command
+(`scripts/check.sh [--release]` running fmt, clippy, rustdoc `-D warnings`, the suite, and
+`systemd-analyze verify`) and that hostile input is fuzzed across the codec and all four carriers with
+liveness asserted after. Next-priorities bar updated to 64 unit + 56 end-to-end.
+
+**Tests executed.** No code change; `./scripts/check.sh` remains green.
+
+**Commit identifiers:** `open-agent-graph` `97c0e13`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — document mirror idempotence in the README
 
 **Repository:** `oag-listend`, commit `802eae2` on `master`; records in `open-agent-graph`.
