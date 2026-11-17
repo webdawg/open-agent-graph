@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — include the systemd unit in `scripts/check.sh`
+
+**Repository:** `oag-listend`, commit `2480f5f` on `master`; records in `open-agent-graph`.
+
+**The gap.** The script said "every quality gate", but it omitted the one gate that is not a cargo
+command: `systemd-analyze verify` on the shipped unit.
+
+**What changed.** It now verifies the unit against a temporary copy whose `ExecStart` names a binary
+this checkout has actually built (release preferred, then debug), skipping with a message when the
+tool or the binary is absent rather than failing spuriously.
+
+**Two findings while wiring it.**
+- `systemd-analyze` requires the file be named `*.service`; a bare `mktemp` name fails with
+  `Failed to prepare filename ...: Invalid argument`.
+- The binary may not have been built at all, which would look identical to a broken unit.
+
+**Verified.** `./scripts/check.sh` exits 0 with all five gates: fmt, clippy, rustdoc, tests, systemd
+unit.
+
+**Commit identifiers:** `oag-listend` `2480f5f`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — `scripts/check.sh`: the whole bar in one command
 
 **Repository:** `oag-listend`, commit `d44d880` on `master`; records in `open-agent-graph`.
