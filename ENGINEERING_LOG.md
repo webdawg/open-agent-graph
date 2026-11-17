@@ -47,6 +47,39 @@ format.
 
 ---
 
+## 2026-11-14 — verify the two-way IPFS surface with the release binaries
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** The by-CID read path had only been exercised through tests on the debug build. The shipped
+artifact is what an operator runs, and this is the first feature whose value depends on two halves
+working together against a node.
+
+**Setup.** `cargo build --release -p oag-listend` (explicitly the bin, not `--examples`), plus a Python
+stub implementing both `/api/v0/add` and `/api/v0/cat` and remembering what it was given.
+
+**Observed.**
+```
+published hash: 5e0e16cd1ccf54c9...
+CID from X-IPFS-CID: bafyrelay1
+GET /ipfs/$CID -> 200 audio/wav 8044B
+byte-identical to what was posted
+  ETag: "bafyrelay1"
+  Cache-Control: public, max-age=31536000, immutable
+  X-Content-Hash: 5e0e16cd1ccf54c9...d78d85a
+exit after SIGTERM: 0
+```
+The write half stored the audio, the publish answered with the CID, and the read half served the same
+bytes back identified by that CID with a BLAKE3 the receiver can check.
+
+**Harness note.** A first stub attempt over-read past the header terminator and lost the start of the
+multipart body; fixed in the harness, not the daemon. Worth recording because a faulty stub looks
+exactly like a broken carrier.
+
+**Commit identifiers:** none (no code change).
+
+---
+
 ## 2026-11-14 — make CID-served audio cacheable and verifiable
 
 **Repository:** `oag-listend`, commit `2fb53b6` on `master`; records in `open-agent-graph`.
