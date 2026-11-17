@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — fuzz the lying-length case
+
+**Repository:** `oag-listend`, commit `b0021e0` on `master`; records in `open-agent-graph`.
+
+**The gap.** The directive's sharpest bound is "never an unbounded read", and the new robustness
+guard never fed the daemon a size it *declares* but does not send -- the exact shape a hostile or
+broken peer uses to make a reader wait for bytes that never arrive.
+
+**What changed.** The guard now sends short bodies under native declarations of 1, 100, 100,000 and
+`MAX_FRAME_BYTES`, then half-closes, and asserts the session ends at the close within two seconds.
+HTTP gets the same shape via an unsatisfied `Content-Length`, asserting it answers or closes rather
+than staying open.
+
+**Why the assertion is trustworthy.** Making `read_exact_bounded` ignore EOF -- i.e. pretending the
+close never happened -- makes this test **fail at 2.1 s**; restoring the real code makes it pass.
+Without that probe the loop would have asserted nothing at all.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 54 end-to-end, 0 failed**; clippy and
+rustfmt clean.
+
+**Commit identifiers:** `oag-listend` `b0021e0`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — extend the panic-safety fuzz to UDP and the Unix socket
 
 **Repository:** `oag-listend`, commit `aef6f73` on `master`; records in `open-agent-graph`.
