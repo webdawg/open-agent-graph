@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — put `#![forbid(unsafe_code)]` on the two files that lacked it
+
+**Repository:** `oag-listend`, commit `6d87c5b` on `master`; records in `open-agent-graph`.
+
+**The gap.** The directive requires `#![forbid(unsafe_code)]` unless justified. Every library module
+had it; **`main.rs` and `examples/push_pull.rs` did not**, so the constraint was satisfied only by
+convention rather than stated everywhere.
+
+**What changed.** Both files now carry the attribute. There is no `unsafe` anywhere in the crate, so
+this adds a guarantee rather than changing behaviour.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 52 end-to-end, 0 failed**; clippy and
+rustfmt clean.
+
+**Commit identifiers:** `oag-listend` `6d87c5b`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — verify licence compliance across all five repositories
 
 **Repositories:** all five, by remote; records in `open-agent-graph`.
