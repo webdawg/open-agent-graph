@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — keep `--check` a store verification, not a mirror run
+
+**Repository:** `oag-listend`, commit `bace3a3` on `master`; records in `open-agent-graph`.
+
+**The defect.** Found by checking flag interactions rather than single features. The IPFS setup was
+placed before the `--check` early return, so `--check --ipfs-api ADDR` would configure a publisher
+and run `mirror_existing` over the whole library -- up to the 30 s budget -- print two extra lines,
+and only then print the store report. That contradicts `--check`'s documented contract ("open the
+store, print the load report, and exit") and would surprise any script expecting a quick answer.
+
+**What changed.** The check now returns before any IPFS configuration; the mirror is attached only on
+the serving path. New test: with an unreachable `--ipfs-api`, `--check` still succeeds fast, prints
+`store ok`, and does not announce a mirror.
+
+**Tests executed.** `cargo test -p oag-listend`: **62 unit + 47 end-to-end, 0 failed**; 0 warnings.
+
+**Commit identifiers:** `oag-listend` `bace3a3`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — verify the IPFS path with the release binary; a stale-artifact trap
 
 **Repository:** `oag-listend`, no code change.
