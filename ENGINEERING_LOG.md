@@ -47,6 +47,25 @@ format.
 
 ---
 
+## 2026-11-14 — make CID-served audio cacheable and verifiable
+
+**Repository:** `oag-listend`, commit `2fb53b6` on `master`; records in `open-agent-graph`.
+
+**The gap.** The by-CID read route served bytes with no caching header and, unlike every other route,
+no way for the receiver to prove what it had got. A client holding a CID could not verify the audio it
+received beyond trusting the daemon.
+
+**What changed.** The route now answers with `Cache-Control: public, max-age=31536000, immutable`
+(content at a CID cannot change), an `ETag` of the CID, and `X-Content-Hash` carrying the BLAKE3 of the
+bytes actually sent -- the same verification guarantee the rest of the carrier gives.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 50 end-to-end, 0 failed**; the by-CID test
+now asserts all three headers and checks `X-Content-Hash` against an independently computed BLAKE3.
+
+**Commit identifiers:** `oag-listend` `2fb53b6`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — refuse chunked IPFS replies instead of misreading them as audio
 
 **Repository:** `oag-listend`, commit `5d6ef42` on `master`; records in `open-agent-graph`.
