@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — refuse a TLS Kubo endpoint instead of sending audio in clear
+
+**Repository:** `oag-listend`, commit `13ce5bb` on `master`; records in `open-agent-graph`.
+
+**The defect.** Auditing the IPFS client found that `split_api` stripped an `https://` prefix and
+then spoke plain HTTP to whatever port followed. An operator pasting a TLS endpoint would see a
+configuration that appeared to work while audio went out unencrypted.
+
+**What changed.** `https://` is now refused with a stated reason rather than silently downgraded.
+`http://host:port` and a bare `host:port` still resolve, which the new unit test pins alongside the
+refusal. README and SPEC record the behaviour.
+
+**Tests executed.** `cargo test -p oag-listend`: **62 unit + 46 end-to-end, 0 failed**; 0 warnings.
+
+**Commit identifiers:** `oag-listend` `13ce5bb`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — keep a hung IPFS node from stalling the daemon
 
 **Repository:** `oag-listend`, commits `2125e51` and `2a72087` on `master`; records in
