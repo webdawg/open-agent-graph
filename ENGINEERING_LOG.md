@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — verify the systemd unit and document the IPFS option in it
+
+**Repository:** `oag-listend`, commit `f673912` on `master`; records in `open-agent-graph`.
+
+**Why.** The systemd unit is a shipped artefact that had only ever been read, never parsed, and it
+never mentioned `--ipfs-api` -- so an operator reading the unit could not discover the mirror exists.
+
+**What changed.**
+- Added a commented line to `ExecStart` showing how to enable `--ipfs-api 127.0.0.1:5001` and what
+  its failure behaviour is, pointing at SPEC's IPFS section.
+- Ran `systemd-analyze verify`: **clean**, with no warnings on `User`/`Group`, `StateDirectory`,
+  `RuntimeDirectory`, `ReadWritePaths`, or `ProtectSystem`. Its only complaint before was that
+  `/usr/local/bin/oag-listend` does not exist yet, which is the documented install step; verifying a
+  copy whose `ExecStart` points at the built binary removes that artefact of not being installed.
+
+**Tests executed.** No code change; `cargo test -p oag-listend` remains 64 unit + 52 end-to-end,
+0 failed.
+
+**Commit identifiers:** `oag-listend` `f673912`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — test the operator client's own CLI
 
 **Repository:** `oag-listend`, commit `4368dbf` on `master`; records in `open-agent-graph`.
