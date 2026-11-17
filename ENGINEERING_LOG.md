@@ -47,6 +47,27 @@ format.
 
 ---
 
+## 2026-11-14 — inspection only; no further increment available
+
+**Repositories:** all five, no code change.
+
+**Checked.** oag-listend HEAD `840a946`; all five working trees clean and pushed on their correct
+branches; `./scripts/check.sh --release` green (fmt, clippy, rustdoc `-D warnings`, 120 tests,
+systemd unit verified).
+
+**Deliberately not done.** No new feature or refactor was started, because the remaining candidates
+all need something outside this repository:
+
+- Reticulum -- physical interface plus `oag-storage`.
+- Real-Kubo testing of both IPFS halves -- a running node.
+- Native-protocol read by CID -- a sixth frame operation, excluded by step 2 of the directive.
+
+Starting any of them anyway would be untested carrier code, which this run has consistently refused.
+
+**Commit identifiers:** none.
+
+---
+
 ## 2026-11-14 — verify the non-loopback warning and serving on a real interface
 
 **Repository:** `oag-listend`, no code change.
