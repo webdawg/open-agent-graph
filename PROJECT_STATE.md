@@ -28,7 +28,7 @@ mission as a whole.
 | `oag-mesh` | 188 | 43 | 01–15 |
 | `oag-imagination-random-data-compute` | 48 | 31 | 01–03 |
 | `oag-collisions` | — | 44 | `SPEC.md` |
-| `oag-listend` | 94 | 103 | `SPEC.md` |
+| `oag-listend` | 109 | — | `SPEC.md` |
 
 All five working trees are clean and pushed as of the last update.
 
@@ -97,8 +97,8 @@ All five working trees are clean and pushed as of the last update.
 
 ### oag-listend (the serving surface)
 The perpetual-directive repository: one stable audio surface behind pluggable carriers.
-- Four live carriers share one store: native length-prefixed frames over TCP, HTTP/1.1, UDP datagrams,
-  and a Unix domain socket.
+- Five ways to reach the audio, all sharing one store: native length-prefixed frames over TCP,
+  HTTP/1.1, UDP datagrams, a Unix domain socket, and an IPFS mirror behind `--ipfs-api`.
 - Inbound rule at the surface, on the bytes and never on a declared type: WAV, AIFF, FLAC, Ogg
   (Vorbis/Opus/FLAC, not Theora), MP3 (ID3 or raw frame), M4A by brand list (not generic
   `isom`/`mp42` video). Everything else is refused before it is stored, and a refusal never echoes
@@ -108,14 +108,21 @@ The perpetual-directive repository: one stable audio surface behind pluggable ca
 - Generated sound (silence, tone, noise) plus the canonical musical ping -- "even pings are music",
   the opening phrase of Twinkle Twinkle Little Star -- seeded only into an empty store, on every
   carrier.
-- Bounds all measured: per-syscall read/write timeouts, session and connection totals, the
-  16 MiB frame cap, the store byte bound with eviction and off-lock unlink, the 64-session cap,
-  lock release before byte copies, and the HTTP head/body caps.
+- Bounds all measured by tests that were checked to fail when the property breaks: per-syscall
+  read/write timeouts, session and connection totals, the 16 MiB frame cap, the store byte bound
+  with eviction and off-lock unlink, the 64-session cap, lock release before byte copies, the HTTP
+  head/body caps, the UDP listing page, and a hung IPFS node not stalling other clients.
+- The IPFS mirror is best-effort and lives behind one `accept_and_mirror`: accept under the store
+  lock, then send with no lock held, so a slow Kubo cannot stall the daemon. Bytes are local first;
+  a mirror failure is recorded, never propagated. A fetched item carries its CID as an optional
+  trailing field and as `X-IPFS-CID` over HTTP. Tested against a stub mimicking `/api/v0/add`;
+  **untested against a real Kubo node**, and `https://` endpoints are refused rather than silently
+  downgraded to cleartext.
 - Operator surface: `oag-listend` binary (`--version`, `--help`, usage errors exit 2, clean
-  SIGINT/SIGTERM stop), `--check` to verify a store without serving it, and `push_pull` as the
-  smallest honest client. systemd unit included.
-- IPFS and Reticulum carriers deliberately not built: both need infrastructure this repository
-  cannot test against.
+  SIGINT/SIGTERM stop), `--check` (a store verification that does not serve and does not contact
+  IPFS), `--seed`, `--no-generate`, and `push_pull` as the smallest honest client. systemd unit
+  included.
+- Reticulum remains deliberately unbuilt: it needs a physical interface.
 
 ## Standing decisions
 
@@ -484,11 +491,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: the remaining carriers.** TCP, HTTP, UDP, and the Unix socket are done, all
-   sharing one store and all serving the musical ping. IPFS needs a Kubo node or an embedded libp2p
-   node and Reticulum needs a physical interface, so both are recorded as deliberately not built --
-   neither can be tested against a real network from this repository. The service unit and clean
-   SIGTERM stop are done, so "turn this thing on" is `systemctl enable --now oag-listend`.
+1. **oag-listend: Reticulum, and testing IPFS against a real node.** TCP, HTTP, UDP, and the Unix
+   socket are done, all sharing one store and all serving the musical ping, plus an IPFS mirror
+   behind `--ipfs-api`. Reticulum still needs a physical interface and is honestly unbuilt; the IPFS
+   mirror is tested only against a stub, never a real Kubo node. The service unit and clean SIGTERM
+   stop are done, so "turn this thing on" is `systemctl enable --now oag-listend`.
    Since the last update the operator surface has been closed out and every documented bound made
    observable: the binary itself (`--version`, `--help`, usage exit codes, start/serve/stop) and
    `--check` (load a content-addressed store, report loaded/skipped, skip a corrupted file) are
@@ -496,7 +503,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    per-format content types are each exercised over the wire; SIGTERM is proven a clean exit 0 that
    removes the Unix socket; the 64-session cap, lock release before copying, the HTTP head/body caps,
    and the UDP listing page are each measured by a test that was checked to **fail** when its
-   property is broken. Current bar: 56 unit + 38 end-to-end tests, 0 failed.
+   property is broken, including a hung IPFS node not stalling other clients. The IPFS mirror
+   (`--ipfs-api`) offers accepted audio to a Kubo node best-effort and lock-free, mirrors the stored
+   library on startup, and carries each CID on the wire and as `X-IPFS-CID`; it is tested against a
+   stub and **not** against real IPFS. Current bar: 62 unit + 47 end-to-end tests, 0 failed.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
