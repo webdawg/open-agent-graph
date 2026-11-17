@@ -47,6 +47,31 @@ format.
 
 ---
 
+## 2026-11-14 — clear every clippy lint in the crate
+
+**Repository:** `oag-listend`, commit `c1a3da5` on `master`; records in `open-agent-graph`.
+
+**Why.** The crate had never been through clippy. The first run found ten real lints; the count is
+now **zero** across `--all-targets`.
+
+**What changed.**
+- `unix.rs` matched `Some(metadata)` against `metadata().ok()`; now a plain `Ok` pattern.
+- `http.rs`'s route list had overindented continuation lines.
+- `server.rs` passed `&vec![9u8; 100]` where a slice suffices.
+- A test compared `.len() > 0` instead of `!is_empty()`.
+- Two concurrency tasks re-bound `addr` inside an already-`move` closure.
+- UDP's frame-bound test asserted two constants directly, which clippy flags and which proves
+  nothing at runtime. Rewritten as the derived equality
+  `MAX_FRAME_BYTES + 4 == MAX_DATAGRAM_BYTES` -- and my first attempt wrote it backwards, which the
+  test caught immediately.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 51 end-to-end, 0 failed**;
+`cargo clippy -p oag-listend --all-targets`: **0 warnings**.
+
+**Commit identifiers:** `oag-listend` `c1a3da5`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — record why the HTTP CONNECT tunnel needs no carrier here
 
 **Repository:** `oag-listend`, commit `af50f45` on `master`; records in `open-agent-graph`.
