@@ -47,6 +47,32 @@ format.
 
 ---
 
+## 2026-11-14 — give `push_pull` a `--unix` option
+
+**Repository:** `oag-listend`, commit `7bb4df7` on `master`; records in `open-agent-graph`.
+
+**The gap.** The Unix carrier was the one surface with no operator client. TCP and UDP had `push_pull`,
+HTTP any browser, but the socket could only be exercised by a hand-written client or a test -- an
+operator had no shipped way to try it.
+
+**What changed.** `push_pull --unix PATH` speaks the identical frame protocol over a filesystem socket,
+with the same per-read timeouts as the network carriers. Its usage line and README updated.
+
+**Verified with release binaries against a live daemon:**
+
+```
+fetched tone:  66790ab6a57e13ef same-hash 1004 bytes verified=true
+fetched noise: e4fbf604f67408bd same-hash 1164 bytes verified=true
+daemon exit=0, socket removed on shutdown
+```
+
+**Tests executed.** `cargo test -p oag-listend`: 64 unit + 51 end-to-end, 0 failed; clippy, rustdoc and
+rustfmt clean.
+
+**Commit identifiers:** `oag-listend` `7bb4df7`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — have `push_pull` report each item's IPFS CID
 
 **Repository:** `oag-listend`, commit `d15ece8` on `master`; records in `open-agent-graph`.
