@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — refuse chunked IPFS replies instead of misreading them as audio
+
+**Repository:** `oag-listend`, commit `5d6ef42` on `master`; records in `open-agent-graph`.
+
+**The defect.** Auditing the by-CID read path before trusting it: Kubo answers larger `/api/v0/cat`
+responses with `Transfer-Encoding: chunked`, and this client read the reply from the first blank line
+onward as if it were the body -- so chunk framing would have been served (or sniffed) as audio,
+silently corrupting it. A first patch attempt landed only in the add path, which the new test caught.
+
+**What changed.** Both halves detect a chunked reply head and return a typed refusal. New unit test
+feeds a real chunked response to `cat` and asserts the refusal rather than the framing bytes.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 50 end-to-end, 0 failed**; 0 warnings.
+
+**Commit identifiers:** `oag-listend` `5d6ef42`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — serve audio by CID over HTTP
 
 **Repository:** `oag-listend`, commit `b452fc5` on `master`; records in `open-agent-graph`.
