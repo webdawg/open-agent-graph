@@ -47,6 +47,23 @@ format.
 
 ---
 
+## 2026-11-14 — sweep for leftovers and unwind paths in the crate
+
+**Repository:** `oag-listend`, no code change.
+
+**Checked.**
+- No unfinished markers anywhere: no `TODO`, `FIXME`, `XXX`, `HACK`, `unimplemented!`, or leftover
+  probe text in `crates/`, `scripts/`, or the markdown.
+- Zero `unwrap()` / `expect()` in library code outside `#[cfg(test)]`.
+- Every `panic!` is inside a test module, so no request path can unwind into a panic -- the
+  availability property the robustness fuzz was built to protect.
+
+**Result:** clean on all three; nothing to change.
+
+**Commit identifiers:** none (no code change). `./scripts/check.sh --release` green: 120 tests.
+
+---
+
 ## 2026-11-14 — full gate run on current HEAD (closing verification)
 
 **Repositories:** all five, no code change.
