@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — document mirror idempotence in the README
+
+**Repository:** `oag-listend`, commit `802eae2` on `master`; records in `open-agent-graph`.
+
+**The gap.** The idempotence fix was documented in SPEC but not in the README, and one sentence about
+the read route said the fetched object "applies the same audio rule" -- as though the IPFS node
+applied it rather than this daemon.
+
+**What changed.** README now states that mirroring is idempotent (a repeated publish and every restart
+add what is already recorded exactly once, rather than rewriting the library) and that *what comes
+back* from a CID is held to the same audio rule.
+
+**Tests executed.** Documentation only; `./scripts/check.sh` remains green (64 unit + 56 end-to-end).
+
+**Commit identifiers:** `oag-listend` `802eae2`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — verify idempotent mirroring on the release binary, and release gates
 
 **Repository:** `oag-listend`, no code change.
