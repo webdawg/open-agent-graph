@@ -47,6 +47,24 @@ format.
 
 ---
 
+## 2026-11-14 — record the two-way IPFS surface in PROJECT_STATE
+
+**Repository:** `open-agent-graph`, commit `284070a` on `main`; records in the same file.
+
+**The defect.** The cross-project record predated the by-CID read route: its capabilities still
+described IPFS as write-only, and its measured bar was 109 tests.
+
+**What changed.** The oag-listend bullets now describe both halves -- best-effort lock-free writing,
+and local-first reading with the sniff rule applied to whatever comes back -- plus verification and
+caching headers, the chunked-reply refusal, the cleartext-downgrade refusal, and the standing caveat
+that none of it is tested against a real Kubo node. Bar updated to 115.
+
+**Tests executed.** No code change; `cargo test -p oag-listend`: 64 unit + 51 end-to-end, 0 failed.
+
+**Commit identifiers:** `open-agent-graph` `284070a`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — serve a held CID from the store instead of asking IPFS
 
 **Repository:** `oag-listend`, commit `9fd6c01` on `master`; records in `open-agent-graph`.
