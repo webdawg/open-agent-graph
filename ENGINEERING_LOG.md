@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — record why the HTTP CONNECT tunnel needs no carrier here
+
+**Repository:** `oag-listend`, commit `af50f45` on `master`; records in `open-agent-graph`.
+
+**The question.** The directive names "whatever the imagination `Transport` seam already has".
+That seam lists TCP, UDP, HTTP, an HTTP CONNECT tunnel, IPFS, and Reticulum. Four are implemented and
+Reticulum is hardware-bound; the CONNECT tunnel had never been analysed.
+
+**Finding.** `ProxiedTransport` is a *client* wrapper -- it connects to a proxy, asks for a tunnel,
+then runs another carrier's exchange through it. oag-listend is a server: a client tunnelling to its
+TCP listener needs no code on our side, because TCP is TCP. So there is nothing to build, only
+something to stop re-investigating.
+
+**What changed.** SPEC's Next now accounts for the whole seam: four implemented, Reticulum
+hardware-bound, the CONNECT tunnel explained as a non-item, and the two real-Kubo verification items
+folded into one.
+
+**Tests executed.** No code change; `cargo test -p oag-listend`: 64 unit + 51 end-to-end, 0 failed.
+
+**Commit identifiers:** `oag-listend` `af50f45`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — run the whole suite in release mode
 
 **Repository:** `oag-listend`, no code change.
