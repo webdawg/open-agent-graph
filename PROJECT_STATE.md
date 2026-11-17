@@ -28,7 +28,7 @@ mission as a whole.
 | `oag-mesh` | 188 | 43 | 01–15 |
 | `oag-imagination-random-data-compute` | 48 | 31 | 01–03 |
 | `oag-collisions` | — | 44 | `SPEC.md` |
-| `oag-listend` | 115 | — | `SPEC.md` |
+| `oag-listend` | 120 | — | `SPEC.md` |
 
 All five working trees are clean and pushed as of the last update.
 
@@ -127,8 +127,10 @@ The perpetual-directive repository: one stable audio surface behind pluggable ca
   SIGINT/SIGTERM stop), `--check` (a store verification that does not serve and does not contact
   IPFS), `--seed`, `--no-generate`, and `push_pull` as the smallest honest client. systemd unit
   included.
-- Quality gates all green: `cargo fmt --check`, `cargo clippy --all-targets` (0 warnings),
-  `RUSTDOCFLAGS="-D warnings" cargo doc`, and 115 tests in debug and release.
+- Every gate is one command: `scripts/check.sh [--release]` runs fmt, clippy, rustdoc with warnings
+  denied, the suite, and `systemd-analyze verify` on the shipped unit. All green, debug and release.
+- Hostile input is fuzzed for panic-safety: 5,000 deterministic random bodies through the codec, and
+  garbage plus lying lengths across native, HTTP, UDP and Unix, with liveness asserted after.
 - Reticulum remains deliberately unbuilt: it needs a physical interface.
 
 ## Standing decisions
@@ -517,7 +519,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    (`--ipfs-api`) offers accepted audio to a Kubo node best-effort and lock-free, mirrors the stored
    library on startup, and carries each CID on the wire and as `X-IPFS-CID`; it is tested against a
    stub and **not** against real IPFS; it also reads by CID (`GET /ipfs/{cid}`, local-first so held
-   audio survives a node outage). Current bar: 64 unit + 51 end-to-end tests, 0 failed.
+   audio survives a node outage). Current bar: 64 unit + 56 end-to-end tests, 0 failed.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
