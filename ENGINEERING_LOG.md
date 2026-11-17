@@ -53,10 +53,12 @@ format.
 
 **The trap.** The first attempt to verify the shipped artifact failed with `unknown argument
 --ipfs-api` -- and correctly so: `target/release/oag-listend` was timestamped 14:09, hours old, while
-`target/debug` was current. An earlier `cargo build --release -p oag-listend --examples` had left the
-release *binary* stale even though it compiled successfully. Building the bin explicitly refreshed it
-(992,352 -> 1,035,544 bytes, flag present). Lesson recorded: verify an artifact by its content, not by
-having run a build.
+`target/debug` was current. Cause found by experiment: `cargo build --release -p oag-listend
+--examples` builds the *example* targets and their library dependency, **not** the binary, so it
+never refreshed the daemon. `cargo build --release -p oag-listend` does (992,352 -> 1,035,544 bytes,
+flag present). A bare `touch` also does not trigger a rebuild, while a real content change does --
+so this is normal cargo behaviour, not a wrapper fault. Lesson: when verifying a shipped artifact,
+build that target explicitly and check the result's content rather than trusting that a build ran.
 
 **Verified with the fresh release binary** (`push_pull` also release-built), against a Python stub
 mimicking `/api/v0/add`:
