@@ -47,6 +47,28 @@ format.
 
 ---
 
+## 2026-11-14 — bring PROJECT_STATE's oag-listend record up to date
+
+**Repository:** `open-agent-graph`, commit `6b3047c` on `main`; records in the same file.
+
+**The defect.** The cross-project record had fallen behind the mission again: its capabilities
+section still said **four carriers** and that **IPFS was deliberately not built** -- both false since
+the mirror landed -- and its measured bar read 94 tests. The next-priorities entry opened by calling
+both IPFS and Reticulum unbuilt.
+
+**What changed.** Capabilities rewritten for five ways to reach the audio; the mirror described with
+its real properties (best-effort, accept under the lock then send without it, stored library mirrored
+on startup, CID on the wire and as `X-IPFS-CID`) and its real limitation (**untested against a real
+Kubo node**, `https://` refused rather than downgraded). `--check` now described as not contacting
+IPFS. Measured bar updated to 109 tests; next priorities renamed to what is actually open --
+Reticulum, and testing IPFS against a real node.
+
+**Tests executed.** No code change; `cargo test -p oag-listend`: 62 unit + 47 end-to-end, 0 failed.
+
+**Commit identifiers:** `open-agent-graph` `6b3047c`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — drop an unused IPFS accessor; flag-interaction matrix checked
 
 **Repository:** `oag-listend`, commit `3a66325` on `master`; records in `open-agent-graph`.
