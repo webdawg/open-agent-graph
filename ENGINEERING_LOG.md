@@ -47,6 +47,25 @@ format.
 
 ---
 
+## 2026-11-14 — rustdoc clean under denied warnings
+
+**Repository:** `oag-listend`, commit `a16f3b4` on `master`; records in `open-agent-graph`.
+
+**Why.** Third quality gate never run on this crate, after rustfmt and clippy. Documentation is the
+part most likely to drift silently while code changes around it.
+
+**Finding and fix.** One redundant explicit intra-doc link -- `[`accept_and_mirror`](crate::accept_and_mirror)`
+-- where the label already resolves. Removed the target. `RUSTDOCFLAGS="-D warnings" cargo doc
+-p oag-listend --no-deps` now finishes clean.
+
+**Gates now green.** `cargo fmt --check`, `cargo clippy -p oag-listend --all-targets`,
+`RUSTDOCFLAGS="-D warnings" cargo doc`, and `cargo test -p oag-listend` (64 unit + 51 end-to-end,
+0 failed) -- in debug and, earlier, release.
+
+**Commit identifiers:** `oag-listend` `a16f3b4`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — clear every clippy lint in the crate
 
 **Repository:** `oag-listend`, commit `c1a3da5` on `master`; records in `open-agent-graph`.
