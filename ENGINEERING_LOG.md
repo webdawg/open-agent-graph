@@ -47,6 +47,26 @@ format.
 
 ---
 
+## 2026-11-14 — test an oversized body without `Expect`
+
+**Repository:** `oag-listend`, commit `9233b84` on `master`; records in `open-agent-graph`.
+
+**The gap.** The oversized-body refusal had coverage only for the `Expect: 100-continue` variant. A
+plain `POST` declaring more than `MAX_BODY_BYTES` -- the more common case, since most clients do not
+send `Expect` at all -- was exercised only by reading the code.
+
+**What changed.** New test: send such a head, write a few bytes, half-close so the post-refusal drain
+ends rather than waiting out its timeout, and assert **413** with the store still empty. It also
+confirms the status chosen when the `too_large` flag was introduced: the client is never told to
+commit an upload this carrier will reject.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 55 end-to-end, 0 failed**; clippy and
+rustfmt clean.
+
+**Commit identifiers:** `oag-listend` `9233b84`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — fuzz the lying-length case
 
 **Repository:** `oag-listend`, commit `b0021e0` on `master`; records in `open-agent-graph`.
