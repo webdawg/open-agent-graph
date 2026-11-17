@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — serve a held CID from the store instead of asking IPFS
+
+**Repository:** `oag-listend`, commit `9fd6c01` on `master`; records in `open-agent-graph`.
+
+**The gap.** The by-CID route always went out to Kubo, so an item we already held became unreachable
+when the node was down. That is the wrong failure direction: local audio should not depend on a
+remote service being up.
+
+**What changed.** A reverse index (`cid -> content hash`) sits beside the existing forward one and is
+dropped on eviction. `GET /ipfs/{cid}` serves a CID we hold straight from the store -- verifiable
+here, no network -- and only sends an unfamiliar CID to `/api/v0/cat`. Both paths then face the same
+sniff rule.
+
+**Bug caught while writing the test.** The reverse index was declared and exposed but **never
+populated**, so the local path silently never matched and the request fell through to the node. The
+test's stub answers `add` but not `cat`, which is exactly what exposed it.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 51 end-to-end, 0 failed**. New test
+publishes (mirroring to a stub whose cat 404s) and asserts the CID still serves 200 `audio/wav`.
+
+**Commit identifiers:** `oag-listend` `9fd6c01`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — verify the two-way IPFS surface with the release binaries
 
 **Repository:** `oag-listend`, no code change.
