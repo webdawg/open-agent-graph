@@ -28,7 +28,7 @@ mission as a whole.
 | `oag-mesh` | 188 | 43 | 01–15 |
 | `oag-imagination-random-data-compute` | 48 | 31 | 01–03 |
 | `oag-collisions` | — | 44 | `SPEC.md` |
-| `oag-listend` | 109 | — | `SPEC.md` |
+| `oag-listend` | 115 | — | `SPEC.md` |
 
 All five working trees are clean and pushed as of the last update.
 
@@ -112,12 +112,17 @@ The perpetual-directive repository: one stable audio surface behind pluggable ca
   read/write timeouts, session and connection totals, the 16 MiB frame cap, the store byte bound
   with eviction and off-lock unlink, the 64-session cap, lock release before byte copies, the HTTP
   head/body caps, the UDP listing page, and a hung IPFS node not stalling other clients.
-- The IPFS mirror is best-effort and lives behind one `accept_and_mirror`: accept under the store
-  lock, then send with no lock held, so a slow Kubo cannot stall the daemon. Bytes are local first;
-  a mirror failure is recorded, never propagated. A fetched item carries its CID as an optional
-  trailing field and as `X-IPFS-CID` over HTTP. Tested against a stub mimicking `/api/v0/add`;
-  **untested against a real Kubo node**, and `https://` endpoints are refused rather than silently
-  downgraded to cleartext.
+- The IPFS surface is two-way behind `--ipfs-api`, and best-effort throughout. Writing uses one
+  `accept_and_mirror`: accept under the store lock, then send with no lock held, so a slow Kubo cannot
+  stall the daemon; a failure is recorded, never propagated, and bytes are local first. Reading is
+  `GET /ipfs/{cid}`: audio the daemon already holds is served straight from the store (so a node that
+  is down does not take held audio with it), and only an unfamiliar CID goes to `/api/v0/cat`.
+  Whatever comes back faces the same sniff rule, so non-audio is refused un-echoed and un-stored.
+  A fetched item carries its CID as an optional trailing field and as `X-IPFS-CID`; CID-served bytes
+  carry `X-Content-Hash` and `Cache-Control: immutable`. Chunked replies are refused rather than
+  misread as audio, and `https://` endpoints are refused rather than silently downgraded to
+  cleartext. Tested against stubs mimicking `/api/v0/add` and `/api/v0/cat`; **untested against a
+  real Kubo node**.
 - Operator surface: `oag-listend` binary (`--version`, `--help`, usage errors exit 2, clean
   SIGINT/SIGTERM stop), `--check` (a store verification that does not serve and does not contact
   IPFS), `--seed`, `--no-generate`, and `push_pull` as the smallest honest client. systemd unit
@@ -506,7 +511,8 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    property is broken, including a hung IPFS node not stalling other clients. The IPFS mirror
    (`--ipfs-api`) offers accepted audio to a Kubo node best-effort and lock-free, mirrors the stored
    library on startup, and carries each CID on the wire and as `X-IPFS-CID`; it is tested against a
-   stub and **not** against real IPFS. Current bar: 62 unit + 47 end-to-end tests, 0 failed.
+   stub and **not** against real IPFS; it also reads by CID (`GET /ipfs/{cid}`, local-first so held
+   audio survives a node outage). Current bar: 64 unit + 51 end-to-end tests, 0 failed.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
