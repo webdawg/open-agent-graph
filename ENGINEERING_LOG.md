@@ -47,6 +47,34 @@ format.
 
 ---
 
+## 2026-11-14 — keep a hung IPFS node from stalling the daemon
+
+**Repository:** `oag-listend`, commits `2125e51` and `2a72087` on `master`; records in
+`open-agent-graph`.
+
+**The defect.** Reviewing the mirror with the same rigour as the rest of the crate found a defect
+introduced one turn earlier: `accept` awaited the IPFS add **while holding the store lock**. A Kubo
+node that hung would therefore stall every carrier's publish *and* fetch for up to `ADD_TIMEOUT`
+(10 s) -- violating the concurrency property SPEC claims.
+
+**What changed.**
+- Every carrier now goes through one function, `accept_and_mirror`: `accept` under the lock (rule,
+  durable write, insert), then the bytes are read under a short lock and sent **with no lock held**.
+  `AudioStore::accept` stays the pure inbound rule, so a mirror cannot become part of what
+  "accepted" means. Startup generation uses the same path.
+- Fixed two further gaps found while rewiring: `http.rs` still called `accept` directly, so **HTTP
+  publishes bypassed the mirror entirely**; and the CID map was filled only by the startup pass, so
+  an item published normally had a CID that no client could discover.
+
+**Tests executed.** `cargo test -p oag-listend`: **61 unit + 46 end-to-end, 0 failed**. New
+`a_hung_mirror_does_not_stall_other_clients` publishes into a stub that accepts and never replies,
+then requires another client's `Hello` within three seconds. Verified it discriminates: holding the
+store lock across the add makes it fail at 3.3 s; the real code passes.
+
+**Commit identifiers:** `oag-listend` `2125e51`, `2a72087`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — carry the CID on fetch, so clients can reach IPFS
 
 **Repository:** `oag-listend`, commit `de5aa23` on `master`; records in `open-agent-graph`.
