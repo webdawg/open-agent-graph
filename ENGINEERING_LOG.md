@@ -47,6 +47,25 @@ format.
 
 ---
 
+## 2026-11-14 — accept multibase characters in CID validation
+
+**Repository:** `oag-listend`, commit `8ab17c3` on `master`; records in `open-agent-graph`.
+
+**The defect.** A defect I introduced earlier in this run: `validate_cid` accepted only ASCII
+alphanumerics, so base64url CIDs containing `-` or `_` were refused as implausible identifiers before
+any request was made. Real CIDs in that encoding would have been unusable.
+
+**What changed.** The validator now accepts those two characters -- the multibase alphabet extends
+beyond alphanumerics -- while still rejecting path separators, whitespace and over-length strings.
+Test pins both directions: `bafyabc-_` is accepted; `..%2f..`, spaces and over-length are refused.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 61 end-to-end, 0 failed**;
+`./scripts/check.sh` green.
+
+**Commit identifiers:** `oag-listend` `8ab17c3`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — serial execution check
 
 **Repository:** `oag-listend`, no code change.
