@@ -47,6 +47,27 @@ format.
 
 ---
 
+## 2026-11-14 — full bar from `cargo clean`
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** Several defects this run were only found by rebuilding explicitly rather than trusting an
+existing `target/`. This is the strongest form of that check: delete all build output and run the
+whole advertised bar.
+
+**Observed.** `cargo clean` removed 8,282 files (1.7 GiB). `./scripts/check.sh` then ran end to end:
+fmt, clippy `--all-targets`, rustdoc with warnings denied, examples built, the suite (**64 unit +
+60 end-to-end**), and `systemd-analyze verify` on the unit -- **exit 0, `all gates passed`**, with
+the working tree clean afterwards.
+
+**Commit identifiers:** none (no change needed).
+
+**Standing note for whoever picks this up.** Run `./scripts/check.sh` after `cargo clean` before
+claiming the bar is green; incremental runs reuse artefacts and have twice masked real breakage in
+this repository's history.
+
+---
+
 ## 2026-11-14 — shipped-client tests must work from a clean tree
 
 **Repository:** `oag-listend`, commit `8c09523` on `master`; records in `open-agent-graph`.
