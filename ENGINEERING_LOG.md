@@ -47,6 +47,20 @@ format.
 
 ---
 
+## 2026-11-14 — serial execution check
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** A suite can pass under parallel execution while hiding order dependence or leaked state
+between tests. Run serially to rule that out.
+
+**Result.** `cargo test -p oag-listend -- --test-threads=1`: **125 passed, 0 failed** (64 unit +
+61 end-to-end), no failures, so nothing depends on parallel scheduling.
+
+**Commit identifiers:** none (no change needed).
+
+---
+
 ## 2026-11-14 — fix the `ftyp` largesize parse to match ISO 14496-12
 
 **Repository:** `oag-listend`, commit `ebf9211` on `master`; records in `open-agent-graph`.
