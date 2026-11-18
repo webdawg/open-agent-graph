@@ -47,6 +47,22 @@ format.
 
 ---
 
+## 2026-11-14 — clean-clone verification of the CI workflow
+
+**Repository:** `oag-listend`, no code change.
+
+**Method.** Two fresh clones containing only committed content; `./scripts/check.sh` (debug) and
+`./scripts/check.sh --release`. Both exit 0 with all five gates green: fmt, clippy `--all-targets`,
+rustdoc `-D warnings`, examples built, tests (**64 unit + 62 end-to-end**), systemd unit verified.
+
+**Why it matters.** The workflow invokes the script rather than restating its steps, so these runs are
+what CI will actually do. Verifying both profiles on pristine trees confirms a merge cannot land with a
+gate unrun or an artefact dependency.
+
+**Commit identifiers:** none (no change needed).
+
+---
+
 ## 2026-11-14 — bounded shutdown grace; register stop signals eagerly
 
 **Repository:** `oag-listend`, commits `16f953f` and `19c7c4f` on `master`; records in
