@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — fix the `ftyp` largesize parse to match ISO 14496-12
+
+**Repository:** `oag-listend`, commit `ebf9211` on `master`; records in `open-agent-graph`.
+
+**The defect.** Found by reading the sniff code rather than its tests. When a box declares
+`size == 1`, the 64-bit `largesize` sits **immediately after the type field** (bytes 8..16,
+ISO 14496-12), which pushes the major brand to bytes 16..20 and the compatible brands to 24.
+The parser read `largesize` from bytes 16..24 and checked the major brand at 8..12 -- and the
+unit test constructed its fixture to match that mistake, so the test passed while the parse was
+wrong.
+
+**What changed.** Rewritten for all three header shapes: normal size, `size == 0` (to end of file),
+and `size == 1` (largesize at 8..16). The test now covers each shape with the audio brand as major
+and as compatible, plus an `avc1`/`mp42` video box in the largesize form staying refused.
+
+**Verified both ways.** Restoring the old offsets makes the new test fail; the fix passes.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 61 end-to-end, 0 failed**;
+`./scripts/check.sh` green across all five gates.
+
+**Commit identifiers:** `oag-listend` `ebf9211`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — test that SIGINT is a clean stop
 
 **Repository:** `oag-listend`, commit `fe837a7` on `master`; records in `open-agent-graph`.
