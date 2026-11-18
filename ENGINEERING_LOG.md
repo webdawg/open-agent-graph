@@ -47,6 +47,39 @@ format.
 
 ---
 
+## 2026-11-14 — bounded shutdown grace; register stop signals eagerly
+
+**Repository:** `oag-listend`, commits `16f953f` and `19c7c4f` on `master`; records in
+`open-agent-graph`.
+
+**Two related defects, both in shutdown.**
+
+1. *In-flight exchanges were cut off.* SIGTERM/SIGINT stopped the accept loops and exited at
+   once, so a client mid-download lost the tail of the item. Now accepting stops immediately, then
+   the daemon waits up to `SHUTDOWN_GRACE` (2 s) for sessions to drain -- honestly counted per
+   stream carrier via an atomic counter -- and a client that never reads cannot hold a stop open.
+2. *An early Ctrl+C could kill the daemon outright.* Reproduced only under CPU load: the signal
+   arrived before `main` reached the select that registered the handler, so the default terminate
+   action fired (exit by signal, not 0). The window ran from exec to that point. Both stop
+   signals are now registered at the very top of `main`, using `unix::signal` for SIGINT as well as
+   SIGTERM because `ctrl_c()` only registers on first poll.
+
+**Test hardening found while writing the test.** The shutdown tests only waited for stdout; under
+load the kill could still land before the child reached `main`. They now confirm a successful Hello
+first, which proves the handlers exist (registration precedes binding).
+
+**Verification.** New `an_in_flight_download_survives_a_stop`: a client requests an 8 MiB item over a
+2 KiB receive buffer, does not read while SIGTERM arrives, then drains and must receive every byte,
+with the daemon exiting 0 promptly. Under 3 busy loops, 10 consecutive runs: **0 failures**
+(previously 3 of 8 failed on the signal race alone).
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 62 end-to-end, 0 failed**;
+`./scripts/check.sh` green across all five gates.
+
+**Commit identifiers:** `oag-listend` `16f953f`, `19c7c4f`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — accept multibase characters in CID validation
 
 **Repository:** `oag-listend`, commit `8ab17c3` on `master`; records in `open-agent-graph`.
