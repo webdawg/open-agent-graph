@@ -47,6 +47,23 @@ format.
 
 ---
 
+## 2026-11-14 — a store directory full of stray files
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** Operators put things in directories. The loader promises only verified entries are held and
+the rest are reported, but that had never been exercised against a realistically cluttered store.
+
+**Observed.** `--check` over a directory containing misnamed audio, a README, an empty file, a
+hash-named non-audio file, an orphan `.cid`, a directory named like a hash, and a subdirectory:
+`loaded 0 skipped 4 evicted 0`, exit 0. Nothing trusted, nothing fatal, and every stray accounted
+for -- files with extensions are skipped as sidecars, non-audio names fail the hash check, and
+non-regular entries are refused without being read.
+
+**Commit identifiers:** none (no change needed). `./scripts/check.sh` green: 64 unit + 58 end-to-end.
+
+---
+
 ## 2026-11-14 — verify the documented defaults with no arguments
 
 **Repository:** `oag-listend`, no code change.
