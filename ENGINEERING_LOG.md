@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — full five-surface acceptance on current HEAD
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** Several behaviour changes landed after the previous full pass (persisted CID index, off-lock
+sidecar write), so the mission's own acceptance sentence was re-run end to end on release binaries
+against a stub Kubo node.
+
+**Observed.**
+- Startup: four generated items, `held 48816`.
+- Native TCP, UDP and Unix each: publish/fetch `same-hash ... verified=true`, HTML typed-rejected.
+- HTTP: `GET /audio/<hash>` 200, 8,044 bytes byte-identical; `Range: 0-100` -> 206.
+- IPFS: `GET /ipfs/<cid>` 200, 8,044 bytes **byte-identical** to what was posted.
+- Shutdown lists one CID per distinct item.
+
+**Bonus confirmation.** All three carriers publish the *same* tone and noise, and all three report
+the same CID (`bafyrelay6`) -- proving the persisted-idempotence fix works across carriers within a
+run, not just across restarts. Only four distinct items reached the node, not eight.
+
+**Commit identifiers:** none (no code change). `./scripts/check.sh` green: 64 unit + 58 end-to-end.
+
+---
+
 ## 2026-11-14 — a store directory full of stray files
 
 **Repository:** `oag-listend`, no code change.
