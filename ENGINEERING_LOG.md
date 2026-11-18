@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — enforce the bar in CI
+
+**Repository:** `oag-listend`, commits `a9688d6` and `9c8882e` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** `./scripts/check.sh` held the whole bar, but nothing required anyone to run it: a push
+could land without fmt, clippy, rustdoc-with-warnings-denied, the examples build, the suite, or the
+systemd unit check ever executing. Verification was a matter of discipline rather than enforcement.
+
+**What changed.** New `.github/workflows/check.yml`: on push to `master`, pull request, and manual
+dispatch, install Rust minimal via rustup and run `./scripts/check.sh`. It deliberately invokes the
+script instead of restating its steps, so what an operator runs and what CI enforces cannot drift.
+README's Build section notes the workflow. No third-party actions beyond `actions/checkout@v4`;
+rustup is fetched over TLS with certificate validation.
+
+**Verification performed here.** Workflow YAML parsed and its job/step structure inspected;
+`sh -n scripts/check.sh` re-verified; no behaviour change (documentation plus one workflow file).
+`./scripts/check.sh` remains green locally: 64 unit + 60 end-to-end.
+
+**Commit identifiers:** `oag-listend` `a9688d6`, `9c8882e`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — binary-level tests in release
 
 **Repository:** `oag-listend`, no code change.
