@@ -47,6 +47,29 @@ format.
 
 ---
 
+## 2026-11-14 — cover every client transport; fail loudly when the daemon dies early
+
+**Repository:** `oag-listend`, commit `ebf4715` on `master`; records in `open-agent-graph`.
+
+**Coverage gap.** The shipped client had automated coverage only for `--help`. New test drives the
+real binary over native TCP, UDP and Unix against one live daemon, asserting `verified=true`,
+`same-hash`, and a typed `Rejected` on each.
+
+**Defect found by writing it -- in the harness, not the daemon.** `announce()` broke out of its read
+loop on EOF and returned whatever it had, so a daemon that died before announcing looked like success;
+the test then spent five seconds polling for a socket. It now panics with the partial output.
+
+**Verified both ways.** Removing the runtime-directory creation (so the Unix bind fails) now fails
+immediately: "the daemon closed its output before announcing; got oag-listend udp on 127.0.0.1:…".
+Restoring it passes.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 60 end-to-end, 0 failed**;
+`./scripts/check.sh` green across all five gates.
+
+**Commit identifiers:** `oag-listend` `ebf4715`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — test that `push_pull --udp` reaches an IPv6 daemon
 
 **Repository:** `oag-listend`, commit `7c2e6e3` on `master`; records in `open-agent-graph`.
