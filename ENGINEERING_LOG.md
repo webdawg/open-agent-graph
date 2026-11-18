@@ -47,6 +47,32 @@ format.
 
 ---
 
+## 2026-11-14 — shipped-client tests must work from a clean tree
+
+**Repository:** `oag-listend`, commit `8c09523` on `master`; records in `open-agent-graph`.
+
+**The defect.** Deleting `target/debug/examples/push_pull` and running
+`cargo test -p oag-listend --test binary` failed three tests: **`cargo test` does not build examples**,
+so the shipped-client tests could not run. Consequently `./scripts/check.sh` -- advertised as "the
+whole bar in one command" -- failed for anyone after `cargo clean` or on a fresh clone.
+
+**What changed.**
+- `scripts/check.sh` now runs `cargo build -p oag-listend --examples` before the suite, with a comment
+  stating why.
+- The `push_pull()` helper builds the example itself if it is missing, so plain
+  `cargo test -p oag-listend` (the directive's canonical command) is self-sufficient too. A nested
+  cargo invocation here is safe because tests run after the outer build has released its lock.
+
+**Verified.** Removed the whole `target/debug/examples` directory, then ran `./scripts/check.sh` end to
+end: exit 0 across fmt, clippy, rustdoc, examples, tests, and the systemd unit. Also re-verified
+`cargo test -p oag-listend --test binary` on the same clean state: 9 passed.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 60 end-to-end, 0 failed**.
+
+**Commit identifiers:** `oag-listend` `8c09523`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — cover every client transport; fail loudly when the daemon dies early
 
 **Repository:** `oag-listend`, commit `ebf4715` on `master`; records in `open-agent-graph`.
