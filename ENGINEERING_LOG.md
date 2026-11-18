@@ -47,6 +47,22 @@ format.
 
 ---
 
+## 2026-11-14 — verify the documented CLI surface against the parsers
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** A flag documented but not accepted (or accepted but never documented) is an operator-facing
+lie, and the docs were written piecemeal. Checked mechanically rather than by reading.
+
+**Result.** All thirteen flags the two binaries accept -- `--addr`, `--check`, `--dir`, `--help`,
+`--http`, `--ipfs-api`, `--listen`, `--max-bytes`, `--no-generate`, `--seed`, `--udp`, `--unix`,
+`--version` -- appear somewhere in README or SPEC, and no flag appears in the docs that either binary
+does not accept. Both directions clean.
+
+**Commit identifiers:** none (no change needed). `./scripts/check.sh` green: 64 unit + 58 end-to-end.
+
+---
+
 ## 2026-11-14 — documentation reconciled against the code
 
 **Repositories:** `oag-listend` and `open-agent-graph`; no code change.
