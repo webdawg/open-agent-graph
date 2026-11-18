@@ -47,6 +47,27 @@ format.
 
 ---
 
+## 2026-11-14 — test that SIGINT is a clean stop
+
+**Repository:** `oag-listend`, commit `fe837a7` on `master`; records in `open-agent-graph`.
+
+**The gap.** SPEC and README both promise "handles SIGINT and SIGTERM", but only SIGTERM was
+covered automatically. SIGINT (Ctrl+C) is the signal an operator actually hits first.
+
+**What changed.** New binary-level test sends SIGINT to the daemon and asserts exit 0 with the Unix
+socket removed.
+
+**Verified both ways.** Replacing the `ctrl_c()` arm of the shutdown select with a pending future
+makes the test fail; restoring it passes. (As before, the probe required rebuilding the binary
+explicitly -- `cargo test` does not rebuild bins either.)
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 61 end-to-end, 0 failed**;
+`./scripts/check.sh` green across all five gates.
+
+**Commit identifiers:** `oag-listend` `fe837a7`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — run the bar against a clean clone
 
 **Repository:** `oag-listend`, no code change.
