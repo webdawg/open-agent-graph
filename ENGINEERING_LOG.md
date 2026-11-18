@@ -47,6 +47,33 @@ format.
 
 ---
 
+## 2026-11-14 — let `push_pull --udp` reach an IPv6 daemon
+
+**Repository:** `oag-listend`, commit `b17dc28` on `master`; records in `open-agent-graph`.
+
+**The defect.** While checking address-family coverage I found the shipped UDP client could not
+reach an IPv6 daemon at all: it bound its local socket to `127.0.0.1` unconditionally, so sending to
+`[::1]:port` failed with `Address family not supported by protocol (os error 97)` -- an error that
+points away from the actual cause. An operator on an IPv6-only network would have had no working
+client.
+
+**What changed.** The target is parsed first; an IPv6 peer gets a `[::]:0` bind, everything else keeps
+the previous IPv4 behaviour.
+
+**Verified with release binaries on both families:**
+
+```
+v6: fetched noise: 2888acf2ca6200eb same-hash 1164 bytes verified=true
+v4: identical
+```
+
+**Tests executed.** `cargo test -p oag-listend`: 64 unit + 58 end-to-end, 0 failed;
+`./scripts/check.sh` green.
+
+**Commit identifiers:** `oag-listend` `b17dc28`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — verify IPv6 end to end
 
 **Repository:** `oag-listend`, no code change.
