@@ -47,6 +47,27 @@ format.
 
 ---
 
+## 2026-11-14 — run the bar against a clean clone
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** The new CI workflow checks out committed content only; a local run reuses whatever is in
+`target/` and can hide dependence on untracked state. A clone is the closest local simulation of what
+CI actually does.
+
+**Method.** `git clone /home/webdawg/DATA/CODE/oag-listend /tmp/oag-fresh` -- resulting tree contains
+only committed files (Cargo.toml, Cargo.lock, crates/, scripts/, .github/, docs) and no `target/`.
+
+**Result.** `./scripts/check.sh` in the clone: **exit 0**, all five gates -- fmt, clippy `--all-targets`,
+rustdoc `-D warnings`, examples built, tests (**64 unit + 60 end-to-end**), systemd unit verified.
+
+**Commit identifiers:** none (no change needed).
+
+**Note.** Release-mode gates were verified separately earlier; CI runs the debug suite, which is what
+this clone exercised.
+
+---
+
 ## 2026-11-14 — enforce the bar in CI
 
 **Repository:** `oag-listend`, commits `a9688d6` and `9c8882e` on `master`; records in
