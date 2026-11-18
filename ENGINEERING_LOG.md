@@ -47,6 +47,22 @@ format.
 
 ---
 
+## 2026-11-14 — run the README command block verbatim
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** The README's examples had been checked piecemeal; this runs them all in order, from the
+README's own command line, against a live daemon.
+
+**Result -- all nine behave as their comments promise.** POST returns a 64-char hash; `GET
+/audio/<hash>` -> 200; `GET /` -> `oag-listend`; `GET /audio` lists sorted hashes;
+`GET /audio?offset=2&limit=2` reports `X-Total-Count: 5`; `HEAD` -> 200 with headers only; `Range:
+0-1023` -> 206; `If-None-Match` -> 304; `/ping` -> 44,844 bytes.
+
+**Commit identifiers:** none (no change needed). `./scripts/check.sh` green: 64 unit + 58 end-to-end.
+
+---
+
 ## 2026-11-14 — carrier-count language check
 
 **Repositories:** `oag-listend` and `open-agent-graph`, no code change.
