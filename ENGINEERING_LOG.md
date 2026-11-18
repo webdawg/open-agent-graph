@@ -47,6 +47,20 @@ format.
 
 ---
 
+## 2026-11-14 — binary-level tests in release
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** The shipped-client tests (all transports, IPv6 UDP, both binaries' CLIs, `--check`, SIGTERM)
+landed after the last release-mode run, so they had only been exercised in debug.
+
+**Result.** `cargo test -p oag-listend --release --test binary`: **9 passed, 0 failed**, with
+`--examples` built in release first.
+
+**Commit identifiers:** none (no change needed).
+
+---
+
 ## 2026-11-14 — full bar from `cargo clean`
 
 **Repository:** `oag-listend`, no code change.
