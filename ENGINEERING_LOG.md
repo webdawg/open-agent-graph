@@ -47,6 +47,25 @@ format.
 
 ---
 
+## 2026-11-14 — verify IPv6 end to end
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** The founding statement says "any present and future technology", and an IPv6-only network is a
+real deployment case -- but nothing had ever bound or connected over IPv6.
+
+**Observed.** With `--listen [::1]:7951 --http [::1]:7952`: both carriers report their bracketed
+address; native publish/fetch returns `same-hash ... verified=true`; HTML is typed-rejected; HTTP
+`GET /` returns 200; SIGTERM exits 0.
+
+**Note.** The IPFS client sends `Host: [::1]:port`, which is the correct HTTP/1.1 form for an IPv6
+authority -- worth recording because a bare `::1:port` would be malformed, and this path has not been
+exercised against a real node.
+
+**Commit identifiers:** none (no change needed). `./scripts/check.sh` green: 64 unit + 58 end-to-end.
+
+---
+
 ## 2026-11-14 — full five-surface acceptance on current HEAD
 
 **Repository:** `oag-listend`, no code change.
