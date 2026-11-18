@@ -47,6 +47,31 @@ format.
 
 ---
 
+## 2026-11-14 — documentation reconciled against the code
+
+**Repositories:** `oag-listend` and `open-agent-graph`; no code change.
+
+**Method.** Three independent mechanical checks rather than recollection:
+
+1. Section-by-section read of README and SPEC against the router, store, and session loops.
+2. A sweep of every test-count claim across all markdown.
+3. An identifier-existence check: every backticked name in README/SPEC must appear in the crate.
+
+**Drift found and fixed across this reconciliation:** PROJECT_STATE omitted the fifth repository; SPEC's
+status paragraph was off by 8 unit and 25 end-to-end tests and predated the IPFS surface, fuzzing,
+release verification, the `--unix` client, and `check.sh`; SPEC's HTTP section omitted
+`GET /ipfs/{cid}`; SPEC's native section omitted `--unix`; the persistence layout omitted
+`<hash>.cid` and its validation; and the IPFS coverage claim named only `/api/v0/add`.
+
+**Result now.** Identifier check clean -- the only names absent from the crate are `ProxiedTransport`
+and `Transport`, which live in oag-imagination and are cited deliberately. Count claims agree at
+64 unit + 58 end-to-end. All five repos clean and pushed; `./scripts/check.sh` green.
+
+**Commit identifiers:** none this entry (previous entries carry `97d99ee`, `0cb16ba`, `dc5c00c`,
+`311d268`).
+
+---
+
 ## 2026-11-14 — finish reconciling SPEC with the code
 
 **Repository:** `oag-listend`, commits `97d99ee` and `0cb16ba` on `master`; records in
