@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — test that `push_pull --udp` reaches an IPv6 daemon
+
+**Repository:** `oag-listend`, commit `7c2e6e3` on `master`; records in `open-agent-graph`.
+
+**Why.** The IPv6 client fix was verified only by hand; a behaviour change in a shipped artefact
+deserves an automated guard.
+
+**What changed.** New binary-level test: start the daemon with `--udp [::1]:<port>`, run the shipped
+client against it, assert `verified=true` and a typed `Rejected`. It skips cleanly where the host has
+no IPv6 loopback rather than failing.
+
+**A trap worth recording.** My first discrimination probe appeared to pass with the bug in place. Cause:
+the test executes `target/debug/examples/push_pull`, which `cargo test --test binary` does **not**
+rebuild, so it ran a stale example. Rebuilding the example first made the probe fail as expected.
+Same class of mistake as the earlier release-binary staleness -- verify artefacts by content, and
+rebuild explicitly before trusting a probe.
+
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 59 end-to-end, 0 failed**;
+`./scripts/check.sh` green. Probe verified both ways after rebuilding.
+
+**Commit identifiers:** `oag-listend` `7c2e6e3`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — let `push_pull --udp` reach an IPv6 daemon
 
 **Repository:** `oag-listend`, commit `b17dc28` on `master`; records in `open-agent-graph`.
