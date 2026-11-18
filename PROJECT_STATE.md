@@ -128,7 +128,9 @@ The perpetual-directive repository: one stable audio surface behind pluggable ca
   IPFS), `--seed`, `--no-generate`, and `push_pull` as the smallest honest client. systemd unit
   included.
 - Every gate is one command: `scripts/check.sh [--release]` runs fmt, clippy, rustdoc with warnings
-  denied, the suite, and `systemd-analyze verify` on the shipped unit. All green, debug and release.
+  denied, the examples build, the suite, and `systemd-analyze verify` on the shipped unit -- and
+  `.github/workflows/check.yml` runs that same script on every push and pull request, so a merge
+  cannot bypass it. All green, debug and release, and from a clean clone.
 - Hostile input is fuzzed for panic-safety: 5,000 deterministic random bodies through the codec, and
   garbage plus lying lengths across native, HTTP, UDP and Unix, with liveness asserted after.
 - Reticulum remains deliberately unbuilt: it needs a physical interface.
