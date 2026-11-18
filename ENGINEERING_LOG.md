@@ -47,6 +47,30 @@ format.
 
 ---
 
+## 2026-11-14 — verify the documented defaults with no arguments
+
+**Repository:** `oag-listend`, no code change.
+
+**Why.** SPEC and README state the default bind (`0.0.0.0:7100`), the default store bound (1 GiB), and
+that the seed comes from the clock and process id. All three had only been read, never run.
+
+**Observed.**
+```
+oag-listend http on 127.0.0.1:7932
+oag-listend listening on 0.0.0.0:7100
+  note: 0.0.0.0:7100 is not a loopback address -- this serves audio to that interface
+  seed 1801033544959692469  max-bytes 1073741824  held 0
+```
+`GET /` reported `protocol 1`, `items: 0`, `bytes: 0 / 1073741824` -- matching SPEC's description of
+that route exactly. SIGTERM exited 0.
+
+(Note: with no `--http`, port 7100 speaks the frame protocol only, so the usage line is not available
+over HTTP in that configuration.)
+
+**Commit identifiers:** none (no change needed). `./scripts/check.sh` green: 64 unit + 58 end-to-end.
+
+---
+
 ## 2026-11-14 — run the README command block verbatim
 
 **Repository:** `oag-listend`, no code change.
