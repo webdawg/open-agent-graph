@@ -47,6 +47,22 @@ format.
 
 ---
 
+## 2026-11-14 — carrier-count language check
+
+**Repositories:** `oag-listend` and `open-agent-graph`, no code change.
+
+**Why.** "Four carriers" vs "five ways to reach the audio" could be drift or a deliberate distinction; checked rather than assumed.
+
+**Result -- consistent, nothing changed.** TCP, HTTP, UDP and the Unix socket are the four *carriers*;
+IPFS is framed throughout as a mirror on top of them (SPEC's status line: "Four carriers are live … and
+`--ipfs-api` additionally mirrors accepted audio to IPFS"; README: "Five ways to reach the audio"). The
+only other hits are dated historical entries in PROJECT_STATE ("47 unit + 21 end-to-end"), which are
+records of their time, not current claims.
+
+**Commit identifiers:** none. `./scripts/check.sh` green across all five gates.
+
+---
+
 ## 2026-11-14 — verify the documented CLI surface against the parsers
 
 **Repository:** `oag-listend`, no code change.
