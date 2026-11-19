@@ -26,6 +26,14 @@ accumulation.
 and to pass with it. `./scripts/check.sh` green across all six gates:
 **64 unit + 77 end-to-end = 141 tests**.
 
+**Verification after the fix.** Clean `git clone` → `./scripts/check.sh` and
+`./scripts/check.sh --release`: **both exit 0, all six gates, 141 tests**.
+
+**An incident, recorded plainly.** The first attempt cloned into `/tmp`, which is a 7.8 GB
+tmpfs; three clones filled it and the run died with `Disk quota exceeded`. Nothing in the
+repositories was affected (they live on the 203 GB root filesystem), and the clones were
+removed. The verification was redone with the clone on the large disk.
+
 **Push status:** `oag-listend` pushed to `master` (`604124f..db790de`); this entry's commit pending.
 
 ---
