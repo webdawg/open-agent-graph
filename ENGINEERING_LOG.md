@@ -114,7 +114,7 @@ an invalid `--listen` (exit 1, `invalid socket address`); `--seed abc` (usage er
 150-character `--unix` path (`path must be shorter than SUN_LEN`, exit 1); `--unix` in a
 missing directory (`No such file or directory`, exit 1).
 
-**Tests executed.** None new; the suite remains 128 green.
+**Tests executed.** None new in this sweep; the suite is 133 green as of this entry.
 
 **Push status:** all five clean and pushed.
 
