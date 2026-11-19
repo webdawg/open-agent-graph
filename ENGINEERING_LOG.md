@@ -6,6 +6,27 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — the clippy gate now denies warnings
+
+**Repository:** `oag-listend`, commit `6c63b9b` on `master`; records in `open-agent-graph`.
+
+**The gap.** `scripts/check.sh` ran `cargo clippy --all-targets` with no `-D warnings`. A new lint was
+printed and the gate still passed — weaker than the rustdoc gate, which already used
+`RUSTDOCFLAGS="-D warnings"`. The earlier "clippy 0 warnings" results were true of the default
+lint set, but nothing enforced them.
+
+**What changed.** `cargo clippy -p oag-listend --all-targets -- -D warnings`. Adding it **immediately
+surfaced a real lint the gate had been passing**: a needless borrow in `tests/persistence.rs`
+(`dir.join(&"cd".repeat(32))`). Fixed. The header comment, which described four gates when the
+script runs six, is corrected too.
+
+**Tests executed.** `./scripts/check.sh` green across all six gates: **64 unit + 77 end-to-end =
+141 tests**. The gate's new strictness was confirmed by the failure it produced before the fix.
+
+**Push status:** `oag-listend` pushed to `master` (`db790de..6c63b9b`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — boundary probes: the remaining numeric caps, by hand
 
 **Repository:** `oag-listend`; records in `open-agent-graph`. No code change.
