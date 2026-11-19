@@ -19,6 +19,8 @@ performance measurements, commit identifiers, push status, and remaining defects
 - Licence: `AGPL-3.0-or-later` in every `Cargo.toml` and the AGPL v3 text in every `LICENSE`.
 - `#![forbid(unsafe_code)]` in **21 of 21** `.rs` files.
 - `README.md` documents every flag `main.rs` actually accepts; `SPEC.md` status line says "serves".
+- Repository identity by remote: all five `origin` URLs match the directive, and no sixth
+  `oag*` checkout exists.
 
 **Tests executed.** `./scripts/check.sh` exit 0, **128 tests** (64 unit + 64 end-to-end).
 
