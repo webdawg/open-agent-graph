@@ -6,6 +6,32 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — refuse a CID the mirror hands back that cannot be one
+
+**Repository:** `oag-listend`, commit `579b01c` on `master`; records in `open-agent-graph`.
+
+**The defect.** The write half of the IPFS mirror read `Hash` out of Kubo's `/api/v0/add` reply,
+stored it, persisted it to `<hash>.cid`, and later wrote it into `X-IPFS-CID` and `ETag` on every
+fetch of that audio — without ever running it through `validate_cid`, the plausibility check the read
+half already applies. The mirror is cleartext HTTP by design, so that reply comes from the network:
+a malicious or compromised node, or an on-path attacker, answering with
+`{"Hash":"evil\r\nX-Injected: yes"}` would put a second header line into responses the daemon sends.
+
+**The fix.** `IpfsPublisher::add` now runs the returned CID through `validate_cid`. A refusal becomes
+`MirrorOutcome::Failed`, which is exactly what a failed mirror means: the audio was already written
+durably before the mirror was attempted, so it is still stored and served. No header can carry an
+unvalidated value, on either the native or the HTTP surface.
+
+**Tests executed.** Two new tests: a unit test (`a_cid_that_is_not_plausible_is_refused_not_stored`)
+and an end-to-end one (`an_implausible_cid_from_the_node_is_refused_not_served`) that mirrors to a
+stub returning header text and asserts the audio still verifies, the failure is recorded, and no
+`X-Injected` or `X-IPFS-CID` header appears. **Both were checked to fail with the guard disabled.**
+`./scripts/check.sh` green across all six gates: **64 unit + 68 end-to-end = 132 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`b11dba2..579b01c`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — refuse ambiguous HTTP body framing
 
 **Repository:** `oag-listend`, commit `b11dba2` on `master`; records in `open-agent-graph`.
