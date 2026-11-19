@@ -21,7 +21,8 @@ the exit, so the guard's SIGKILL only fires where nothing else reaped the child.
 
 **Tests executed.** Injected a failure into a daemon-spawning test: **before, the child survived;
 after, 0 daemons are left behind.** `./scripts/check.sh` green across all six gates:
-**64 unit + 77 end-to-end = 141 tests**.
+**64 unit + 77 end-to-end = 141 tests**, and `--release` likewise afterwards, with 0 daemons
+left on the machine.
 
 **Push status:** `oag-listend` pushed to `master` (`6c63b9b..28e50a2`); this entry's commit pending.
 
