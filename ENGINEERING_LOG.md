@@ -6,6 +6,30 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — test the sidecar bounds, not just the constants
+
+**Repository:** `oag-listend`, commits `bc9979e` and `34ce2bc` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** The store directory is operator-controlled, so a sidecar is bounded before it is read:
+a `.json` over `MAX_SIDECAR_BYTES` (4096) and a `.cid` over `MAX_CID_SIDECAR_BYTES` (128) are
+ignored rather than pulled into memory, and a `.cid` is also run through `validate_cid`. Neither
+guard was covered by a test.
+
+**What changed.** New `oversized_sidecars_are_ignored_and_the_audio_still_loads` in
+`tests/persistence.rs`. Two items: one with a small honest `.json` sidecar (asserted to be read, so
+the test proves the guard is what ignores the large one rather than a path that never reads
+sidecars), and one with both sidecars over their bounds (asserted ignored) while its audio still
+loads, serves, and verifies.
+
+**Tests executed.** **Checked to fail when the `.json` size guard is removed** from `read_sidecar`,
+and to pass with it. `./scripts/check.sh` green across all six gates:
+**64 unit + 71 end-to-end = 135 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`057ae78..34ce2bc`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — test the servable bound, not just the constant
 
 **Repository:** `oag-listend`, commit `af99f91` on `master`; records in `open-agent-graph`.
