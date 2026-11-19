@@ -86,6 +86,9 @@ still passes 16 tests.
 
 **Tests executed.** `./scripts/check.sh` green across all five gates: **64 unit + 64 end-to-end**.
 
+**Regression check.** A clean `git clone` of `oag-listend` builds through the wrapper
+(creates `target/.rustc_info.json`) and `./scripts/check.sh` passes all six gates, **128 tests**.
+
 **Push status:** `oag-listend` pushed to `master`; this entry's commit pending.
 
 ---
