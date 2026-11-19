@@ -528,7 +528,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    (`--ipfs-api`) offers accepted audio to a Kubo node best-effort and lock-free, mirrors the stored
    library on startup, and carries each CID on the wire and as `X-IPFS-CID`; it is tested against a
    stub and **not** against real IPFS; it also reads by CID (`GET /ipfs/{cid}`, local-first so held
-   audio survives a node outage). Current bar: 64 unit + 63 end-to-end tests, 0 failed.
+   audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
+   its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
+   `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
+   64 unit + 64 end-to-end tests, 0 failed.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
