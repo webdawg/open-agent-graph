@@ -6,6 +6,25 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — README accuracy, and a clean-clone verification of the whole session
+
+**Repository:** `oag-listend`, commit `604124f` on `master`; records in `open-agent-graph`.
+
+**What changed.** README described `scripts/check.sh` as "fmt, clippy, rustdoc, tests"; it runs six
+gates (fmt, clippy, rustdoc, examples, tests, systemd unit). Corrected. Re-read the whole README
+against the code: the "four generated items" claim is accurate (`wav::sounds(seed, 3)` plus the
+canonical ping), as are the `--dir`, `--max-bytes`, `--ipfs-api`, `--check`, signal and
+non-loopback descriptions.
+
+**Verification.** Clean `git clone` of `oag-listend`, then `./scripts/check.sh` and
+`./scripts/check.sh --release`: **both exit 0, all six gates, 140 tests each**, and the clone's
+working tree is clean afterwards (nothing untracked). This is the first release-profile run since
+the source changes earlier in the session, so the debug/release overflow divergence is covered too.
+
+**Push status:** `oag-listend` pushed to `master` (`30ec208..604124f`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — assert the HTTP index, and catch SPEC up with the suite
 
 **Repository:** `oag-listend`, commit `30ec208` on `master`; records in `open-agent-graph`.
