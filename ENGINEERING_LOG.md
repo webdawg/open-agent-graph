@@ -6,6 +6,30 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — boundary probes: the remaining numeric caps, by hand
+
+**Repository:** `oag-listend`; records in `open-agent-graph`. No code change.
+
+**Method.** The two defects found earlier in the session (the soft head bound, and before it the
+CID injection) both came from *probing a boundary* rather than reading. So the remaining numeric
+caps were probed against the real binary:
+
+- **HTTP `Content-Length` cap.** Declared `MAX_BODY_BYTES` → accepted (the daemon waits for the
+  body); `MAX_BODY_BYTES + 1` and `+1MB` → `413`. Exact.
+- **Frame cap before allocation.** `read_frame` checks `len > max_frame` before `vec![0u8; len]`, so
+  a lying length cannot make the daemon allocate on a client's word. Exact.
+- **HTTP listing limit.** Uses the same `normalize_limit(limit, MAX_LIST_LIMIT)` as the native
+  carrier, so `limit > cap` clamps rather than erroring.
+- **`OPTIONS` with a body.** A preflight carrying `Content-Length: 200` and 200 bytes still gets
+  its full `204`, because `read_request` consumes the declared body before routing -- no unread data
+  is left for the close to turn into a reset.
+
+**Tests executed.** None new; the suite is 141 green as of this entry.
+
+**Push status:** all five clean and pushed.
+
+---
+
 ## 2026-11-19 — the HTTP head bound is now exact
 
 **Repository:** `oag-listend`, commits `1133256` and `db790de` on `master`; records in
