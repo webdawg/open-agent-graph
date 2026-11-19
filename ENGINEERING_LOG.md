@@ -47,122 +47,6 @@ format.
 
 ## 2026-11-14 — bounded shutdown grace; register stop signals eagerly
 
-**Repository:** `oag-listend`, commits `16f953f`, `19c7c4f`, `2bed408`, `0dd409a` on
-`master`; records in `open-agent-graph`.
-
-**Defect 1 -- in-flight exchanges were cut off.** SIGTERM/SIGINT stopped the accept loops and
-exited at once, so a client mid-download lost the tail of the item. Accepting now stops
-immediately, then the daemon waits up to `SHUTDOWN_GRACE` (2 s) for sessions to drain --
-counted per stream carrier via an atomic counter -- and a client that never reads cannot hold a
-stop open past it. New `an_in_flight_download_survives_a_stop` requests an 8 MiB item over a
-2 KiB receive buffer, does not read while SIGTERM arrives, then drains and must receive every
-byte, with the daemon exiting 0 promptly.
-
-**Defect 2 -- an early Ctrl+C could kill the daemon outright.** Reproduced only under CPU load:
-the signal arrived before `main` reached the select that registered the handler, so the default
-terminate action fired. Both stop signals are now registered at the very top of `main`, using
-`unix::signal` for SIGINT as well as SIGTERM because `ctrl_c()` registers only on first poll.
-
-**Test hardening found along the way.** The shutdown tests had duplicate bodies; they now share
-`stop_once`/`stop_twice` with one retry. They gate on a successful Hello first -- registration
-precedes binding -- so a pass cannot hide a startup race. The in-flight scenario also moved to
-the native carrier: it allocated its HTTP port up front, which raced another process under load;
-the daemon announces the address it actually bound, so parsing that removes the allocation and
-the race.
-
-**Verification.** Under 3 busy loops, 10 consecutive runs of the binary suite: **0 failures**
-(previously 3 of 8 failed on the signal race). `./scripts/check.sh` green across all five gates:
-**64 unit + 63 end-to-end**.
-
-**Commit identifiers:** `oag-listend` `16f953f`, `19c7c4f`, `2bed408`, `0dd409a`; this entry's
-commit pending.
-
----
-
-## 2026-11-14 — cover the HTTP CONNECT tunnel end to end
-
-**Repository:** `oag-listend`, commit `59bcc74` on `master`; records in `open-agent-graph`.
-
-**The gap.** The imagination `Transport` seam lists an HTTP CONNECT tunnel as a carrier. It was never
-exercised, so "a new carrier is a new way to reach the same surface" had no evidence for it.
-
-**What changed.** New `tests/tunnel.rs`: a minimal CONNECT proxy in-process answers `CONNECT`, connects
-to the daemon, and pipes bytes both ways; the client then performs hello, publish, fetch with
-verification, and a typed refusal through the tunnel. SPEC now states that the CONNECT tunnel reaches
-the same surface, and the status paragraph lists it.
-
-**Tests executed.** `./scripts/check.sh` green: **64 unit + 64 end-to-end**.
-
-**Commit identifiers:** `oag-listend` `59bcc74`; this entry's commit pending.
-
----
-
-## 2026-11-14 — run the gate in release as well
-
-**Repository:** `oag-listend`, commit `8a1941e` on `master`; records in `open-agent-graph`.
-
-**Why.** Integer overflow panics in debug but wraps in release, so a green debug run does not prove
-the artifact an operator actually runs is safe.
-
-**What changed.** `.github/workflows/check.yml` gains a second job running `./scripts/check.sh --release`.
-Both jobs are present in the committed YAML, which parses.
-
-**Tests executed.** `./scripts/check.sh --release` locally: exit 0, **128 tests** (64 unit + 64 end-to-end).
-Debug gate unchanged at 128.
-
-**Commit identifiers:** `oag-listend` `8a1941e`; this entry's commit pending.
-
----
-
-## 2026-11-14 — bound assert_serving by its own deadline
-
-**Repository:** `oag-listend`, commit `6ca4d21` on `master`; records in `open-agent-graph`.
-
-**The inconsistency.** The helper added for the shutdown tests loops up to 200 times at up to 500 ms per attempt, a worst case near 100 s, while the wall clock wrapping each test is 60 s. A dead daemon could burn past its caller's bound.
-
-**What changed.** `assert_serving` now carries its own 10 s deadline and fails inside it, so a dead daemon fails fast regardless of the caller.
-
-**Tests executed.** `./scripts/check.sh` green: **64 unit + 64 end-to-end**, fmt, clippy `--all-targets`, rustdoc `-D warnings`, examples built, systemd unit verified.
-
-**Commit identifiers:** `oag-listend` `6ca4d21`; this entry's commit pending.
-
----
-
-## 2026-11-14 — start-up checks; no reachable increment remains
-
-**Repositories:** all five, no code change.
-
-**Checks performed this invocation.** Five checkouts located by remote; all clean and pushed on their correct branches (`main`, `main`, `master`, `master`, `master`). SPEC status line reads "serves"; `lib.rs` matches. `./scripts/check.sh` green across fmt, clippy `--all-targets`, rustdoc `-D warnings`, examples built, **64 unit + 63 end-to-end**, systemd unit verified.
-
-**Why no change.** Every defect reachable from inside this repository has been fixed and guarded, and every documented bound is measured by a test proven to fail when its property breaks. The three remaining items each need something this machine does not have:
-- **Reticulum** -- a physical interface plus `oag-storage`.
-- **Real-Kubo validation** of the IPFS halves -- a running node; everything so far is stub-tested and SPEC says so.
-- **Native-protocol CID reads** -- a sixth frame operation, which step 2 excludes ("operations are only ...").
-
-Building any of them blind would be untested carrier code, which this run has consistently refused.
-
-**Commit identifiers:** none.
-
----
-
-## 2026-11-14 — clean-clone verification of the CI workflow
-
-**Repository:** `oag-listend`, no code change.
-
-**Method.** Two fresh clones containing only committed content; `./scripts/check.sh` (debug) and
-`./scripts/check.sh --release`. Both exit 0 with all five gates green: fmt, clippy `--all-targets`,
-rustdoc `-D warnings`, examples built, tests (**64 unit + 62 end-to-end**), systemd unit verified.
-
-**Why it matters.** The workflow invokes the script rather than restating its steps, so these runs are
-what CI will actually do. Verifying both profiles on pristine trees confirms a merge cannot land with a
-gate unrun or an artefact dependency.
-
-**Commit identifiers:** none (no change needed).
-
----
-
-## 2026-11-14 — bounded shutdown grace; register stop signals eagerly
-
 **Repository:** `oag-listend`, commits `16f953f` and `19c7c4f` on `master`; records in
 `open-agent-graph`.
 
@@ -180,14 +64,15 @@ gate unrun or an artefact dependency.
 
 **Test hardening found while writing the test.** The shutdown tests only waited for stdout; under
 load the kill could still land before the child reached `main`. They now confirm a successful Hello
-first, which proves the handlers exist (registration precedes binding).
+first, which proves the handlers exist (registration precedes binding). The in-flight scenario also
+moved to the native carrier: it had allocated its HTTP port up front, which raced another process.
 
 **Verification.** New `an_in_flight_download_survives_a_stop`: a client requests an 8 MiB item over a
 2 KiB receive buffer, does not read while SIGTERM arrives, then drains and must receive every byte,
 with the daemon exiting 0 promptly. Under 3 busy loops, 10 consecutive runs: **0 failures**
 (previously 3 of 8 failed on the signal race alone).
 
-**Tests executed.** `cargo test -p oag-listend`: **64 unit + 62 end-to-end, 0 failed**;
+**Tests executed.** `cargo test -p oag-listend`: **64 unit + 64 end-to-end, 0 failed**;
 `./scripts/check.sh` green across all five gates.
 
 **Commit identifiers:** `oag-listend` `16f953f`, `19c7c4f`; this entry's commit pending.
