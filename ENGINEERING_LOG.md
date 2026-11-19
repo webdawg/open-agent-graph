@@ -22,6 +22,8 @@ script runs six, is corrected too.
 
 **Tests executed.** `./scripts/check.sh` green across all six gates: **64 unit + 77 end-to-end =
 141 tests**. The gate's new strictness was confirmed by the failure it produced before the fix.
+Afterwards a clean `git clone` passed **both** `./scripts/check.sh` and `--release`, all six
+gates, 141 tests each.
 
 **Push status:** `oag-listend` pushed to `master` (`db790de..6c63b9b`); this entry's commit pending.
 
