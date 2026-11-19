@@ -123,6 +123,11 @@ implementable step.
 - Dependency set: three direct dependencies (`blake3`, `thiserror`, `tokio`) and 42 packages in
   total, all mainstream and maintained; `cargo-audit` is not installed here, so no advisory scan
   was run — recorded as an absence, not a pass.
+- Frame codec audited: bounds-checked `Reader`, string lengths validated against remaining
+  bytes, hash validated as 64 hex and lowercased. The encoders' `as u16` / `as u32` casts are
+  latent truncation, but every daemon-side value is bounded by construction (16 MiB frame cap,
+  10 000 list limit, 100 000 load cap), so it is unreachable; making 40 call sites fallible for it
+  would be churn, not hardening.
 
 **Tests executed.** `./scripts/check.sh` exit 0, **128 tests** (64 unit + 64 end-to-end).
 
