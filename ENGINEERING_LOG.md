@@ -6,6 +6,35 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — refuse ambiguous HTTP body framing
+
+**Repository:** `oag-listend`, commit `b11dba2` on `master`; records in `open-agent-graph`.
+
+**Why.** Auditing the HTTP reader for protocol correctness turned up two ways a client — or a reverse
+proxy in front — could make the body's extent ambiguous.
+
+**What changed.**
+
+- *Duplicated `Content-Length`.* The reader accepted more than one and let the last win. RFC 7230
+  3.3.3 requires rejecting it, and a proxy that chooses a different value is the classic
+  request-smuggling setup. Now refused with `400 multiple Content-Length headers`.
+- *Non-chunked transfer encoding.* Only `Transfer-Encoding: chunked` was refused, so
+  `Transfer-Encoding: gzip` fell through and its body was read as if `Content-Length` framed it.
+  Any transfer encoding is now refused, with a message that still says to send `Content-Length`.
+
+Both refusals happen **before** the body is read, so `unread_body` is set and the body is drained
+after a half-close rather than turning the refusal into a TCP reset that discards the response.
+
+**Tests executed.** Two new end-to-end tests (`two_content_length_headers_are_refused`,
+`a_non_chunked_transfer_encoding_is_refused`). **Each was checked to fail when its guard is
+disabled** — disabling both also fails the existing chunked test, which shares the transfer-encoding
+guard. `./scripts/check.sh` green across all six gates: **64 unit + 66 end-to-end = 130 tests**.
+`SPEC.md` and `README.md` updated, including the test count.
+
+**Push status:** `oag-listend` pushed to `master` (`6380b2f..b11dba2`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — operator failure modes, exercised
 
 **Repository:** `oag-listend`; records in `open-agent-graph`. No code change.
