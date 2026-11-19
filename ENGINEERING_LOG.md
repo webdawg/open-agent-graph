@@ -128,6 +128,10 @@ implementable step.
   latent truncation, but every daemon-side value is bounded by construction (16 MiB frame cap,
   10 000 list limit, 100 000 load cap), so it is unreachable; making 40 call sites fallible for it
   would be churn, not hardening.
+- Generator and UDP carrier audited: the WAV writer's RIFF/data sizes are checked
+  against the actual bytes, the sample count is capped, and the canonical ping is
+  asserted to fit a datagram; the datagram carrier refuses any reply that exceeds one
+  datagram rather than truncating it. No defect.
 
 **Tests executed.** `./scripts/check.sh` exit 0, **128 tests** (64 unit + 64 end-to-end).
 
