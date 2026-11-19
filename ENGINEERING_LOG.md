@@ -6,6 +6,30 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — test eviction during a store load
+
+**Repository:** `oag-listend`, commits `1985272` and `3a9558a` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** Runtime eviction is covered by `tests/eviction.rs`; the load path is not. A restart
+whose directory exceeds `--max-bytes` must honour the bound and unlink what it drops. Without that,
+an operator who lowers the bound would find the daemon holding more than it advertises, with the
+surplus files never leaving the disk.
+
+**What changed.** New `a_restart_over_the_bound_evicts_and_unlinks`. The directory is read in
+filesystem order, so *which* item is dropped is not deterministic; the test asserts the invariants
+an operator depends on instead: `bytes_held() <= bound`, `report.loaded == store.len()`,
+`report.evicted + report.loaded == 3`, at least one eviction, and the directory naming exactly the
+same set as the index (nothing served that is not on disk, no file left for a dropped item).
+
+**Tests executed.** **Checked to fail when the load-time unlink loop is removed from `load_dir`**,
+and to pass with it. `./scripts/check.sh` green across all six gates:
+**64 unit + 72 end-to-end = 136 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`34ce2bc..3a9558a`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — test the sidecar bounds, not just the constants
 
 **Repository:** `oag-listend`, commits `bc9979e` and `34ce2bc` on `master`; records in
