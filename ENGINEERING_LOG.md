@@ -6,6 +6,26 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — wire the build-generation pruner in oag-listend
+
+**Repository:** `oag-listend`, commit `6380b2f` on `master`; records in `open-agent-graph`.
+
+**The gap.** Re-checking the settled tooling invariant, rather than trusting the earlier record, showed
+that `oag-listend/.cargo/` existed but was **empty**: the build-generation pruner that the other four
+repositories run through `scripts/rustc-wrapper.sh` was silently inactive in this repository — the one
+whose `target/` is most likely to grow.
+
+**What changed.** `.cargo/config.toml` copied verbatim from `open-agent-graph`; the file is now
+sha256-identical (`7973fe4d70d3b1fd`) across all five repositories. Verified that `cargo build` now
+runs through the wrapper (it creates `target/.rustc_info.json`) and that `scripts/test_prune_target.py`
+still passes 16 tests.
+
+**Tests executed.** `./scripts/check.sh` green across all five gates: **64 unit + 64 end-to-end**.
+
+**Push status:** `oag-listend` pushed to `master`; this entry's commit pending.
+
+---
+
 ## 2026-11-12 — oag-listend is founded: the global daemon that serves audio
 
 **Repository:** `oag-listend` (new, https://github.com/webdawg/oag-listend), plus `open-agent-graph`
