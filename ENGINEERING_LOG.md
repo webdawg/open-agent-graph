@@ -23,6 +23,8 @@ performance measurements, commit identifiers, push status, and remaining defects
 - The pruner fired during the run (`removed 9 items`), confirming the newly wired config is live.
 
 **Tests executed.** `./scripts/check.sh` exit 0, 128 tests; the above is the operator-visible proof.
+The suite was then repeated **8 consecutive times** (5 idle, 3 under three busy loops): 0 failures,
+so no test depends on timing luck.
 
 **Push status:** all five clean and pushed.
 
