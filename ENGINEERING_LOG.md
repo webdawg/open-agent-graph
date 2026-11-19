@@ -6,6 +6,26 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — re-verified the settled invariants, not the notes
+
+**Repository:** `oag-listend`; records in `open-agent-graph`. No code change this pass.
+
+**What was re-checked, because the last gap was found exactly this way:**
+
+- Build-generation pruner now wired in **all five** repositories: `.cargo/config.toml` sha256
+  `7973fe4d70d3b1fd` in each, including `oag-listend` where it was missing.
+- `scripts/rustc-wrapper.sh`, `scripts/prune-target.py`, `scripts/test_prune_target.py` sha256-identical
+  across all five; no `__pycache__` tracked anywhere.
+- Licence: `AGPL-3.0-or-later` in every `Cargo.toml` and the AGPL v3 text in every `LICENSE`.
+- `#![forbid(unsafe_code)]` in **21 of 21** `.rs` files.
+- `README.md` documents every flag `main.rs` actually accepts; `SPEC.md` status line says "serves".
+
+**Tests executed.** `./scripts/check.sh` exit 0, **128 tests** (64 unit + 64 end-to-end).
+
+**Push status:** no commit needed; all five clean and pushed.
+
+---
+
 ## 2026-11-19 — wire the build-generation pruner in oag-listend
 
 **Repository:** `oag-listend`, commit `6380b2f` on `master`; records in `open-agent-graph`.
