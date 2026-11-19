@@ -45,39 +45,6 @@ format.
 
 ---
 
----
-
-## 2026-11-14 — bounded shutdown grace; register stop signals eagerly
-
-**Repository:** `oag-listend`, commits `16f953f` and `19c7c4f` on `master`; records in
-`open-agent-graph`.
-
-**Defect 1 -- in-flight exchanges were cut off.** SIGTERM/SIGINT stopped the accept loops and
-exited at once, so a client mid-download lost the tail. Accepting now stops immediately, then the
-daemon waits up to `SHUTDOWN_GRACE` (2 s) for sessions to drain -- counted per stream carrier via an
-atomic counter -- and a client that never reads cannot hold a stop open past it. New
-`an_in_flight_download_survives_a_stop` requests an 8 MiB item over a 2 KiB receive buffer, does not
-read while SIGTERM arrives, then drains and must receive every byte.
-
-**Defect 2 -- an early Ctrl+C could kill the daemon outright.** Reproduced only under CPU load: the
-signal arrived before `main` reached the select that registered the handler, so the default terminate
-action fired. Both stop signals are now registered at the very top of `main`, using `unix::signal`
-for SIGINT as well as SIGTERM because `ctrl_c()` only registers on first poll.
-
-**Test hardening found along the way.** The two shutdown tests had duplicate bodies; they now share
-`stop_once`/`stop_twice` with one retry, since a stop signal that beats `main` legitimately kills the
-process. Both gate on a successful Hello first -- registration precedes binding -- so a pass cannot
-hide a startup race. Adds a native pipelining test: frames written together are answered in order,
-which is the contract that lets one connection carry many exchanges.
-
-**Verification.** Under 3 busy loops, 10 consecutive runs of the binary suite: **0 failures**
-(previously 3 of 8 failed on the signal race). `./scripts/check.sh` green across all five gates:
-**64 unit + 63 end-to-end**.
-
-**Commit identifiers:** `oag-listend` `16f953f`, `19c7c4f`; this entry's commit pending.
-
----
-
 ## 2026-11-14 — bounded shutdown grace; register stop signals eagerly
 
 **Repository:** `oag-listend`, commits `16f953f`, `19c7c4f`, `2bed408`, `0dd409a` on
