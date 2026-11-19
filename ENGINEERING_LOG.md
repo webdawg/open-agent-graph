@@ -130,6 +130,23 @@ the same surface, and the status paragraph lists it.
 
 ---
 
+## 2026-11-14 — run the gate in release as well
+
+**Repository:** `oag-listend`, commit `8a1941e` on `master`; records in `open-agent-graph`.
+
+**Why.** Integer overflow panics in debug but wraps in release, so a green debug run does not prove
+the artifact an operator actually runs is safe.
+
+**What changed.** `.github/workflows/check.yml` gains a second job running `./scripts/check.sh --release`.
+Both jobs are present in the committed YAML, which parses.
+
+**Tests executed.** `./scripts/check.sh --release` locally: exit 0, **128 tests** (64 unit + 64 end-to-end).
+Debug gate unchanged at 128.
+
+**Commit identifiers:** `oag-listend` `8a1941e`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — bound assert_serving by its own deadline
 
 **Repository:** `oag-listend`, commit `6ca4d21` on `master`; records in `open-agent-graph`.
