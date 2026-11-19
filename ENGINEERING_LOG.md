@@ -63,6 +63,9 @@ implementable step.
 - `README.md` documents every flag `main.rs` actually accepts; `SPEC.md` status line says "serves".
 - Repository identity by remote: all five `origin` URLs match the directive, and no sixth
   `oag*` checkout exists.
+- Dependency set: three direct dependencies (`blake3`, `thiserror`, `tokio`) and 42 packages in
+  total, all mainstream and maintained; `cargo-audit` is not installed here, so no advisory scan
+  was run — recorded as an absence, not a pass.
 
 **Tests executed.** `./scripts/check.sh` exit 0, **128 tests** (64 unit + 64 end-to-end).
 
