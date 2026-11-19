@@ -6,6 +6,28 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — assert the HTTP index, and catch SPEC up with the suite
+
+**Repository:** `oag-listend`, commit `30ec208` on `master`; records in `open-agent-graph`.
+
+**The gap.** `GET /` is the operator's "what is this", and README points an operator at it. The test
+asserted only that the body contained the daemon's name, so a change to the reported protocol,
+item count, byte accounting, or the audio-only statement would have passed unnoticed. Separately,
+`SPEC.md`'s coverage list had fallen behind the suite: the servable-bound round trip, the sidecar
+bounds, load-time eviction, the load-path skips, the mirror-log cap, hang-up resilience, IPv6 on the
+stream/HTTP carriers and the unwritable-stdout behaviour were all unpinned in the spec.
+
+**What changed.** The index test now asserts the protocol version, `items: 0`, `bytes: 0 / <bound>`
+and the audio-only line. SPEC's coverage list gains four bullets naming the behaviours above.
+
+**Tests executed.** **Checked to fail when the index wording changes** (`only audio is accepted`
+→ `only audio is taken`), and to pass with it. `./scripts/check.sh` green across all six gates:
+**64 unit + 76 end-to-end = 140 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`3cfe821..30ec208`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — test the stream and HTTP carriers over IPv6
 
 **Repository:** `oag-listend`, commits `d734948` and `3cfe821` on `master`; records in
