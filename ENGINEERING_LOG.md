@@ -24,6 +24,10 @@ caps were probed against the real binary:
   its full `204`, because `read_request` consumes the declared body before routing -- no unread data
   is left for the close to turn into a reset.
 
+- **Malformed request lines**, all answered without a panic: HTTP/1.0 with no `Host` → 200;
+  no version → 200; method only and an empty request line → 400; an absolute-form target
+  → 404 (this is not a proxy); `POST` with an empty body → 400; `DELETE` → 404.
+
 **Tests executed.** None new; the suite is 141 green as of this entry.
 
 **Push status:** all five clean and pushed.
