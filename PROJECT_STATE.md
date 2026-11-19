@@ -131,6 +131,11 @@ The perpetual-directive repository: one stable audio surface behind pluggable ca
   denied, the examples build, the suite, and `systemd-analyze verify` on the shipped unit -- and
   `.github/workflows/check.yml` runs that same script on every push and pull request, so a merge
   cannot bypass it. All green, debug and release, and from a clean clone.
+- A stop is graceful but bounded: accepting stops at once, in-flight exchanges get up to 2 s
+  (`SHUTDOWN_GRACE`) to finish rather than being cut off mid-transfer, then the process exits 0; a
+  client that never reads cannot hold a stop open past that bound. Both SIGINT and SIGTERM are
+  registered before anything observable (a signal in that window previously killed the daemon), and
+  both are covered by tests that confirm the daemon is genuinely serving before signalling.
 - Hostile input is fuzzed for panic-safety: 5,000 deterministic random bodies through the codec, and
   garbage plus lying lengths across native, HTTP, UDP and Unix, with liveness asserted after.
 - A stop is graceful but bounded: accepting stops at once, in-flight exchanges get up to 2 s
