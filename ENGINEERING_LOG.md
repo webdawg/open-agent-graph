@@ -6,6 +6,28 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — acceptance sentence run by hand, observed
+
+**Repository:** `oag-listend`; records in `open-agent-graph`. No code change.
+
+**The run.** `oag-listend --listen 127.0.0.1:17100 --http 127.0.0.1:17101 --udp 127.0.0.1:17120
+--unix /tmp/acc.sock --dir /tmp/acc-store --seed 7`, then the operator client against it. Observed:
+
+- Startup generated 4 items; `Hello { protocol_version: 1, item_count: 4 }`.
+- TCP, UDP and Unix each: `published tone ... fetched tone ... same-hash ... verified=true`, same for
+  noise; `non-audio: Rejected { reason: "input is not audio; only audio is accepted" }`.
+- HTTP: `GET /audio` lists hashes with `X-Total-Count`; `GET /audio/{hash}` returns 200,
+  `Content-Type: audio/wav`, byte-identical to the stored file, `Cache-Control: immutable`; `Range`
+  returns 206 matching the prefix; `HEAD` 200; non-audio `POST` 400; unknown hash 404.
+- SIGTERM: daemon exit 0.
+- The pruner fired during the run (`removed 9 items`), confirming the newly wired config is live.
+
+**Tests executed.** `./scripts/check.sh` exit 0, 128 tests; the above is the operator-visible proof.
+
+**Push status:** all five clean and pushed.
+
+---
+
 ## 2026-11-19 — the imagination carrier seam is fully accounted for
 
 **Repository:** `oag-listend`; records in `open-agent-graph`. No code change.
