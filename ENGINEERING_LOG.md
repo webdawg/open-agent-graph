@@ -341,7 +341,8 @@ missing directory (`No such file or directory`, exit 1).
 
 **Tests executed.** `./scripts/check.sh` exit 0, 128 tests; the above is the operator-visible proof.
 The suite was then repeated **8 consecutive times** (5 idle, 3 under three busy loops): 0 failures,
-so no test depends on timing luck.
+so no test depends on timing luck. After the later additions (140 tests, including hang-up and
+per-syscall-timeout cases) it was run **3 more times under three busy loops**: 0 failures.
 
 **Push status:** all five clean and pushed.
 
