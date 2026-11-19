@@ -6,6 +6,26 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — test the mirror log's cap
+
+**Repository:** `oag-listend`, commits `0d456fe` and `b4f11ef` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** `MIRROR_LOG_LIMIT` (64) keeps the most recent mirror outcomes and drops the oldest, so
+a long run cannot grow the log without limit. It is a memory bound with no test.
+
+**What changed.** New `the_mirror_log_is_capped_and_keeps_the_newest` in `tests/ipfs_mirror.rs`: it
+records 70 failures and asserts the log holds 64, `mirror_summary()` counts the retained 64, the
+oldest (`70 - 64`) was dropped, and the newest is last.
+
+**Tests executed.** **Checked to fail when the cap is disabled** (`if false && ...`), and to pass
+with it. `./scripts/check.sh` green across all six gates:
+**64 unit + 73 end-to-end = 137 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`3a9558a..b4f11ef`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — test eviction during a store load
 
 **Repository:** `oag-listend`, commits `1985272` and `3a9558a` on `master`; records in
