@@ -112,6 +112,24 @@ commit pending.
 
 ---
 
+## 2026-11-14 — cover the HTTP CONNECT tunnel end to end
+
+**Repository:** `oag-listend`, commit `59bcc74` on `master`; records in `open-agent-graph`.
+
+**The gap.** The imagination `Transport` seam lists an HTTP CONNECT tunnel as a carrier. It was never
+exercised, so "a new carrier is a new way to reach the same surface" had no evidence for it.
+
+**What changed.** New `tests/tunnel.rs`: a minimal CONNECT proxy in-process answers `CONNECT`, connects
+to the daemon, and pipes bytes both ways; the client then performs hello, publish, fetch with
+verification, and a typed refusal through the tunnel. SPEC now states that the CONNECT tunnel reaches
+the same surface, and the status paragraph lists it.
+
+**Tests executed.** `./scripts/check.sh` green: **64 unit + 64 end-to-end**.
+
+**Commit identifiers:** `oag-listend` `59bcc74`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — start-up checks; no reachable increment remains
 
 **Repositories:** all five, no code change.
