@@ -6,6 +6,30 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — a full log sink no longer stops the audio
+
+**Repository:** `oag-listend`, commit `ff76849` on `master`; records in `open-agent-graph`.
+
+**The defect, reproduced.** Every line the daemon printed went through `println!`, which panics when
+the write fails. `oag-listend --no-generate --listen 127.0.0.1:17900 > /dev/full` exited **101** with
+`failed printing to stdout: No space left on device (os error 28)`. Under systemd stdout *is* the
+journal, so an unavailable journal, a full disk, or a pipe whose reader exited would panic the
+process and stop serving audio.
+
+**The fix.** Output goes through `say!` / `complain!`, which ignore a failed write. Verified by hand
+that a daemon with stdout on `/dev/full` still answers `Hello`, still publishes and fetches with
+`verified=true`, and still exits 0 on SIGTERM.
+
+**Tests executed.** New `an_unwritable_stdout_does_not_stop_the_audio` in `tests/binary.rs`: it opens
+`/dev/full`, spawns the daemon with that as stdout, waits on the listener (the announcement cannot be
+read by design), then asserts Hello, publish and fetch verify, and a clean exit 0. **Checked to fail
+against the pre-fix `main.rs` and pass after.** `./scripts/check.sh` green across all six gates:
+**64 unit + 69 end-to-end = 133 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`579b01c..ff76849`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — refuse a CID the mirror hands back that cannot be one
 
 **Repository:** `oag-listend`, commit `579b01c` on `master`; records in `open-agent-graph`.
