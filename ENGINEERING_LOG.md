@@ -107,6 +107,13 @@ the daemon, and `kill -9 $!` killed `timeout`, which forwarded a stop to the dae
 vanished and the log showed a clean shutdown. Re-tested with the daemon as the direct child: SIGKILL
 leaves the stale socket, as it must.
 
+**Further failure modes exercised, all clean (no panic, no hang):** `--max-bytes 0` (starts,
+reports the zero bound, refuses audio); a read-only `--dir` (generated sounds are rejected with
+the persist reason, the daemon still serves); `--dir` at a regular file (exit 1, `File exists`);
+an invalid `--listen` (exit 1, `invalid socket address`); `--seed abc` (usage error, exit 2); a
+150-character `--unix` path (`path must be shorter than SUN_LEN`, exit 1); `--unix` in a
+missing directory (`No such file or directory`, exit 1).
+
 **Tests executed.** None new; the suite remains 128 green.
 
 **Push status:** all five clean and pushed.
