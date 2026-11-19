@@ -130,6 +130,20 @@ the same surface, and the status paragraph lists it.
 
 ---
 
+## 2026-11-14 — bound assert_serving by its own deadline
+
+**Repository:** `oag-listend`, commit `6ca4d21` on `master`; records in `open-agent-graph`.
+
+**The inconsistency.** The helper added for the shutdown tests loops up to 200 times at up to 500 ms per attempt, a worst case near 100 s, while the wall clock wrapping each test is 60 s. A dead daemon could burn past its caller's bound.
+
+**What changed.** `assert_serving` now carries its own 10 s deadline and fails inside it, so a dead daemon fails fast regardless of the caller.
+
+**Tests executed.** `./scripts/check.sh` green: **64 unit + 64 end-to-end**, fmt, clippy `--all-targets`, rustdoc `-D warnings`, examples built, systemd unit verified.
+
+**Commit identifiers:** `oag-listend` `6ca4d21`; this entry's commit pending.
+
+---
+
 ## 2026-11-14 — start-up checks; no reachable increment remains
 
 **Repositories:** all five, no code change.
