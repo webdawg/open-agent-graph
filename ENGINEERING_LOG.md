@@ -112,6 +112,23 @@ commit pending.
 
 ---
 
+## 2026-11-14 — start-up checks; no reachable increment remains
+
+**Repositories:** all five, no code change.
+
+**Checks performed this invocation.** Five checkouts located by remote; all clean and pushed on their correct branches (`main`, `main`, `master`, `master`, `master`). SPEC status line reads "serves"; `lib.rs` matches. `./scripts/check.sh` green across fmt, clippy `--all-targets`, rustdoc `-D warnings`, examples built, **64 unit + 63 end-to-end**, systemd unit verified.
+
+**Why no change.** Every defect reachable from inside this repository has been fixed and guarded, and every documented bound is measured by a test proven to fail when its property breaks. The three remaining items each need something this machine does not have:
+- **Reticulum** -- a physical interface plus `oag-storage`.
+- **Real-Kubo validation** of the IPFS halves -- a running node; everything so far is stub-tested and SPEC says so.
+- **Native-protocol CID reads** -- a sixth frame operation, which step 2 excludes ("operations are only ...").
+
+Building any of them blind would be untested carrier code, which this run has consistently refused.
+
+**Commit identifiers:** none.
+
+---
+
 ## 2026-11-14 — clean-clone verification of the CI workflow
 
 **Repository:** `oag-listend`, no code change.
