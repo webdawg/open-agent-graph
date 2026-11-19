@@ -6,6 +6,34 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — operator failure modes, exercised
+
+**Repository:** `oag-listend`; records in `open-agent-graph`. No code change.
+
+**Why.** An operator hits these before any test does, and a panic or a hang here is a defect even
+when every test is green.
+
+**Observed, on the real binary:**
+
+- Port already in use: exit 1, `oag-listend: cannot bind 127.0.0.1:17500: Address already in use
+  (os error 98)`. No panic, no retry loop.
+- `--unix` at an existing regular file: exit 1, `"/tmp/regfile.sock" exists and is not a socket` —
+  the file is not deleted.
+- `--unix` at a socket another live daemon serves: exit 1, `"/tmp/live.sock" is already being served`.
+- Socket left by a `SIGKILL`ed daemon: a restart reclaims it and binds.
+- Clean SIGTERM: the socket file is removed.
+
+**A false alarm, recorded as such.** An earlier run of the stale-socket case used `timeout 30` around
+the daemon, and `kill -9 $!` killed `timeout`, which forwarded a stop to the daemon — so the socket
+vanished and the log showed a clean shutdown. Re-tested with the daemon as the direct child: SIGKILL
+leaves the stale socket, as it must.
+
+**Tests executed.** None new; the suite remains 128 green.
+
+**Push status:** all five clean and pushed.
+
+---
+
 ## 2026-11-19 — acceptance sentence run by hand, observed
 
 **Repository:** `oag-listend`; records in `open-agent-graph`. No code change.
