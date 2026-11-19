@@ -6,6 +6,29 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — test the client's runtime-failure exit code
+
+**Repository:** `oag-listend`, commits `106dec3` and `bab8bb9` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** `push_pull`'s usage errors (exit 2) were tested; its runtime failures were not. An
+operator's script depends on that code, and a hang would stall it. Probed by hand first: a closed
+port gives `push_pull: Connection refused` and exit 1; a missing Unix socket gives exit 1 in 47 ms;
+a closed UDP port gives `udp read timed out` at exactly the 10 s bound.
+
+**What changed.** New `the_client_fails_cleanly_against_a_dead_daemon`: runs the client against
+`127.0.0.1:1` under a real 15 s timeout and asserts exit 1 with a reason on stderr. Written as a
+`#[tokio::test]` with `tokio::time::timeout` on purpose -- a plain `Command::output()` cannot bound
+a hang, and an elapsed-time assertion afterwards is too late.
+
+**Tests executed.** **Checked to fail when the client exits 2 instead of 1** (the probe had to delete
+the built example first, since `push_pull()` reuses a stale binary), and to pass with it.
+`./scripts/check.sh` green across all six gates: **64 unit + 78 end-to-end = 142 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`28e50a2..bab8bb9`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — failing tests no longer leave daemons running
 
 **Repository:** `oag-listend`, commit `28e50a2` on `master`; records in `open-agent-graph`.
