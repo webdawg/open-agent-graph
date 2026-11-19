@@ -6,6 +6,29 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — test the servable bound, not just the constant
+
+**Repository:** `oag-listend`, commit `af99f91` on `master`; records in `open-agent-graph`.
+
+**The gap.** `MAX_SERVABLE_BYTES` exists so that no accepted item is unfetchable: a fetch reply also
+carries the hash, a length prefix and an optional CID, so an item at the frame cap would make a reply
+larger than the cap and the client's own decoder would reject it. Only the constant was covered by a
+unit test; the property it guarantees was never exercised.
+
+**What changed.** New `an_item_at_the_frame_bound_is_served_and_one_byte_more_is_refused` in
+`tests/back_and_forth.rs`. It builds a well-formed 16-bit PCM WAV of exactly `MAX_SERVABLE_BYTES`
+(zero payload, honest header), publishes it, fetches it back whole, verifies the hash against the
+bytes, then publishes one byte more and asserts a refusal and that the store still holds one item.
+
+**Tests executed.** **Checked to fail when the 256-byte headroom is removed from the constant**
+(`MAX_FRAME_BYTES - 256` → `MAX_FRAME_BYTES`), and to pass with it — so the test pins the exact
+off-by-one the constant prevents. `./scripts/check.sh` green across all six gates:
+**64 unit + 70 end-to-end = 134 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`ff76849..af99f91`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — a full log sink no longer stops the audio
 
 **Repository:** `oag-listend`, commit `ff76849` on `master`; records in `open-agent-graph`.
