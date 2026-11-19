@@ -6,6 +6,29 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — test every skip reason on the store load path
+
+**Repository:** `oag-listend`, commits `760793f` and `8e2c50e` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** Only the corrupted-file skip was covered. A store directory is operator-controlled, so a
+restart must skip what it cannot honestly serve and report how many: a name that is not a content
+hash, bytes that do not hash to their name, a non-audio payload under a hash-shaped name, a
+non-regular file named like a hash, and a file larger than the bound.
+
+**What changed.** New `a_restart_skips_what_it_cannot_honestly_serve` in `tests/persistence.rs`: one
+directory with six entries, one of them honest, asserting `loaded == 1` and `skipped == 5`. The
+oversized entry is **valid audio whose name is its own hash** -- that is what makes the test detect
+the size guard, since a merely misnamed file would be skipped by the hash check regardless.
+
+**Tests executed.** **Checked to fail when the load size guard is removed** from `load_dir`, and to
+pass with it. `./scripts/check.sh` green across all six gates:
+**64 unit + 74 end-to-end = 138 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`b4f11ef..8e2c50e`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — test the mirror log's cap
 
 **Repository:** `oag-listend`, commits `0d456fe` and `b4f11ef` on `master`; records in
