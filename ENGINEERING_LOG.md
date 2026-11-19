@@ -23,7 +23,8 @@ a hang, and an elapsed-time assertion afterwards is too late.
 
 **Tests executed.** **Checked to fail when the client exits 2 instead of 1** (the probe had to delete
 the built example first, since `push_pull()` reuses a stale binary), and to pass with it.
-`./scripts/check.sh` green across all six gates: **64 unit + 78 end-to-end = 142 tests**.
+`./scripts/check.sh` green across all six gates: **64 unit + 78 end-to-end = 142 tests**. A clean `git clone` then passed **both** profiles, 142 tests each, with 0 daemons left
+running afterwards.
 
 **Push status:** `oag-listend` pushed to `master` (`28e50a2..bab8bb9`); this entry's commit pending.
 
