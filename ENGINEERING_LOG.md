@@ -6,6 +6,30 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — the HTTP head bound is now exact
+
+**Repository:** `oag-listend`, commits `1133256` and `db790de` on `master`; records in
+`open-agent-graph`.
+
+**Found by probing the boundary by hand.** `MAX_HEAD_BYTES` is documented as "the largest HTTP
+request head this carrier will read", but the growth check runs at the top of the read loop, so the
+cap was soft by up to one read chunk: a head of 16384 was served (200), **16385 was also served
+(200)**, and 20000 was refused (400).
+
+**The fix.** The head itself — everything up to and including the blank line — is now measured and
+refused when it exceeds the bound. A body arriving in the same read does not count against it, so a
+large publish is unaffected; the per-read growth check remains as the guard against unbounded
+accumulation.
+
+**Tests executed.** New `the_request_head_bound_is_exact` pins both sides: a head of exactly
+`MAX_HEAD_BYTES` is served, one byte more is 400. **Checked to fail when the new check is disabled**,
+and to pass with it. `./scripts/check.sh` green across all six gates:
+**64 unit + 77 end-to-end = 141 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`604124f..db790de`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — README accuracy, and a clean-clone verification of the whole session
 
 **Repository:** `oag-listend`, commit `604124f` on `master`; records in `open-agent-graph`.
