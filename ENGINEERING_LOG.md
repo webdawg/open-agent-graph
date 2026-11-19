@@ -6,6 +6,29 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — test hang-up resilience
+
+**Repository:** `oag-listend`, commits `69b1fc5` and `91f8124` on `master`; records in
+`open-agent-graph`.
+
+**Found by experiment, not by reading.** A client that disappears mid-reply is ordinary, not
+hostile. Ran the real binary and had **300 native** and **300 HTTP** clients send a request and close
+without reading: afterwards both carriers still answered (`GET /ping` 200, 44844 bytes; `GET /` 200),
+the process was alive, it exited 0 on SIGTERM, and no panic was logged.
+
+**What changed.** New `clients_hanging_up_mid_reply_leave_the_daemon_serving` in
+`tests/robustness.rs`: 200 hang-ups on each of the native and HTTP carriers, then a normal `Hello`
+and `GET /` must still succeed. The ping is used because it is the largest reply the daemon sends
+unprompted, so it is the most likely to be mid-write when the peer vanishes.
+
+**Tests executed.** **Checked to fail when a session error stops the accept loop** (sessions served
+inline with `break` on error), and to pass with the spawn-per-session behaviour.
+`./scripts/check.sh` green across all six gates: **64 unit + 75 end-to-end = 139 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`8e2c50e..91f8124`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — test every skip reason on the store load path
 
 **Repository:** `oag-listend`, commits `760793f` and `8e2c50e` on `master`; records in
