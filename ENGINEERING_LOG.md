@@ -6,6 +6,33 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — CI could never have passed: the minimal profile has no rustfmt or clippy
+
+**Repository:** `oag-listend`, commit `8ab9a0c` on `master`; records in `open-agent-graph`.
+
+**The defect.** `.github/workflows/check.yml` installed Rust with `--profile minimal`. That profile
+is `rustc`, `rust-std` and `cargo` only, so the gate's first two steps -- `cargo fmt --check` and
+`cargo clippy` -- would fail with "not installed for the toolchain", and **CI has been red on every
+push** since the workflow was added.
+
+**Verified, not assumed.** rustup is not installed on this machine (Rust comes from the distro), so
+the profile was installed into a scratch `RUSTUP_HOME`/`CARGO_HOME`:
+
+- the toolchain's `components` file lists only `cargo`, `rust-std`, `rustc`;
+- `cargo fmt --version` → `'cargo-fmt' is not installed for the toolchain 'stable-...'`;
+- `cargo clippy --version` → `'cargo-clippy' is not installed ...`;
+- `rustup component add rustfmt clippy` → both then report versions.
+
+**The fix.** Both jobs now run `rustup component add rustfmt clippy` after the install. Depending
+on a profile's contents is exactly what fails silently, so the components the gate needs are named.
+
+**Tests executed.** The gate itself is unchanged and still green locally: **64 unit + 78 end-to-end =
+142 tests**. The scratch toolchain was removed afterwards.
+
+**Push status:** `oag-listend` pushed to `master` (`bab8bb9..8ab9a0c`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — test the client's runtime-failure exit code
 
 **Repository:** `oag-listend`, commits `106dec3` and `bab8bb9` on `master`; records in
