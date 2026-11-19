@@ -6,6 +6,27 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — failing tests no longer leave daemons running
+
+**Repository:** `oag-listend`, commit `28e50a2` on `master`; records in `open-agent-graph`.
+
+**The gap, noticed while cleaning up.** A sweep of stray processes showed eight `oag-listend`
+daemons still running. A **passing** suite leaks none — `cargo test --test binary` leaves 0 behind
+— so the leaks came from *failing* probe runs. `tokio::process::Child` does not kill on drop, so a
+test that panics leaves its daemon bound to its ports and holding its store directory.
+
+**What changed.** A `Daemon` guard in `tests/binary.rs` (`Deref`/`DerefMut` to `Child`, kill on
+drop) wraps all seven spawn sites. A test that wanted a clean stop has already sent it and awaited
+the exit, so the guard's SIGKILL only fires where nothing else reaped the child.
+
+**Tests executed.** Injected a failure into a daemon-spawning test: **before, the child survived;
+after, 0 daemons are left behind.** `./scripts/check.sh` green across all six gates:
+**64 unit + 77 end-to-end = 141 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`6c63b9b..28e50a2`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — the clippy gate now denies warnings
 
 **Repository:** `oag-listend`, commit `6c63b9b` on `master`; records in `open-agent-graph`.
