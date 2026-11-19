@@ -6,6 +6,31 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — test the stream and HTTP carriers over IPv6
+
+**Repository:** `oag-listend`, commits `d734948` and `3cfe821` on `master`; records in
+`open-agent-graph`.
+
+**Found by experiment.** The directive says the service is reached "any way that anyone connects".
+Bound all four carriers on `[::1]` by hand: native, HTTP and UDP all served audio and verified, so
+IPv6 works. Only UDP had a test -- a hardcoded IPv4 address in the native or HTTP bind path would
+have broken both silently.
+
+**What changed.** New `the_stream_and_http_carriers_serve_over_ipv6_loopback` in
+`tests/back_and_forth.rs`. It binds both carriers on `[::1]:0`, then connects to the **literal**
+`[::1]:<port>` rather than the address the carrier reported, so it proves reachability at IPv6 and
+not merely at whatever was bound. It does a full publish/fetch/verify round trip and a
+`GET /audio/{hash}` whose body must be the audio bytes. It skips cleanly where the host has no
+IPv6 loopback.
+
+**Tests executed.** **Checked to fail when `ListendServer::bind_shared` binds `127.0.0.1:0`
+regardless of the requested family**, and to pass with the requested family.
+`./scripts/check.sh` green across all six gates: **64 unit + 76 end-to-end = 140 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`91f8124..3cfe821`); this entry's commit pending.
+
+---
+
 ## 2026-11-19 — test hang-up resilience
 
 **Repository:** `oag-listend`, commits `69b1fc5` and `91f8124` on `master`; records in
