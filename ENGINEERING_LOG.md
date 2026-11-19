@@ -6,6 +6,24 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-19 — the imagination carrier seam is fully accounted for
+
+**Repository:** `oag-listend`; records in `open-agent-graph`. No code change.
+
+**Question closed.** Read `oag-imagination-random-data-compute/spec/03-transports.md` directly instead
+of trusting the summary. The seam's carriers are: `TcpTransport`, `UdpTransport`, `HttpTransport`
+(JSON POST), `IpfsTransport`/`PublishingIpfsTransport`, `ProxiedTransport` (CONNECT tunnel), and
+`ReticulumTransport`. Every one is covered in `oag-listend` — TCP, UDP, HTTP, IPFS, and the Unix
+socket as carriers; the CONNECT tunnel end to end; Reticulum unbuilt and hardware-bound. There is no
+seventh carrier and no unimplemented seam item, so "extend carriers one at a time" has no remaining
+implementable step.
+
+**Tests executed.** None new; `./scripts/check.sh` last run exit 0, 128 tests.
+
+**Push status:** all five clean and pushed.
+
+---
+
 ## 2026-11-19 — re-verified the settled invariants, not the notes
 
 **Repository:** `oag-listend`; records in `open-agent-graph`. No code change this pass.
