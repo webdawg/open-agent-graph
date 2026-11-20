@@ -69,7 +69,12 @@ the shipped `scripts/oag-listend.service` is untouched (`git status` clean).
 **Tests executed.** None new; this is an operational verification. `./scripts/check.sh` last run
 exit 0, six gates, 143 tests (153 with `--features reticulum`).
 
-**Push status:** `open-agent-graph` records pending; `oag-listend` unchanged.
+**Follow-up.** The trap found while verifying is now in `SPEC.md` ("Running it"): the unit is
+recorded as run-verified, and `PrivateTmp` masking `/tmp` and `/var/tmp` is documented so the
+next operator who repoints `ExecStart` does not chase a "missing" binary. `oag-listend`
+commit `3c0f0d2`.
+
+**Push status:** `open-agent-graph` records pending; `oag-listend` pushed.
 
 ---
 
