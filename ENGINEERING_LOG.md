@@ -6,6 +6,27 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — CI now installs and starts the shipped unit
+
+**Repository:** `oag-listend`, commit `d76d961` on `master`; records in `open-agent-graph`.
+
+**The gap.** Every job only *linted* the unit (`systemd-analyze verify`). The four sandbox
+directives (`ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, `NoNewPrivileges`) cannot be
+exercised without root, so the shipped unit file itself had never been started by CI.
+
+**What changed.** A fourth job, `check-service`: builds the release binary, installs it to
+`/usr/local/bin`, installs `scripts/oag-listend.service` **verbatim**, creates the `oag` user,
+`systemctl enable --now`, then fetches the musical ping and the index over HTTP, and stops the
+unit. The unit file is unchanged.
+
+**Tests executed.** The serve check was exercised locally against a running daemon: 44,844-byte
+ping and a 200 index. **The `sudo`/`systemctl` steps are verified by the runner on the first run,
+not locally** — this machine has no passwordless sudo, which is exactly why the job exists.
+
+**Push status:** `oag-listend` pushed to `master` (`10d1411..d76d961`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — correction: the unit's sandbox IS verified (earlier note was wrong)
 
 **Repository:** `oag-listend` untouched; records in `open-agent-graph`.
