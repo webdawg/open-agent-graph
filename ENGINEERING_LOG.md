@@ -6,6 +6,39 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — record honesty: Reticulum status, and the mesh pull question closed
+
+**Repository:** `oag-listend` untouched; records in `open-agent-graph`, commit `d069076` on `main`.
+
+**Why.** The directive gates `oag-mesh` on "not this mission until listend serves locally" -- a
+precondition now met -- and the workspace's own next-priorities list had both a stale status and an
+item explicitly asking for a re-examination. Both were cheap to settle and neither needed new code.
+
+**Item 1 was stale.** It still said Reticulum was "hardware-bound ... honestly unbuilt". It is built:
+opt-in behind `--features reticulum`, speaking over Reticulum's own `TcpServer` interface. What
+remains unproven is interop with another implementation, alongside the real-Kubo validation of the
+IPFS halves. Corrected.
+
+**Item 4 is now closed as examined.** The claim was "no atomic multi-store write during a pull".
+Read the code: `pull_changed_stores` merges each changed store **in memory only** and writes
+nothing, and `save_to_dir` -- which writes all seven stores plus a commit marker atomically -- has
+exactly one production caller (`node.rs`, the shutdown/save path). So the atomic machinery is not on
+the pull path at all. The residual gap is that a pull's merged state is durable only when the caller
+later saves, and the crate's own docs say the caller decides when to save. That is a scheduling
+question, not a correctness hole; reopening it needs an operator's durability requirement.
+
+**Not acted on, deliberately.** The other next-priority items are each recorded as needing something
+this machine cannot supply: a real corpus (collisions), a measurement of timed-out-but-alive peers
+(mesh fallback), an operator's requirement (configurable HTTP timeouts), and a design pass
+(`spec/06`, `spec/07`). `spec/29` explicitly defers the static-page items.
+
+**Tests executed.** None; records only. `./scripts/check.sh` last run exit 0, six gates, 143 tests
+(153 with `--features reticulum`).
+
+**Push status:** `open-agent-graph` pushed to `main`; `oag-listend` unchanged and clean.
+
+---
+
 ## 2026-11-20 — pin the skipped-mirror policy
 
 **Repository:** `oag-listend`, commit `8a5ebef` on `master`; records in `open-agent-graph`.
