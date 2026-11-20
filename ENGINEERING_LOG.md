@@ -74,6 +74,9 @@ recorded as run-verified, and `PrivateTmp` masking `/tmp` and `/var/tmp` is docu
 next operator who repoints `ExecStart` does not chase a "missing" binary. `oag-listend`
 commit `10d1411`.
 
+**Closing verification on the SPEC-updated HEAD (`10d1411`).** `check.sh` 143, `--release` 143,
+`--features reticulum` 153 — all six gates each, working tree clean.
+
 **Push status:** `open-agent-graph` records pending; `oag-listend` pushed.
 
 ---
