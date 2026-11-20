@@ -6,6 +6,29 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — Reticulum: answer every frame in a packet
+
+**Repository:** `oag-listend`, commit `92a5854` on `master`; records in `open-agent-graph`.
+
+**The defect, found by reading the carrier against the protocol.** A Reticulum packet can carry
+several frames, exactly as a client may pipeline them on a stream carrier (the native protocol's
+own pipelining test covers that). The carrier cleared its reassembly buffer after one frame, so a
+second frame packed into the same packet was silently dropped.
+
+**The fix.** Drain only the bytes consumed and loop until no complete frame remains; a declared
+length above `MAX_FRAME_BYTES` is now refused outright rather than treated as "not all here yet".
+
+**Tests executed.** New `reticulum_answers_pipelined_frames_in_one_packet`: two frames packed into
+one packet must both be answered in order and both stored. **Checked to fail when the buffer is
+cleared after the first frame.** Fixtures are `generate_n(seed, Tone, 10)` -- small enough to fit
+one packet, and different seeds give different bytes (identical silence fixtures would hash the
+same and prove nothing). `./scripts/check.sh` **142 tests**; `./scripts/check.sh --features
+reticulum` **144 tests**; both all six gates.
+
+**Push status:** `oag-listend` pushed to `master` (`cfcf68c..92a5854`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — the last carrier: Reticulum, feature-gated
 
 **Repository:** `oag-listend`, commit `cfcf68c` on `master`; records in `open-agent-graph`.
