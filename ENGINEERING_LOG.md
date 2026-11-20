@@ -72,7 +72,7 @@ exit 0, six gates, 143 tests (153 with `--features reticulum`).
 **Follow-up.** The trap found while verifying is now in `SPEC.md` ("Running it"): the unit is
 recorded as run-verified, and `PrivateTmp` masking `/tmp` and `/var/tmp` is documented so the
 next operator who repoints `ExecStart` does not chase a "missing" binary. `oag-listend`
-commit `3c0f0d2`.
+commit `10d1411`.
 
 **Push status:** `open-agent-graph` records pending; `oag-listend` pushed.
 
