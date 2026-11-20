@@ -6,6 +6,28 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — record a mirror skipped by eviction
+
+**Repository:** `oag-listend`, commit `e70e862` on `master`; records in `open-agent-graph`.
+
+**The gap.** `accept_and_mirror` returned `Ok(hash)` without recording anything when the item had
+been evicted between the accept and the mirror -- a concurrent publish pushed it out, so `serve`
+failed. `SPEC.md` says every mirror outcome is recorded and the shutdown report lists each one, so
+an operator had no way to tell that this mirror never happened.
+
+**The fix.** It records `MirrorOutcome::Failed` with the reason "evicted before it could be
+mirrored".
+
+**Tests executed.** None new, and stated plainly: the branch needs a specific interleaving (an
+eviction landing between two lock acquisitions inside one call), and constructing that
+deterministically would require injecting a failure into the middle of `accept_and_mirror`. So
+this is a documented-contract fix, **not** a tested guard. `./scripts/check.sh` exit 0, six gates,
+**142 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`0d44577..e70e862`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — a Reticulum stop now drains in-flight exchanges
 
 **Repository:** `oag-listend`, commits `0986767` and `85d6856` on `master`; records in
