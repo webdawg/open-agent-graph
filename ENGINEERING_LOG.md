@@ -6,6 +6,27 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — bound a Reticulum packet send
+
+**Repository:** `oag-listend`, commit `c96948f` on `master`; records in `open-agent-graph`.
+
+**The gap.** `reply()` awaited `send_packet` with no bound, inside the single event loop that serves
+every link. A stalled link would therefore stall all of them -- the same defect the other carriers'
+per-syscall timeouts exist to prevent, and the Reticulum carrier was the one place without it.
+
+**The fix.** Each send is bounded by `IO_TIMEOUT` (10 s); when the bound elapses the rest of that
+frame is abandoned rather than queued behind the stalled link.
+
+**Tests executed.** The bound is a small helper so it can be pinned: `bounded_send` returns `false`
+when the bound elapses and `true` for a send that completes. **The probe without the bound hangs**
+(killed at 300 s rather than failing), which is exactly the defect. The test passes its own 10 ms
+timeout so it does not spend the real one -- the first version did, adding 10 s to every run.
+`./scripts/check.sh` **142 tests**; `./scripts/check.sh --features reticulum` **150 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`12a6a60..c96948f`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — cap Reticulum links; correct the test counts
 
 **Repository:** `oag-listend`, commits `5940d4b` and `12a6a60` on `master`; records in
