@@ -6,6 +6,44 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — the last carrier: Reticulum, feature-gated
+
+**Repository:** `oag-listend`, commit `cfcf68c` on `master`; records in `open-agent-graph`.
+
+**Why.** The directive says to extend to "whatever the imagination `Transport` seam already has",
+and Reticulum was the only carrier left. An earlier note recorded it as hardware-bound; that was
+wrong. `oag-imagination-reticulum` serves over Reticulum's own `TcpServer` interface, so no radio
+is involved and the whole path is testable on one machine.
+
+**Measured before committing.** Adding `reticulum = "=0.1.0"` brings **about 160 transitive
+packages** (gRPC, protobuf codegen, a crypto stack) against the three dependencies the rest of the
+daemon uses, and needs `protoc` at build time. That is disproportionate for an unconditional
+dependency, so the carrier is **opt-in** behind a cargo feature: the default build and the two
+existing CI jobs do not compile it, and a third job installs `protobuf-compiler` and runs the whole
+bar with it.
+
+**What was built.** `--reticulum ADDR` (and `--reticulum-seed SEED`, default `oag-listend`, stable
+because it derives the destination's address) serves the same frame protocol over the interface.
+An incoming frame goes through the same `crate::server::handle`, so `AudioStore::accept` is the
+inbound rule here too — no per-carrier audio rules. Bounds: one reassembly buffer per link capped
+at a frame plus one packet, the frame cap enforced by the codec, and replies chunked to a packet's
+capacity.
+
+**Tests executed.** New `tests/reticulum_carrier.rs` (cfg-gated): a minimal client dials the
+interface, waits for the announce, activates one link, then publishes, fetches, verifies, answers a
+ping with audio, and is refused non-audio.
+* `./scripts/check.sh` — exit 0, six gates, **142 tests** (unchanged; reticulum absent).
+* `./scripts/check.sh --features reticulum` — exit 0, six gates, **143 tests**.
+* By hand: the daemon binds `127.0.0.1:18942`, prints its destination address, and exits 0 on
+  SIGTERM; `--help` documents both flags.
+
+**Honest limitation, recorded in SPEC.** Loopback proves the audio surface, not interop with
+another Reticulum implementation.
+
+**Push status:** `oag-listend` pushed to `master` (`e84d0e8..cfcf68c`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — replicate CI for real, and fix what it caught
 
 **Repository:** `oag-listend`, commit `0650bc0` on `master`; records in `open-agent-graph`.
