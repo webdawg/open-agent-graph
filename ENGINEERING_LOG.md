@@ -64,7 +64,8 @@ ping with audio, and is refused non-audio.
 another Reticulum implementation.
 
 **Clean-clone verification.** A fresh `git clone` passes all three gates: `check.sh` **142
-tests**, `check.sh --release` **142 tests**, `check.sh --features reticulum` **143 tests**.
+tests**, `check.sh --release` **142 tests**, `check.sh --features reticulum` **144 tests**
+(143 before the pipelining fix added its own test).
 
 **Push status:** `oag-listend` pushed to `master` (`e84d0e8..cfcf68c`); this entry's commit pending.
 
