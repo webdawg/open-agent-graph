@@ -23,6 +23,10 @@ unit. The unit file is unchanged.
 ping and a 200 index. **The `sudo`/`systemctl` steps are verified by the runner on the first run,
 not locally** — this machine has no passwordless sudo, which is exactly why the job exists.
 
+**Further validation before pushing.** Every `run:` block in the workflow passes `bash -n`, and the
+service job's serve block was then executed **verbatim** against a daemon on the unit's port: exit 0,
+44,844-byte ping. The `sudo install`/`systemctl` lines remain unrun locally.
+
 **Push status:** `oag-listend` pushed to `master` (`10d1411..d76d961`); this entry's commit pending.
 
 ---
