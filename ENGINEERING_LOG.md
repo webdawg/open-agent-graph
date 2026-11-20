@@ -569,6 +569,8 @@ implementable step.
 - `README.md` documents every flag `main.rs` actually accepts; `SPEC.md` status line says "serves".
   Re-read both in full afterwards; the only remaining inaccuracy was `check.sh` described without
   its examples gate, now corrected (commit `e84d0e8`, documentation only).
+  Final integrity check: all five repositories have 0 tracked build artefacts and 0
+  untracked non-`target/` files; `oag-listend` tracks 37 files.
 - Repository identity by remote: all five `origin` URLs match the directive, and no sixth
   `oag*` checkout exists.
 - Environment-dependence sweep of the tests: after the `push_pull()` fix, the only
