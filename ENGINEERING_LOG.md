@@ -565,6 +565,10 @@ implementable step.
 - `README.md` documents every flag `main.rs` actually accepts; `SPEC.md` status line says "serves".
 - Repository identity by remote: all five `origin` URLs match the directive, and no sixth
   `oag*` checkout exists.
+- Environment-dependence sweep of the tests: after the `push_pull()` fix, the only
+  environment references left are `CARGO_BIN_EXE_*`, `CARGO_PKG_VERSION`,
+  `CARGO_MANIFEST_DIR`, `std::env::temp_dir()` and a handled `CARGO_TARGET_DIR` -- no
+  other `current_exe()` assumption.
 - Panic-safety sweep of the library: every slice and index reachable from network bytes is
   guarded by a length check or a `find_*` result, and every `unwrap`/`expect` outside the
   test modules sits on a value just validated. No hostile-input panic found.
