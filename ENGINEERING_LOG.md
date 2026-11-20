@@ -6,6 +6,42 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — the shipped unit actually runs, not just lints
+
+**Repository:** `oag-listend` untouched; records in `open-agent-graph`, commit pending.
+
+**Why.** The directive's first criterion is "the daemon turns on and listens", and until now the
+systemd unit had only been checked with `systemd-analyze verify` — a syntax/lint pass, not a run.
+
+**How it was run without root.** A user-level systemd manager is available on this machine, so the
+shipped unit was derived into a user unit: the same `ExecStart` flag set, `RuntimeDirectory`,
+`StateDirectory`, `Restart=on-failure`, with only the paths, `User=`/`Group=` and `WantedBy=`
+adjusted for an unprivileged user.
+
+**Observed.**
+- `systemctl --user start` → **active**; the daemon served (`Hello`, ping `verified=true`,
+  publish/fetch verified) while running as a service.
+- systemd created **both** directories: `RuntimeDirectory` → `/run/user/1000/oag-listend-test`
+  and `StateDirectory` → `~/.local/state/oag-listend-test`, and the content-addressed store was
+  written under the latter.
+- `systemctl --user stop` → **inactive**, the Unix socket **removed**, and
+  `oag-listend shutting down` in the journal — the clean stop the unit is designed for.
+
+**What could not be verified, stated plainly.** The sandbox directives (`ProtectSystem=strict`,
+`ProtectHome`, `PrivateTmp`, `NoNewPrivileges`) are designed for a system install with the binary
+in `/usr/local/bin`; staging the binary outside `/home` still failed the namespace setup, so those
+four lines remain lint-verified only. Everything else about the unit is now run-verified.
+
+**Housekeeping.** The test unit, its staged binary, and both directories were removed afterwards;
+the shipped `scripts/oag-listend.service` is untouched (`git status` clean).
+
+**Tests executed.** None new; this is an operational verification. `./scripts/check.sh` last run
+exit 0, six gates, 143 tests (153 with `--features reticulum`).
+
+**Push status:** `open-agent-graph` records pending; `oag-listend` unchanged.
+
+---
+
 ## 2026-11-20 — record honesty: Reticulum status, and the mesh pull question closed
 
 **Repository:** `oag-listend` untouched; records in `open-agent-graph`, commit `d069076` on `main`.
