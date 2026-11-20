@@ -733,6 +733,10 @@ implementable step.
   environment references left are `CARGO_BIN_EXE_*`, `CARGO_PKG_VERSION`,
   `CARGO_MANIFEST_DIR`, `std::env::temp_dir()` and a handled `CARGO_TARGET_DIR` -- no
   other `current_exe()` assumption.
+- Final workspace state: all five repositories clean, 0 unpushed, correct branches
+  (`open-agent-graph`/`oag-mesh` on `main`; the other three on `master`), 0 stray daemon
+  processes, and `.cargo/config.toml`, `rustc-wrapper.sh`, `prune-target.py` and
+  `test_prune_target.py` byte-identical across all five (5 occurrences of each hash).
 - Panic-safety sweep of the library: every slice and index reachable from network bytes is
   guarded by a length check or a `find_*` result, and every `unwrap`/`expect` outside the
   test modules sits on a value just validated. No hostile-input panic found.
