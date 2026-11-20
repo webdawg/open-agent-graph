@@ -6,6 +6,29 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — one Reticulum link no longer stalls the others
+
+**Repository:** `oag-listend`, commit `e77b785` on `master`; records in `open-agent-graph`.
+
+**The gap.** `handle()` was awaited inline in the carrier's event loop, which every link shares.
+Handling a publish can wait on an IPFS mirror, so one publish to a hung Kubo node stalled *every*
+link for the add timeout -- the exact property the other carriers already test and the Reticulum
+carrier did not have.
+
+**The fix.** Each link gets a worker task fed by a bounded queue (`MAX_QUEUED_FRAMES`, 64). A slow
+accept delays only its own link, and a link's frames keep their order. A full queue drops that
+link's buffer rather than holding up the loop.
+
+**Tests executed.** New `a_hung_mirror_on_one_link_does_not_stall_another`: with a stub that
+accepts the mirror connection and never answers, one link publishes (its reply waits out the add
+timeout) while a second link fetches an item that is already held. The second must answer within
+5 s. **Checked to fail against the pre-refactor inline handling, where that fetch took 10.31 s.**
+`./scripts/check.sh` **142 tests**; `./scripts/check.sh --features reticulum` **151 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`60771ac..e77b785`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — bound a Reticulum packet send
 
 **Repository:** `oag-listend`, commit `c96948f` on `master`; records in `open-agent-graph`.
