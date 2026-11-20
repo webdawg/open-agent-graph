@@ -6,6 +6,25 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — pin the skipped-mirror policy
+
+**Repository:** `oag-listend`, commit `8a5ebef` on `master`; records in `open-agent-graph`.
+
+**Why.** The previous entry recorded a fix with an untested literal, because the interleaving that
+reaches the branch cannot be built deterministically. That left the *policy* unpinned, which is the
+part worth pinning.
+
+**What changed.** The policy is extracted as `mirror_skipped()` and asserted: a mirror that never ran
+because the item was evicted is a `MirrorOutcome::Failed` with the reason "evicted before it could be
+mirrored". `accept_and_mirror` now calls it.
+
+**Tests executed.** New `a_skipped_mirror_is_a_recorded_failure`. `./scripts/check.sh` exit 0, six
+gates, **143 tests** (66 unit + 77 end-to-end); `--features reticulum` exit 0, **153 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`e70e862..8a5ebef`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — record a mirror skipped by eviction
 
 **Repository:** `oag-listend`, commit `e70e862` on `master`; records in `open-agent-graph`.
