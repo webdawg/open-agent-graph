@@ -6,6 +6,26 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — a Reticulum stop now drains in-flight exchanges
+
+**Repository:** `oag-listend`, commits `0986767` and `85d6856` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** `SPEC.md` promises that in-flight exchanges are given `SHUTDOWN_GRACE` rather than cut
+off mid-transfer. Every carrier counts its sessions for that drain -- except Reticulum, whose
+workers were invisible to it, so a stop could cut a publish or a reply off.
+
+**The fix.** `ReticulumCarrier` now exposes `active_handle()`/`active_sessions()` like the others;
+its workers increment and decrement the counter, and `main` includes it in the drain loop.
+
+**Tests executed.** New `an_in_flight_exchange_is_counted_and_drains`: with a hung mirror, a
+publish's worker stays in flight; the counter must reach 1, and after `shutdown()` it must drain to
+0. `./scripts/check.sh` **142 tests**; `./scripts/check.sh --features reticulum` **152 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`e6fd62d..85d6856`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — one Reticulum link no longer stalls the others
 
 **Repository:** `oag-listend`, commit `e77b785` on `master`; records in `open-agent-graph`.
