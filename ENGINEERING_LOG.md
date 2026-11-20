@@ -6,6 +6,37 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — correction: the unit's sandbox IS verified (earlier note was wrong)
+
+**Repository:** `oag-listend` untouched; records in `open-agent-graph`.
+
+**The earlier note was wrong.** The previous entry said the four sandbox directives
+(`ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, `NoNewPrivileges`) "remain lint-verified
+only". They do not — they are now **run-verified**, and the reason they looked broken was my own
+test staging.
+
+**Root cause, found by bisecting properly.** Staging the binary under `/var/tmp` failed with
+`Unable to locate executable ... No such file or directory`. `PrivateTmp=true` is the cause:
+systemd's `PrivateTmp` covers **`/tmp` and `/var/tmp`**, so the staged binary was masked. Staging
+under `/dev/shm` (not masked) and running the **full daemon** with all four directives
+→ **active/running**, serving audio (`Hello`, ping `verified=true`, publish/fetch verified).
+
+**Also corrected: an earlier bisect was invalid.** A probe helper reported "active" for units that
+were already active, because `systemctl start` on an active unit is a no-op — so several
+"directive X is fine" results were stale. Re-run with an explicit stop/reset before each start.
+
+**What is now verified about the shipped unit.** `ExecStart` flag set, `RuntimeDirectory`,
+`StateDirectory`, `ReadWritePaths`, all four sandbox directives, `Restart=on-failure`, and a clean
+`systemctl stop` (inactive, socket removed, `oag-listend shutting down` logged).
+
+**Housekeeping.** All probe units, their staged binaries and directories removed; the shipped
+`scripts/oag-listend.service` is untouched (`git status` clean).
+
+**Tests executed.** None new; operational verification only. `./scripts/check.sh` last run exit 0,
+six gates, 143 tests (153 with `--features reticulum`).
+
+---
+
 ## 2026-11-20 — the shipped unit actually runs, not just lints
 
 **Repository:** `oag-listend` untouched; records in `open-agent-graph`, commit pending.
