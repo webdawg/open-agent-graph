@@ -6,6 +6,33 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — cap Reticulum links; correct the test counts
+
+**Repository:** `oag-listend`, commits `5940d4b` and `12a6a60` on `master`; records in
+`open-agent-graph`.
+
+**The gap.** The Reticulum carrier held one reassembly buffer per link and links were unbounded, so
+a peer could make the daemon hold an unbounded number of buffers. Every other carrier caps sessions
+at 64.
+
+**The fix.** The same cap, and the buffer policy moved into a `LinkBuffers` type so it can be unit
+tested directly: the cap, an untracked link's data being ignored, several frames in one payload, a
+partial frame staying buffered, and a length above the frame cap being refused outright and
+dropping the link. SPEC's bounds paragraph and the coverage list updated.
+
+**A correction worth recording.** Counting the suites exactly showed the documented counts were
+wrong: the library has **65** unit tests, not 64, so the default suite is **65 unit + 77 end-to-end
+= 142**, and with `--features reticulum` **70 unit + 79 end-to-end = 149**. `SPEC.md`, `README.md`
+and `PROJECT_STATE.md` had been carried forward from an earlier count; `PROJECT_STATE`'s "current
+bar" was stale at `64 unit + 70 end-to-end`. All corrected.
+
+**Tests executed.** `./scripts/check.sh` exit 0, six gates, **142 tests**;
+`./scripts/check.sh --features reticulum` exit 0, six gates, **149 tests**.
+
+**Push status:** `oag-listend` pushed to `master` (`92a5854..12a6a60`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — Reticulum: answer every frame in a packet
 
 **Repository:** `oag-listend`, commit `92a5854` on `master`; records in `open-agent-graph`.
