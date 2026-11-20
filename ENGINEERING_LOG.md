@@ -722,6 +722,10 @@ missing directory (`No such file or directory`, exit 1).
 - The pruner fired during the run (`removed 9 items`), confirming the newly wired config is live.
 
 **Tests executed.** `./scripts/check.sh` exit 0, 128 tests; the above is the operator-visible proof.
+Closing live run on `8a5ebef`: native, UDP and Unix each published and fetched with
+`verified=true`, non-audio was refused, `GET /ping` returned 200 with 44,844 bytes and
+`GET /` 200, SIGTERM exited 0, and a `--check` restart loaded 6 items.
+
 Re-run on the final HEAD after all of the above: all four carriers published and fetched with
 `verified=true`, non-audio was refused, `GET /ping` returned 200 with 44,844 bytes, SIGTERM
 exited 0, and a `--check` restart loaded 6 items.
