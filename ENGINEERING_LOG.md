@@ -568,7 +568,7 @@ implementable step.
 - `#![forbid(unsafe_code)]` in **21 of 21** `.rs` files.
 - `README.md` documents every flag `main.rs` actually accepts; `SPEC.md` status line says "serves".
   Re-read both in full afterwards; the only remaining inaccuracy was `check.sh` described without
-  its examples gate, now corrected (commit `e0f2a4f`, documentation only).
+  its examples gate, now corrected (commit `e84d0e8`, documentation only).
 - Repository identity by remote: all five `origin` URLs match the directive, and no sixth
   `oag*` checkout exists.
 - Environment-dependence sweep of the tests: after the `push_pull()` fix, the only
