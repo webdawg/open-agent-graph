@@ -570,11 +570,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    need a longer embeddings timeout, and a slow Kubo daemon a longer pin timeout. The open
    question is whether these belong in `config.toml` (like `[gateway].query_peers`) or are fine as
    compile-time constants -- that needs an operator's requirement, not a guess.
-6. **Imagination: the gather's bound and its node list.** `MAX_CONCURRENT_GATHERS` (32) is a fixed
-   constant, and the fan-out loop is over the caller's `nodes` list rather than the manifest's
-   `pad_ids` -- so a caller that passes more nodes than the manifest names still asks them all. The
-   open question is whether the bound should be configurable per carrier and whether the loop should
-   be driven by the manifest.
+6. **Imagination: the gather's bound and its node list -- behaviour is deliberate.**
+   `MAX_CONCURRENT_GATHERS` (32) is a fixed constant, and the fan-out loop is over the caller's
+   `nodes` list. Read the code: each request is a pad-agnostic `PadRequest { pad_id: "" }`, and
+   `datapad::gather(manifest, &pads)` filters the responses against the manifest. So asking more
+   nodes than the manifest names is **by design** -- a node returns what it holds and the manifest
+   decides what is used -- not a defect. The only open question is whether the bound should be
+   configurable per carrier, which needs an operator's requirement.
 7. **rust-ai static page hosting follow-ups** — scheduled backup pinning and evidence-body
    inlining remain (see `spec/29` "Explicitly deferred"); crawler side-fetch pinning is done.
 8. **Mesh: `spec/06` (owner-controlled research data) and `spec/07` (object history/audit)** —
