@@ -6,6 +6,34 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-20 — replicate CI for real, and fix what it caught
+
+**Repository:** `oag-listend`, commit `0650bc0` on `master`; records in `open-agent-graph`.
+
+**Why.** After fixing the rustup profile, the workflow had still never been executed from this
+machine. Network was available, so the CI job was replicated rather than assumed: install rustup
+with `--profile minimal`, add `rustfmt` and `clippy`, clone the repository, run `./scripts/check.sh`
+and `--release` with that toolchain.
+
+**What it caught.** The first simulated run failed four tests: `push_pull()` located the built
+example from `std::env::current_exe()`, assuming the test binary sits two levels under the target
+directory. Here `current_exe()` reports a relocated path
+(`target/debug/build/oag-listend/<hash>/out/<test>`), so the derived path does not exist. The same
+suite passed elsewhere, which is why it had not surfaced.
+
+**The fix.** `push_pull()` now derives the target directory from `CARGO_MANIFEST_DIR` (fixed at
+compile time, always the workspace) honouring `CARGO_TARGET_DIR`, trying `debug` then `release`.
+The nested build remains as a fallback for a clean tree.
+
+**Tests executed.** A fresh clone under the exact CI toolchain: `./scripts/check.sh` exit 0, all six
+gates, **142 tests**; `./scripts/check.sh --release` exit 0, all six gates, **142 tests**. Locally the
+gate then passed **3 consecutive runs** after one contention-related flake during the build.
+Scratch toolchain and clone removed afterwards.
+
+**Push status:** `oag-listend` pushed to `master` (`8ab9a0c..0650bc0`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — CI could never have passed: the minimal profile has no rustfmt or clippy
 
 **Repository:** `oag-listend`, commit `8ab9a0c` on `master`; records in `open-agent-graph`.
