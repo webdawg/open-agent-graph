@@ -509,14 +509,25 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
 ## Next priorities
 
-1. **oag-listend: Reticulum, and testing IPFS against a real node.** The imagination `Transport`
-   seam is now fully accounted for: TCP, UDP, HTTP, and IPFS are implemented here, Reticulum is
-   hardware-bound, and the HTTP CONNECT tunnel is a *client-side* wrapper (`ProxiedTransport`) that
-   needs no server code -- recorded so it is not re-investigated as missing. TCP, HTTP, UDP, and the Unix
-   socket are done, all sharing one store and all serving the musical ping, plus an IPFS mirror
-   behind `--ipfs-api`. Reticulum still needs a physical interface and is honestly unbuilt; the IPFS
-   mirror is tested only against a stub, never a real Kubo node. The service unit and clean SIGTERM
-   stop are done, so "turn this thing on" is `systemctl enable --now oag-listend`.
+1. **oag-listend: testing IPFS and Reticulum against the real things.** The imagination `Transport`
+   seam is fully accounted for: TCP, UDP, HTTP, IPFS, the Unix socket, and Reticulum are all
+   implemented here; the HTTP CONNECT tunnel is a *client-side* wrapper (`ProxiedTransport`) that
+   needs no server code -- recorded so it is not re-investigated as missing. All of them share one
+   store and serve the musical ping, and the IPFS mirror sits behind `--ipfs-api`.
+
+   **Reticulum was built** (it is not hardware-bound: it speaks over Reticulum's own `TcpServer`
+   interface, exactly as `oag-imagination-reticulum`'s loopback test does). It is opt-in behind
+   `--features reticulum` because the crate adds ~160 packages; `--reticulum ADDR` serves the same
+   audio, and it carries the same bounds as the other carriers (64-link cap, per-link worker, 10 s
+   send bound, shutdown drain). What it has **not** been shown to do is interoperate with another
+   Reticulum implementation -- loopback proves the audio surface, not interop.
+
+   The IPFS mirror is tested only against a stub, never a real Kubo node. Both limitations are in
+   SPEC and are the remaining work: they need a real node and a real transport instance, which this
+   machine does not have.
+
+   The service unit and clean SIGTERM stop are done, so "turn this thing on" is
+   `systemctl enable --now oag-listend`.
    Since the last update the operator surface has been closed out and every documented bound made
    observable: the binary itself (`--version`, `--help`, usage exit codes, start/serve/stop) and
    `--check` (load a content-addressed store, report loaded/skipped, skip a corrupted file) are
@@ -545,11 +556,15 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    but it is a judgement, not a measurement. The open question is whether a timed-out heads request
    should still try one store (cheap) before giving up, which would need a measurement of how
    often a timed-out heads endpoint still serves stores.
-4. **Mesh: no atomic multi-store *write* during a pull.** The commit marker closed the read side;
-   a pull that updates several stores is still best-effort per store. Re-examine against
-   `persistence.rs` first: `save_to_dir` already writes all seven stores plus a commit marker
-   atomically, so the gap may be narrower than it looks -- the in-memory merge is per-store and a
-   crash loses it, but that state is re-learned from the mesh.
+4. **Mesh: no atomic multi-store *write* during a pull -- re-examined, gap is narrower.**
+   `pull_changed_stores` merges each changed store **in memory only**; it writes nothing. And
+   `save_to_dir` has exactly one production caller (`node.rs`, the shutdown/save path), so the
+   atomic-multi-store-write machinery is not on the pull path at all. The residual gap is
+   therefore not "best-effort per store on disk" but "a pull's merged state is durable only when
+   someone later calls `save_to_dir`". A crash between the two loses the merge, and the mesh
+   re-learns it -- so it is a **scheduling** question for the caller (the crate's own docs say a
+   caller decides when to save), not a correctness hole here. Closed as examined; reopening needs
+   an operator's requirement on pull durability, not a code change.
 5. **rust-ai: make the new HTTP timeouts configurable.** Every outbound client is now bounded,
    but the values are fixed constants. An operator running a genuinely slow self-hosted model may
    need a longer embeddings timeout, and a slow Kubo daemon a longer pin timeout. The open
