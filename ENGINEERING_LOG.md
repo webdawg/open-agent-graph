@@ -737,6 +737,9 @@ implementable step.
   (`open-agent-graph`/`oag-mesh` on `main`; the other three on `master`), 0 stray daemon
   processes, and `.cargo/config.toml`, `rustc-wrapper.sh`, `prune-target.py` and
   `test_prune_target.py` byte-identical across all five (5 occurrences of each hash).
+- Gate documentation caught up: `scripts/README.md`'s `check.sh` row and the README build
+  section both predated the examples gate and `--features` (commits `2c4f6d1`, documentation
+  only).
 - Panic-safety sweep of the library: every slice and index reachable from network bytes is
   guarded by a length check or a `find_*` result, and every `unwrap`/`expect` outside the
   test modules sits on a value just validated. No hostile-input panic found.
