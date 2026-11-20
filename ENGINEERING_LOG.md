@@ -38,6 +38,12 @@ question, not a correctness hole; reopening it needs an operator's durability re
   defect.
 - *rust-ai HTTP timeouts.* Confirmed accurate: `EMBEDDINGS_*` and `KUBO_*` are public
   compile-time `const`s. Still needs an operator's requirement, so not acted on.
+- *Mesh fallback classification.* Confirmed accurate: `pull_and_merge` skips the full-pull
+  fallback exactly when the heads error is `is_connect() || is_timeout()`, and the comment
+  records the reasoning plus a measurement (a black-holed peer costs six timeouts). The
+  recorded blind spot -- a slow-but-alive peer whose heads time out -- is real but is a
+  judgement, and resolving it needs a measurement of how often a timed-out heads endpoint
+  still serves stores. Not acted on.
 
 **Not acted on, deliberately.** The remaining items each need something this machine cannot
 supply: a real corpus (collisions), a measurement of timed-out-but-alive peers (mesh fallback),
