@@ -40,6 +40,9 @@ ping with audio, and is refused non-audio.
 **Honest limitation, recorded in SPEC.** Loopback proves the audio surface, not interop with
 another Reticulum implementation.
 
+**Clean-clone verification.** A fresh `git clone` passes all three gates: `check.sh` **142
+tests**, `check.sh --release` **142 tests**, `check.sh --features reticulum` **143 tests**.
+
 **Push status:** `oag-listend` pushed to `master` (`e84d0e8..cfcf68c`); this entry's commit pending.
 
 ---
