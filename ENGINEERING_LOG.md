@@ -20,6 +20,7 @@ mirrored". `accept_and_mirror` now calls it.
 
 **Tests executed.** New `a_skipped_mirror_is_a_recorded_failure`. `./scripts/check.sh` exit 0, six
 gates, **143 tests** (66 unit + 77 end-to-end); `--features reticulum` exit 0, **153 tests**.
+A clean `git clone` then passed all three gates (143 / 143 / 153) with 0 daemons left running.
 
 **Push status:** `oag-listend` pushed to `master` (`e70e862..8a5ebef`); this entry's commit pending.
 
