@@ -27,10 +27,21 @@ the pull path at all. The residual gap is that a pull's merged state is durable 
 later saves, and the crate's own docs say the caller decides when to save. That is a scheduling
 question, not a correctness hole; reopening it needs an operator's durability requirement.
 
-**Not acted on, deliberately.** The other next-priority items are each recorded as needing something
-this machine cannot supply: a real corpus (collisions), a measurement of timed-out-but-alive peers
-(mesh fallback), an operator's requirement (configurable HTTP timeouts), and a design pass
-(`spec/06`, `spec/07`). `spec/29` explicitly defers the static-page items.
+**Two more items read, and one corrected.**
+
+- *Imagination gather.* The note implied a defect: that fanning out over the caller's `nodes`
+  rather than the manifest's `pad_ids` is wrong. It is not. Each request is a pad-agnostic
+  `PadRequest { pad_id: "" }` and `datapad::gather(manifest, &pads)` filters the responses, so a
+  node returns what it holds and the manifest decides what is used. Asking extra nodes is the
+  design. The only open question left is whether the bound (32) should be configurable, which
+  needs an operator's requirement. `PROJECT_STATE` corrected so the note does not read as a
+  defect.
+- *rust-ai HTTP timeouts.* Confirmed accurate: `EMBEDDINGS_*` and `KUBO_*` are public
+  compile-time `const`s. Still needs an operator's requirement, so not acted on.
+
+**Not acted on, deliberately.** The remaining items each need something this machine cannot
+supply: a real corpus (collisions), a measurement of timed-out-but-alive peers (mesh fallback),
+and a design pass (`spec/06`, `spec/07`). `spec/29` explicitly defers the static-page items.
 
 **Tests executed.** None; records only. `./scripts/check.sh` last run exit 0, six gates, 143 tests
 (153 with `--features reticulum`).
