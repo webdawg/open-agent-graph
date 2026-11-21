@@ -522,9 +522,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    send bound, shutdown drain). What it has **not** been shown to do is interoperate with another
    Reticulum implementation -- loopback proves the audio surface, not interop.
 
-   The IPFS mirror is tested only against a stub, never a real Kubo node. Both limitations are in
-   SPEC and are the remaining work: they need a real node and a real transport instance, which this
-   machine does not have.
+   The IPFS mirror is validated against a real Kubo node (0.43.1): add returns a CID the node pins,
+   `/api/v0/cat` returns exactly the bytes, `GET /ipfs/{cid}` serves them byte-identically, a
+   non-audio object fetched by CID is refused, and a restart re-adds nothing. Chunked replies are
+   decoded by both halves — refusing them made the write half fail against every real node.
+   Reticulum interop still needs a real transport instance, which this machine does not have.
 
    The service unit and clean SIGTERM stop are done, so "turn this thing on" is
    `systemctl enable --now oag-listend`; CI installs and starts that unit on every push
