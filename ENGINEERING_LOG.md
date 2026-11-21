@@ -27,6 +27,10 @@ not locally** — this machine has no passwordless sudo, which is exactly why th
 service job's serve block was then executed **verbatim** against a daemon on the unit's port: exit 0,
 44,844-byte ping. The `sudo install`/`systemctl` lines remain unrun locally.
 
+**Failure diagnosability.** A bare 60 s timeout leaves a red run with no clue, so the serve step
+now prints `systemctl status` and the last 40 journal lines before exiting 1. `oag-listend`
+commit `5cbec03`; the block passes `bash -n`.
+
 **Docs tied to it.** The README's service section now says the exact unit is installed and started by CI
 (`check-service`) and repeats the `PrivateTmp` trap. `oag-listend` commit `244b358`.
 
