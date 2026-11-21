@@ -20,6 +20,11 @@ only ever happened against the stub. Kubo answers `POST /api/v0/add` with
 decodes when the head asks for it; `decode_chunked` walks `<hex>[;ext]\r\n<data>\r\n` to a zero-size
 chunk, refusing malformed framing and capping the decoded size. The unused `Chunked` variant is gone.
 
+**Read half, also validated against the real node.** `GET /ipfs/{cid}` for a CID the daemon had never seen
+(added straight to the node, so it is not in `mirror_cids`) returned 200 with the byte-identical object and the
+right content type and `X-Content-Hash`; no `X-IPFS-CID`, because the daemon has not recorded one for it. That is
+the intended asymmetry: the header carries a CID the daemon knows about.
+
 **Validation against Kubo 0.43.1 (real node, loopback):**
 - `POST /api/v0/add` returns a CID and the node **pins** it (recursive pin list includes both).
 - `POST /api/v0/cat` returns exactly the bytes; identical to the stored file and to what listend
