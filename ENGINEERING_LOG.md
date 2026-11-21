@@ -6,6 +6,42 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the IPFS mirror works against a real node
+
+**Repository:** `oag-listend`, commit `aad2d9b` on `master`; records in `open-agent-graph`.
+
+**The defect, found by using a real node.** `SPEC.md` said the mirror was "tested only against a
+stub, never a real Kubo node". So Kubo was built from source (`go build ./cmd/ipfs` from the module
+the proxy serves) and the daemon was run against it. The write half failed: `2 mirrored, 0 failed`
+only ever happened against the stub. Kubo answers `POST /api/v0/add` with
+`Transfer-Encoding: chunked`, which the client refused by design.
+
+**The fix.** Both halves now decode chunked replies: `split_reply` separates head and body and
+decodes when the head asks for it; `decode_chunked` walks `<hex>[;ext]\r\n<data>\r\n` to a zero-size
+chunk, refusing malformed framing and capping the decoded size. The unused `Chunked` variant is gone.
+
+**Validation against Kubo 0.43.1 (real node, loopback):**
+- `POST /api/v0/add` returns a CID and the node **pins** it (recursive pin list includes both).
+- `POST /api/v0/cat` returns exactly the bytes; identical to the stored file and to what listend
+  serves over `GET /ipfs/{cid}` (200, 844 bytes, `X-IPFS-CID`, ETag = content hash).
+- A non-audio object added to the node is refused by `GET /ipfs/{cid}` (400), so the sniff rule
+  applies to bytes fetched from the node too.
+- A restart reports `offered 0 of 2` and the node's object count is unchanged (10 → 10), so the
+  persisted CID mapping makes the startup pass idempotent across restarts with a real node.
+
+**Also settled with evidence.** This Kubo accepts `hash=blake3` and returns a CIDv1 raw-codec CID
+whose digest is exactly the file's BLAKE3 (`bafkr4i…` → `fd1b77a8…`). That does **not** unify
+fetch-by-hash: for files larger than one block the CID is the DAG root, not the file's BLAKE3, so
+fetch-by-hash remains limited to single-block items. Recorded in SPEC rather than attempted.
+
+**Tests executed.** New unit tests: a reply split across two chunks, a chunk size over the bound,
+and a body that stops early. `./scripts/check.sh` **146 tests**; `--release` **146**;
+`--features reticulum` **156**. All six gates each.
+
+**Push status:** `oag-listend` pushed to `master` (`5cbec03..aad2d9b`); this entry's commit pending.
+
+---
+
 ## 2026-11-20 — CI now installs and starts the shipped unit
 
 **Repository:** `oag-listend`, commit `d76d961` on `master`; records in `open-agent-graph`.
