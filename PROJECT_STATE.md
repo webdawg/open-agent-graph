@@ -523,9 +523,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    Reticulum implementation -- loopback proves the audio surface, not interop.
 
    The IPFS mirror is validated against a real Kubo node (0.43.1): add returns a CID the node pins,
-   `/api/v0/cat` returns exactly the bytes, `GET /ipfs/{cid}` serves them byte-identically, a
-   non-audio object fetched by CID is refused, and a restart re-adds nothing. Chunked replies are
-   decoded by both halves — refusing them made the write half fail against every real node.
+   `/api/v0/cat` returns exactly the bytes, `GET /ipfs/{cid}` serves them byte-identically -- for a
+   CID the daemon holds and for one it does not -- a non-audio object fetched by CID is refused, and
+   a restart re-adds nothing. Chunked replies are decoded by both halves — refusing them made the write
+   half fail against every real node.
    Reticulum interop still needs a real transport instance, which this machine does not have.
 
    The service unit and clean SIGTERM stop are done, so "turn this thing on" is
