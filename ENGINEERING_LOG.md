@@ -34,6 +34,10 @@ the intended asymmetry: the header carries a CID the daemon knows about.
 - A restart reports `offered 0 of 2` and the node's object count is unchanged (10 → 10), so the
   persisted CID mapping makes the startup pass idempotent across restarts with a real node.
 
+**The no-downgrade claim was validated too.** A real TLS endpoint (`openssl s_server`) is refused with
+`https is not supported; give an http:// Kubo address`; both publishes were recorded as mirror failures
+and the audio stayed stored locally. Nothing was silently sent in clear.
+
 **Also settled with evidence.** This Kubo accepts `hash=blake3` and returns a CIDv1 raw-codec CID
 whose digest is exactly the file's BLAKE3 (`bafkr4i…` → `fd1b77a8…`). That does **not** unify
 fetch-by-hash: for files larger than one block the CID is the DAG root, not the file's BLAKE3, so
