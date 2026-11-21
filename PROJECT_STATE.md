@@ -527,7 +527,8 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    machine does not have.
 
    The service unit and clean SIGTERM stop are done, so "turn this thing on" is
-   `systemctl enable --now oag-listend`.
+   `systemctl enable --now oag-listend`; CI installs and starts that unit on every push
+   (`check-service`) and fetches audio from the running service.
    Since the last update the operator surface has been closed out and every documented bound made
    observable: the binary itself (`--version`, `--help`, usage exit codes, start/serve/stop) and
    `--check` (load a content-addressed store, report loaded/skipped, skip a corrupted file) are
