@@ -6,6 +6,75 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the flaky release gate is a real pruner bug, and it is fixed
+
+**Invocation.** The standing perpetual directive. `oag-listend`, all five repositories.
+
+**Files modified.** `scripts/prune-target.py`, `scripts/test_prune_target.py`, `scripts/README.md`
+in all five repositories (byte-identical, verified by sha256).
+
+**Finding.** `check.sh --release` failed two runs in three with:
+
+    error: could not parse/generate dep info at:
+      .../target/release/deps/udp_carrier-e0cd9683a5030ee0.d
+    Caused by: failed to write
+      .../target/release/.fingerprint/oag-listend-e0cd9683a5030ee0/dep-test-integration-test-udp_carrier
+    Caused by: No such file or directory
+
+A prune step deleted a fingerprint directory while the build was writing into it. Two distinct
+causes, both real:
+
+1. **The cargo horizon is per-process.** The wrapper passes the *running* cargo process's start
+   time as `--protect-after`, which stops one cargo run deleting its own outputs. But a *new*
+   cargo run starts after the previous one finished, so its horizon is later than the artifacts
+   the previous run just wrote. A gate that runs several cargo commands back to back
+   (`cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`) deletes them mid-run.
+2. **A generation directory's mtime is not when it was last written.** Cargo creates a
+   `.fingerprint/<crate>-<hash>/` directory once and then rewrites the files inside it on every
+   subsequent build, so the directory's own mtime goes stale while its contents are fresh.
+   Ageing a generation by its directory mtime therefore prunes directories cargo is still using.
+   This second cause is why a 5-minute "recent" window was not enough on its own: the reused
+   directory predated the window even though its contents did not.
+
+**Feature implemented.** Two changes in `prune-target.py`:
+
+- `RECENT_WINDOW = 1800.0`. `main()` clamps the effective bound to
+  `max(args.protect_after, time.time() - RECENT_WINDOW)`, so a generation written within the last
+  30 minutes is never pruned whatever cargo is doing. Thirty minutes covers a whole build while
+  still pruning old generations over time.
+- `generation_age(path)`. A generation is aged by the newest mtime of the directory *and its
+  immediate children*, not by the directory alone. This is the honest answer to "when was this
+  last written".
+
+**Tests executed.** `python3 scripts/test_prune_target.py` in all five repositories: 19 tests
+(was 16), all OK.
+
+- `test_a_fresh_generation_survives_without_a_cargo_horizon` and
+  `test_cli_keeps_a_fresh_generation` pin cause 1.
+- `test_a_reused_generation_dir_with_fresh_contents_is_kept` pins cause 2: eight generation
+  directories whose own mtime is set to the epoch but whose `invoked.timestamp` child is written
+  now must all survive.
+
+**Discrimination.** Each new test was probed by reverting its fix: reverting the clamp makes both
+cause-1 tests fail, and reverting `generation_age` makes the cause-2 test fail.
+
+**Gates executed.** `oag-listend`: default 147 tests, release 147, reticulum 157, all green.
+The release gate was run **five consecutive times** after the fix: 5/5 pass (was 2-of-3 failing).
+The standalone suite in all five repositories is green, and all four other repositories build with
+the shared pruner (`cargo check --workspace --all-targets` in each: 0 errors).
+
+**Commit identifiers.** `oag-listend` `c5a3ff5`, `oag-mesh` `980b34a`, `oag-collisions` `397f9e8`,
+`oag-imagination-random-data-compute` `718d227`, `open-agent-graph` `8434e62`.
+**Push status:** all five pushed; all five clean and nothing unpushed.
+
+**Scope note.** The directive marked re-auditing disk, prune hooks, and cargo config out of
+scope. This was not a re-audit of that design: it is a defect in a shipped gate that was failing
+intermittently, with the cause measured rather than assumed, and it is escalated here.
+
+**Remaining defects.** None known in this area. The Reticulum interop question (needs a real
+transport instance) and the cross-project items listed in `PROJECT_STATE.md` are unchanged.
+
+
 ## 2026-11-21 — the IPFS mirror works against a real node
 
 **Repository:** `oag-listend`, commit `aad2d9b` on `master`; records in `open-agent-graph`.

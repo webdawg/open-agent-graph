@@ -427,11 +427,18 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `AudioStore::accept`, checked on bytes never on a declared type). AGPL-3.0-or-later, 5 tests, no
   carrier yet. `DIRECTIVE.md` names five repositories and "THE SERVING PURPOSE".
 
-- **The pruner no longer races cargo.** The prune hook could delete the
-  `incremental/`/`.fingerprint/`/`build/` directories cargo had created for the units it was about
-  to compile, failing the build with `failed to write .../invoked.timestamp`. The wrapper now
-  passes the cargo process's own start time as `--protect-after` and the pruner skips anything
-  newer. 16 script tests pass (was 14); `cargo build --examples` is clean across repeated runs.
+- **The pruner no longer races cargo, and the flaky release gate is fixed.** The prune hook could
+  delete the `incremental/`/`.fingerprint/`/`build/` directories cargo had created for the units it
+  was about to compile, failing the build with `failed to write .../invoked.timestamp`. The
+  wrapper passes the running cargo process's start time as `--protect-after`. Two further causes
+  of the same failure were found and fixed: a *new* cargo run starts after the previous one
+  finished, so its horizon is later than the artifacts the previous run just wrote (a gate running
+  several cargo commands back to back deleted them mid-run), and cargo reuses a fingerprint
+  directory across builds, so the directory's own mtime goes stale while its contents are fresh.
+  A generation is now aged by the newest mtime of the directory and its immediate children, and a
+  generation written within the last 30 minutes is never pruned whatever cargo is doing. 19 script
+  tests pass (was 16), each new test failing when its fix is reverted; `check.sh --release` passes
+  5/5 (was 2-of-3 failing).
 - **The imagination layer's data-pad gather fans out with a bounded concurrency.** The gather
   asked each node for its pad sequentially, so a file split across the default 1000 pads cost a
   thousand round-trips. `MAX_CONCURRENT_GATHERS` (32) caps the fan-out; `datapad::gather` restores
