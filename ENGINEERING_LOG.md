@@ -6,6 +6,66 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — correction: the pruner bound was `max`, and a published media type was unbounded
+
+**Invocation.** The standing perpetual directive. `oag-listend` for the daemon change; all five
+repositories for the shared pruner.
+
+**Correction to the previous entry.** That entry claimed the flaky release gate was fixed and
+recorded `check.sh --release` passing 5/5. The 5/5 was real for the runs taken, but the fix was
+wrong in a way those runs did not expose: the prune bound was computed as
+
+    protect_after = max(args.protect_after, time.time() - RECENT_WINDOW)
+
+`protect_after` means "skip anything at or after this time", so a **later** bound protects more.
+Taking the maximum therefore threw the recent window away on every real build, because the
+wrapper always supplies a cargo horizon and it is always later than `now - 30 min`. The gate
+failed again on the next invocation. Measured, not assumed: `cargo test -p oag-listend` failed with
+`failed to write .../target/debug/.fingerprint/oag-listend-<hash>/invoked.timestamp`.
+
+**Fix.** `protect_after = min(args.protect_after, now - RECENT_WINDOW)` -- the *earlier* threshold,
+which protects the union of this cargo run's outputs and the last half hour's. A horizon of 0 (the
+CLI default) means the caller supplied none, so only the window applies.
+
+**Test.** `test_the_cargo_horizon_and_the_recent_window_protect_the_union` -- eight `.fingerprint`
+generations a minute old (directory and contents alike) with a caller horizon of `now`. Under `max`
+it fails, under `min` it passes; verified both ways. Back-dating only the child is not enough,
+because the directory's own mtime is then still "now" and protects it for the wrong reason.
+
+**Daemon change: a published media type was unbounded.** `AudioStore::accept` wrote a publisher's
+declared media type to `<hash>.json` with no length bound, while the loader already refuses a
+sidecar over 4 KiB (`MAX_SIDECAR_BYTES`). A frame carries ~16 MiB, so a publisher could send a
+declared type of megabytes: it was written to disk and then ignored by every later load, so
+`--max-bytes` bounded the audio but not the bytes actually stored -- a disk-exhaustion vector in
+the one place the daemon is supposed to be bounded. `AudioItem::new` now applies the loader's own
+bound and trims, so the write bound equals the read bound. An absurd type is dropped, not refused:
+the audio is never lost because of its metadata, and the declared type is not used for serving (the
+HTTP carrier derives the content type from the bytes).
+
+**Tests executed.** `python3 scripts/test_prune_target.py` in all five repositories: 20 tests (was
+19), all OK. `cargo test -p oag-listend`: **73 unit + 77 end-to-end = 150**, all green (was 70 +
+77); **79 + 81 = 160** with `--features reticulum`. New tests:
+`a_declared_media_type_is_bounded_and_trimmed_like_the_loader_reads_it`,
+`a_publish_with_an_absurd_media_type_keeps_the_audio_and_writes_no_sidecar`,
+`a_normal_declared_media_type_survives_a_reopen`.
+
+**Gates executed.** `oag-listend`: `./scripts/check.sh`, `--release`, `--features reticulum` all
+green. The release gate was run **six consecutive times** after the correction: 6/6 pass. The four
+other repositories build with the shared pruner (`cargo check --workspace --all-targets`, 0
+errors each).
+
+**Commit identifiers.** `oag-listend` `73f70ae`; `oag-mesh` `45f9fa8`; `oag-collisions` `b19fc44`;
+`oag-imagination-random-data-compute` `73fadb3`; `open-agent-graph` `b0c5e92` (this entry follows).
+**Push status:** all five pushed; all five clean and nothing unpushed.
+
+**Remaining defects.** Recorded, not claimed away: a generation **older than 30 minutes** that a
+later cargo run reuses can still be pruned mid-run, because `--once` prunes at the first `rustc`
+and cargo touches a fingerprint directory only once it starts that unit. The operator's documented
+remedy (`delete target/.rustc_info.json and rebuild`) applies. Closing it properly needs either a
+much longer window or not pruning cargo's own bookkeeping directories, and both are design changes
+to a hook the directive puts out of scope -- so it is escalated rather than churned again.
+
+
 ## 2026-11-21 — the flaky release gate is a real pruner bug, and it is fixed
 
 **Invocation.** The standing perpetual directive. `oag-listend`, all five repositories.

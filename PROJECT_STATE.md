@@ -436,9 +436,25 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   several cargo commands back to back deleted them mid-run), and cargo reuses a fingerprint
   directory across builds, so the directory's own mtime goes stale while its contents are fresh.
   A generation is now aged by the newest mtime of the directory and its immediate children, and a
-  generation written within the last 30 minutes is never pruned whatever cargo is doing. 19 script
-  tests pass (was 16), each new test failing when its fix is reverted; `check.sh --release` passes
-  5/5 (was 2-of-3 failing).
+  generation written within the last 30 minutes is never pruned whatever cargo is doing. **The
+  bound is `min(--protect-after, now - 30 min)`, not `max`.** `protect_after` means "skip
+  anything at or after this time", so a later bound protects more, and the `max` first written
+  here silently discarded the recent window on every real build -- the gate failed again the next
+  invocation, and the 5/5 recorded in the previous entry was a narrower run than it looked. The
+  minimum protects the union: this cargo's outputs *and* the last half hour's. 20 script tests pass
+  (was 16), each new test failing when its fix is reverted, including
+  `test_the_cargo_horizon_and_the_recent_window_protect_the_union`; `check.sh --release` passes
+  6/6 after the correction. Residual, recorded rather than claimed away: a generation older than
+  30 minutes that a later cargo run reuses can still be pruned mid-run; the operator's documented
+  `target/.rustc_info.json` remedy applies.
+- **A published media type can no longer outrun the store bound.** `AudioStore::accept` wrote a
+  publisher's declared media type to `<hash>.json` with no length bound, while the loader already
+  refuses a sidecar over 4 KiB. A frame carries ~16 MiB, so a publisher could hand the daemon
+  megabytes of "metadata" that were written to disk and then ignored by every later load --
+  `--max-bytes` bounded the audio but not the bytes stored. `AudioItem::new` now applies
+  `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
+  dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
+  + 77 end-to-end (was 70 + 77).
 - **The imagination layer's data-pad gather fans out with a bounded concurrency.** The gather
   asked each node for its pad sequentially, so a file split across the default 1000 pads cost a
   thousand round-trips. `MAX_CONCURRENT_GATHERS` (32) caps the fan-out; `datapad::gather` restores
@@ -553,7 +569,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   66 unit + 77 end-to-end tests, 0 failed; 153 with the opt-in Reticulum carrier.
+   73 unit + 77 end-to-end tests, 0 failed; 160 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
