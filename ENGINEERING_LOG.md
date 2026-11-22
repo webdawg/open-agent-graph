@@ -6,6 +6,56 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the store is bounded in entries as well as bytes
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** `bytes_held` bounds audio bytes. Every item also costs a `HashMap` entry (64-byte hash
+key), a `VecDeque` entry (another 64-byte hash) and an `Arc`, whether the audio is 12 bytes or
+16 MiB. So a publisher of tiny sounds could drive the daemon's memory far past `--max-bytes` while
+the daemon reported itself within it.
+
+Measured against the real release binary, publishing twelve-byte WAVs over the native protocol:
+
+- 20,000 items: RSS 3,988 kB, `bytes_held` 240,000 against a 1,073,741,824 bound.
+- That is ~200 B of overhead per entry at this scale; a second run at the cap measured ~500 B.
+
+Arithmetic from that measurement, labelled as such: at 12 bytes per item, reaching the default
+1 GiB byte bound would mean ~89 million entries, i.e. tens of GB of overhead. An automated client
+could get there -- 150,000 publishes took 12.2 s.
+
+**Change.** `publish` evicts oldest-first while *either* bound is exceeded, and the eviction is one
+`evict_oldest` helper so the byte and entry accounting cannot drift apart:
+
+    while self.bytes_held > self.max_bytes || self.items.len() > MAX_STORE_ENTRIES {
+        self.evict_oldest();
+    }
+
+`MAX_STORE_ENTRIES` is the same number a directory load honours (`MAX_LOAD_ENTRIES`), so a start and
+a lifetime of publishes agree. Behaviour differs deliberately: a load stops at the cap and reports
+`truncated`, while a runtime store evicts and keeps serving.
+
+**Tests executed.** `cargo test -p oag-listend`: **80 unit + 79 end-to-end = 159**, all green (was
+79 + 79); **86 + 83 = 169** with `--features reticulum`.
+
+- `the_store_is_bounded_in_entries_too` -- `with_capacity(usize::MAX)`, so only the entry cap can
+  be what stops it; 100,001 distinct twelve-byte items, asserting exactly 100,000 held and the
+  oldest evicted. Fails with 100,001 held when the entry condition is removed.
+
+**Verified against the binary, not only the tests.** 150,000 twelve-byte publishes: `GET /` reports
+`items: 100000`, `bytes: 1200000 / 1073741824`, RSS 51,460 kB.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 159 /
+159 / 169 tests.
+
+**Commit identifiers.** `oag-listend` `0e0094b`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — the client cannot be made to reserve 4 GiB, and cannot test a stale binary
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

@@ -455,6 +455,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The store is bounded in entries as well as bytes.** `bytes_held` bounds audio, but every item
+  also costs a map entry, a queue entry and an `Arc`, so a publisher of tiny sounds could drive
+  memory far past `--max-bytes` while the daemon reported itself within it. Measured against the
+  real binary: 20,000 twelve-byte items cost 4 MB while `bytes_held` was 240 KB against a 1 GiB
+  bound. `publish` now evicts oldest-first while either bound is exceeded, capped at
+  `MAX_STORE_ENTRIES` -- the same number a directory load honours. Verified against the binary:
+  150,000 twelve-byte publishes leave exactly 100,000 held, at 51 MB RSS. `oag-listend` 80 unit +
+  79 end-to-end (was 79 + 79).
 - **The shipped client cannot be made to reserve 4 GiB, and the suite cannot test a stale binary.**
   `push_pull` allocated `vec![0u8; len]` from a wire length prefix before checking it, on the TCP and
   Unix branches, so a broken or hostile daemon declaring `u32::MAX` could make the operator's client
@@ -623,7 +631,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   79 unit + 79 end-to-end tests, 0 failed; 168 with the opt-in Reticulum carrier.
+   80 unit + 79 end-to-end tests, 0 failed; 169 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
