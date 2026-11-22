@@ -6,6 +6,62 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — a sidecar cannot hang the startup load, or be read before it is measured
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** `read_cid_sidecar` did:
+
+    let bytes = std::fs::read(dir.join(format!("{hash}.cid"))).ok()?;
+    if bytes.is_empty() || bytes.len() > MAX_CID_SIDECAR_BYTES { return None; }
+
+It read the whole file first and measured it afterwards. The store directory is an
+operator-controlled path, and a hand-placed `<hash>.cid` of arbitrary size was therefore pulled
+fully into memory on every startup before being rejected. That is the exact pattern the audio path
+already refuses in the same function's caller -- "a file larger than the store can hold is skipped
+without being read: an unbounded read on the startup path is the same defect as an unbounded
+network read" -- so the CID reader contradicted a rule the crate states about itself.
+
+Neither sidecar reader checked regularity either. `read_sidecar` stat'd for size but not for type,
+and `read_cid_sidecar` did not stat at all, so a FIFO named `<hash>.cid` or `<hash>.json` would
+make `std::fs::read` block forever and hang the load. The audio reader has guarded that class all
+along ("Only regular files. A FIFO or device named like a hash would make `std::fs::read` block
+forever"); the sidecar readers did not.
+
+**Feature implemented.** One helper:
+
+    fn read_bounded_regular(path: &Path, max: usize) -> Option<Vec<u8>> {
+        let metadata = std::fs::metadata(path).ok()?;
+        if !metadata.is_file() || metadata.len() as usize > max { return None; }
+        std::fs::read(path).ok()
+    }
+
+Both `read_sidecar` and `read_cid_sidecar` use it. The bound is now enforced on the way in, before
+the read, for both sidecars.
+
+**Tests executed.** `cargo test -p oag-listend`: **75 unit + 77 end-to-end = 152**, all green (was
+73 + 77); **81 + 81 = 162** with `--features reticulum`.
+
+- `a_fifo_sidecar_does_not_hang_the_load` -- a valid audio entry plus a FIFO under both sidecar
+  names; the load must complete with the audio loaded and neither sidecar trusted. The blocking
+  load runs on a thread with a 10 s bound, so a reader that blocks fails rather than hanging the
+  suite.
+- `an_oversized_cid_sidecar_is_ignored` -- the CID bound, which previously only worked by reading
+  the file first.
+
+**Discrimination.** With the old read-before-stat CID reader restored, the FIFO test fails at
+10.00 s and panics; with the fix it passes in 0.00 s. Verified both ways.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 152 /
+152 / 162 tests.
+
+**Commit identifiers.** `oag-listend` `7346311`; this entry `pending`.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged from the previous entry: the prune hook's residual cold-generation
+case is recorded and escalated, not fixed. Reticulum interop still needs a real transport instance.
+
+
 ## 2026-11-21 — correction: the pruner bound was `max`, and a published media type was unbounded
 
 **Invocation.** The standing perpetual directive. `oag-listend` for the daemon change; all five

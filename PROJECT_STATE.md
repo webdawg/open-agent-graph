@@ -455,6 +455,15 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **A sidecar cannot hang or exhaust the startup load.** `read_cid_sidecar` read the whole
+  `<hash>.cid` file before rejecting it if it was over 128 bytes, so a hand-placed sidecar of
+  arbitrary size was pulled fully into memory -- the exact pattern the audio path already refuses.
+  Neither sidecar reader checked regularity either, so a FIFO named `<hash>.cid` or `<hash>.json`
+  would have made `std::fs::read` block forever and hung startup. One `read_bounded_regular` helper
+  now stats first and requires a regular file within the bound; both readers use it. Pinned by a
+  test that puts a FIFO under both sidecar names and bounds the blocking load on a thread: it fails
+  at 10 s with the old reader and passes in 0.00 s with the fix. `oag-listend` 75 unit + 77
+  end-to-end (was 73 + 77).
 - **The imagination layer's data-pad gather fans out with a bounded concurrency.** The gather
   asked each node for its pad sequentially, so a file split across the default 1000 pads cost a
   thousand round-trips. `MAX_CONCURRENT_GATHERS` (32) caps the fan-out; `datapad::gather` restores
@@ -569,7 +578,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   73 unit + 77 end-to-end tests, 0 failed; 160 with the opt-in Reticulum carrier.
+   75 unit + 77 end-to-end tests, 0 failed; 162 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
