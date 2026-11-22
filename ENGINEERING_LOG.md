@@ -6,6 +6,60 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — an honest 413, and test ports that cannot be taken
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding 1: a false refusal message.** The HTTP `POST /audio` handler caught
+`ListendError::TooLarge` and built a *new* error for the body:
+
+    ListendError::TooLarge { len: body_len, max: store.max_bytes() }
+
+An item refused by the **frame cap** -- audio above `MAX_SERVABLE_BYTES`, which would make a fetch
+reply larger than a frame -- was therefore answered "item is 16776961 bytes ... larger than the
+1073741824 byte store bound". False on both counts: the audio is not that large, and that is not
+the bound that refused it. The two refusals mean different things to a client ("use TCP, not
+HTTP" versus "lower --max-bytes"), and the message made them indistinguishable.
+
+**Fix 1.** The handler reports the error `accept` actually returned; `accept_and_mirror` already
+propagates it. The `TooLarge` message drops the word "store" because it is used for both bounds.
+
+**Finding 2: a race in test port allocation.** `free_port()` reserved a port by binding it and
+dropping the socket; the comment above it admitted the race. Under load the suite failed twice with
+"the daemon closed its output before announcing; got offering accepted audio to IPFS at ..." --
+a bind failure: another process took the reserved port in the window, the daemon printed its
+startup lines and exited 1, and the test read that as "never announced". CI runs two of these suites
+in parallel on one runner.
+
+**Fix 2.** Every test that can read the daemon's announcement now binds `127.0.0.1:0` (or
+`[::1]:0`) and takes the address from it, through a new `announced_addr` helper. The daemon picks
+the port, so no other process can take it first -- the race is removed, not narrowed. `free_port`
+remains only for `an_unwritable_stdout`, whose stdout is `/dev/full`; that test now retries on a
+fresh port when a start dies. `announce` also lost a 200 ms per-read idle timeout: a legitimate
+startup can be silent for up to the 30 s startup mirror, and 200 ms of silence was read as a crash.
+
+**Tests executed.** `cargo test -p oag-listend`: **79 unit + 78 end-to-end = 157**, all green (was
+79 + 77); **85 + 82 = 167** with `--features reticulum`.
+
+- `a_frame_cap_refusal_names_the_frame_cap` -- a WAV of `MAX_SERVABLE_BYTES + 1` posted to a daemon
+  with the default 1 GiB store: 413, naming 16776960 and not 1073741824.
+- The four port-0 conversions and the `/dev/full` retry are exercised by the existing binary tests,
+  all green.
+
+**Discrimination.** Rebuilding the error in the handler makes the new test fail; using `accept`'s
+error passes. `wav::generate_n` caps at 40,000 samples, so the fixture is built directly.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 157 /
+157 / 167 tests.
+
+**Commit identifiers.** `oag-listend` `09295a2` (413) and `98f7f36` (ports); this entry follows.
+**Push status:** both pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — --check no longer deletes what the bound would evict
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

@@ -455,6 +455,16 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **A 413 names the bound that actually refused the item, and the suite no longer races for test
+  ports.** The HTTP POST handler rebuilt the `TooLarge` error from the body length and the store
+  bound, so an item refused by the frame cap was reported as "larger than the 1073741824 byte store
+  bound" -- false on both counts, and indistinguishable from a store-bound refusal. It now reports
+  the error `accept` returned. Separately, `free_port()` reserved a port by binding and dropping it,
+  leaving a window in which another process takes it; the daemon then exits on a bind failure the
+  test reads as "never announced". Every test that can read the announcement now binds port 0 and
+  takes the address from it, and the one that cannot (`/dev/full` stdout) retries on a fresh port.
+  `announce` also lost a 200 ms per-read idle timeout that would misread the 30 s startup mirror as
+  a crash. `oag-listend` 79 unit + 78 end-to-end (was 79 + 77).
 - **`--check` no longer deletes anything.** It is documented as "purely a store verification", but
   it used the same load path as a start, and that path unlinks what `--max-bytes` pushes out.
   Reproduced with the release binary: four generated sounds, `--max-bytes 3000 --check`, left
@@ -605,7 +615,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   79 unit + 77 end-to-end tests, 0 failed; 166 with the opt-in Reticulum carrier.
+   79 unit + 78 end-to-end tests, 0 failed; 167 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
