@@ -6,6 +6,60 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — a network-reachable panic in the IPFS chunked-reply decoder
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** While auditing every arithmetic operation on a network-derived value:
+
+    if pos + size > body.len() || out.len() + size > max {
+        return Err(IpfsError::ChunkedFraming);
+    }
+    out.extend_from_slice(&body[pos..pos + size]);
+
+A chunk size near `usize::MAX` makes both sums wrap to small numbers, so both bounds checks pass,
+and `&body[pos..pos + size]` has an end below its start. In debug the addition panics first
+("attempt to add with overflow"); in release it wraps and the slice panics. Either way the process
+dies.
+
+This is reachable from the network. The mirror is cleartext HTTP, so the reply comes from whatever
+answers at `--ipfs-api`: a hostile or compromised Kubo node, or an on-path attacker, sends one chunk
+size and the daemon's IPFS path takes the whole process down. `decode_chunked` runs for both halves
+-- `add` (publish) and `cat` (`GET /ipfs/{cid}`).
+
+**Fix.** `pos.checked_add(size)` for the slice end and `out.len().saturating_add(size)` for the
+accumulator, both refusing `IpfsError::ChunkedFraming`. The `robustness` fuzz does not cover the
+IPFS HTTP parser, which is why the fuzzing never found it.
+
+**Reproduced twice, and both pins fail against the pre-fix code:**
+
+- `a_chunk_size_that_would_overflow_usize_is_refused` (unit, `ipfs.rs`) -- ten bytes already decoded,
+  then a chunk size of `usize::MAX - 5`. Pre-fix: panicked with "attempt to add with overflow".
+- `a_hostile_chunk_size_is_a_recorded_failure_not_a_crash` (`ipfs_mirror.rs`) -- a stub node
+  returns a chunked 200 with that shape, driven through `accept_and_mirror` as a carrier would.
+  Asserts the audio is still stored and served and the hostile reply is recorded as a mirror
+  failure `(0, 1)`. Pre-fix: panicked; post-fix: passes.
+
+**Audit of the same shape elsewhere.** Every other arithmetic on a network-derived value is
+bounded before use: `decode_frame` and the Reticulum reassembler check `len > MAX_FRAME_BYTES`
+before `4 + len`; the HTTP reader checks `head.len() > MAX_HEAD_BYTES` before `pos + 4`; the
+listing paths do `offset.min(total)` and `normalize_limit` before `offset + limit`. This was the
+only unchecked one.
+
+**Tests executed.** `cargo test -p oag-listend`: **81 unit + 81 end-to-end = 162**, all green (was
+80 + 80); **87 + 85 = 172** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 162 /
+162 / 172.
+
+**Commit identifiers.** `oag-listend` `4068ab0`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — two false claims about the store lock, and a stale 413 quote
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
