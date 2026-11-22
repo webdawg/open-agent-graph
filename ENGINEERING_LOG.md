@@ -6,6 +6,52 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — --check's read-only contract, pinned where it can regress
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** The previous entry fixed `--check` deleting what the bound would evict, with a
+library-level test (`a_check_does_not_delete_what_the_bound_would_evict`). But nothing exercised
+`main`'s choice of `AudioStore::check_directory`: the fix lived in the library, and the binary still
+decided which constructor to call. An edit back to `with_directory` would have deleted an operator's
+audio again with the whole suite green -- the same shape as the stale-example defect two entries
+ago, where a test claimed to exercise code it never reached.
+
+**Change.** `check_reports_what_the_bound_would_evict_without_unlinking_it` runs the real binary:
+three 52-byte items in a store directory, `--max-bytes 100`, and asserts the report says
+`loaded 1 evicted 2` while all three files are still on disk. Verified to fail with
+"a check must not unlink <hash>" when `main` is reverted to `with_directory`, and to pass restored.
+
+**Two smaller things in the same pass.**
+
+- `evict_oldest` now returns whether it evicted, and the eviction loop breaks when it cannot. The
+  loop is bounded by construction -- `bytes_held > max_bytes` or `items.len() > MAX_STORE_ENTRIES`,
+  and each pass removes one entry -- but a store whose queue and map ever disagreed would spin
+  forever, and "no unbounded loops" is a rule here.
+- `LoadReport::evicted` now says "pushed out by a bound", not "by the byte bound", because the entry
+  cap added last entry can push entries out too.
+
+**Records.** SPEC now states the sniff's deliberate scope plainly: it reads signatures, not
+completeness, so `RIFF....WAVE` and nothing else is accepted. That is recorded as a known edge rather
+than left to be discovered. The reasoning is in the SPEC: rejecting truncated containers is a real
+improvement, but it risks refusing a file a real player accepts, and refusing audio violates the
+first requirement -- so it is a deliberate non-change, not an oversight.
+
+**Tests executed.** `cargo test -p oag-listend`: **80 unit + 80 end-to-end = 160**, all green (was
+80 + 79); **86 + 84 = 170** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 160 /
+160 / 170 tests.
+
+**Commit identifiers.** `oag-listend` `e16dd8d`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance). The sniff's
+completeness edge is now recorded as a deliberate limitation.
+
+---
+
 ## 2026-11-21 — the store is bounded in entries as well as bytes
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
