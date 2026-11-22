@@ -6,6 +6,55 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — --check no longer deletes what the bound would evict
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** `--check` is documented as "purely a store verification: it does not serve and does
+not contact IPFS". It went through the same load path as a start, and that path ends with:
+
+    for path in std::mem::take(&mut store.evicted) { let _ = std::fs::remove_file(path); }
+
+so a check unlinked whatever `--max-bytes` pushed out. Reproduced with the release binary: a store
+holding four generated sounds, `--max-bytes 3000 --check`, reported `loaded 2 skipped 1 evicted 1`
+and left **three** audio files. Scripts and operators call `--check` precisely because it looks
+safe to run.
+
+**Change.** `AudioStore::check_directory` opens a store directory without changing it. In that mode
+over-bound entries are still reported as `evicted` -- the report is the point of the command -- but
+their files are left exactly as they were. It also does not create the directory: `with_directory`
+does `create_dir_all` (right for a start), and a check that creates the directory hides a typo in
+`--dir` and leaves an empty directory behind. A real start still uses `with_directory` and still
+prunes on load, because a daemon that starts over its bound must not keep the surplus.
+
+**Tests executed.** `cargo test -p oag-listend`: **79 unit + 77 end-to-end = 156**, all green (was
+77 + 77); **85 + 81 = 166** with `--features reticulum`.
+
+- `a_check_does_not_delete_what_the_bound_would_evict` -- three 52-byte WAVs named by their BLAKE3,
+  bound 100. `check_directory` reports `loaded 1, evicted 2` and all three files survive;
+  `with_directory` on the same directory leaves one. Both halves are asserted, so the test would
+  also catch a start that stopped pruning.
+- `a_check_does_not_create_a_missing_directory`.
+
+**Discrimination.** Removing the `read_only` guard around the unlink makes the first test fail (78
+passed, 1 failed); restoring it gives 79 passed.
+
+**Verified against the binary, not only the tests.** The same store and bound that previously left
+three files now report `loaded 2 skipped 1 evicted 1` with **four** files still on disk. `--check`
+on a missing path prints `cannot open store ...: No such file or directory`, exits 1, and creates
+nothing. A real start still creates the directory and still prunes.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 156 /
+156 / 166 tests.
+
+**Commit identifiers.** `oag-listend` `14bad0b`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — a kept media type counts toward --max-bytes
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

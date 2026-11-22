@@ -455,6 +455,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **`--check` no longer deletes anything.** It is documented as "purely a store verification", but
+  it used the same load path as a start, and that path unlinks what `--max-bytes` pushes out.
+  Reproduced with the release binary: four generated sounds, `--max-bytes 3000 --check`, left
+  three files. `AudioStore::check_directory` now opens without changing anything -- over-bound
+  entries are reported as `evicted` and their files are left alone, and a missing directory is an
+  error rather than something to create. A real start still prunes on load. `oag-listend` 79 unit +
+  77 end-to-end (was 77 + 77).
 - **A kept media type now counts toward `--max-bytes`.** `bytes_held` counted only audio while
   `persist` also wrote the declared type to `<hash>.json`, so a 12-byte WAV with a 4 KiB type was
   accepted and the sidecar grew uncounted -- the directory could far exceed the bound while `GET /`
@@ -598,7 +605,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   77 unit + 77 end-to-end tests, 0 failed; 164 with the opt-in Reticulum carrier.
+   79 unit + 77 end-to-end tests, 0 failed; 166 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
