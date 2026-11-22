@@ -455,6 +455,16 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **Two false claims about the store lock, and a stale 413 quote, corrected.** SPEC said the
+  eviction unlink "is taken off the lock" and that "a slow disk or a large item delays the answer
+  that caused it, not every other client". `accept` runs with the lock taken and awaits both the
+  durable write and the eviction unlink, so neither claim held; `accept_and_mirror`'s own doc always
+  said the lock covers "the rule, the durable write, and the insert". Measured against the real
+  binary with its store on the operator's network share, a 16 MiB publish and a stream of 16 MiB
+  publishes with an eviction on every one, a concurrent fetch answered in 1-3 ms -- so the behaviour
+  is fine and the *claim* was wrong. README also quoted a 413 message from before the message was
+  corrected to name the footprint and the refusing bound; it is re-verified against the binary and
+  now pinned by a test.
 - **`--check`'s read-only contract is pinned at the binary level.** The library test passed while
   nothing exercised `main`'s choice of `check_directory`, so an edit back to `with_directory` would
   have deleted an operator's audio with the suite green. The new binary test runs the real command

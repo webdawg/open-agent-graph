@@ -6,6 +6,63 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — two false claims about the store lock, and a stale 413 quote
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding 1: SPEC claimed lock isolation the code does not provide.** Two passages:
+
+- Persistence: "The eviction unlink is asynchronous too, and is taken off the lock: a slow disk
+  must not stall every other client's accept."
+- Concurrency: "A slow disk or a large item delays the answer that caused it, not every other
+  client."
+
+`accept` is called with the store lock taken (`accept_and_mirror` holds it across
+`store.accept(...)`), and `accept` awaits both `persist` and `drain_evicted`. So the lock is held
+across the durable write and the eviction unlink. `accept_and_mirror`'s own doc has always said the
+lock covers "the rule, the durable write, and the insert" -- the accurate description, and the one
+the two passages contradicted.
+
+**Measurement, before rewriting the claim.** Store on the operator's network share
+(`/media/blackhole0`, ~9.8 MB/s), real release binary, HTTP carrier:
+
+- A 16 MiB publish: 0.077 s, and a concurrent fetch of a small item answered in 0.001 s.
+- A stream of 16 MiB publishes with `--max-bytes 20000000` so every publish evicts (23 publishes,
+  an unlink on the share each time): three concurrent fetches answered in 0.001-0.003 s.
+
+So the behaviour is not observable as a stall here -- the writes are page-cached and the share is
+fast enough. The defect was the *claim*, not a reproduced hang. Both passages now state the truth:
+the lock is held across the write and the unlink, they are asynchronous (they do not block the
+executor), and a write that genuinely blocks would stall other clients' store operations -- with the
+measurement recorded alongside.
+
+**Finding 2: README quoted a 413 message that no longer exists.** It said a 4044-byte WAV against
+`--max-bytes 100` returned `audio is 4044 bytes, larger than the 100 byte store bound`. That wording
+was replaced when the message was corrected to name the footprint and the bound that actually
+refused. Re-verified against the binary:
+
+    item is 4044 bytes (audio plus its declared media type), larger than the 100 byte bound
+
+`audio_larger_than_the_store_bound_is_too_large` now pins that shape (`item is <n> bytes` and
+`larger than the 256 byte bound`), so the quoted message cannot go stale silently again.
+
+**Tests executed.** `cargo test -p oag-listend`: 80 unit + 80 end-to-end = 160, all green; 86 + 84
+= 170 with `--features reticulum`. Counts unchanged -- this entry changes no daemon behaviour.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 160 /
+160 / 170.
+
+**Commit identifiers.** `oag-listend` `6b46d46`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance). The lock-hold
+behaviour is now described accurately rather than fixed; making the write and unlink run off the
+lock would be a real refactor of the inbound path, and it was not done because no stall could be
+produced.
+
+---
+
 ## 2026-11-21 — --check's read-only contract, pinned where it can regress
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
