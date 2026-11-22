@@ -6,6 +6,48 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — correction: how far the chunked-decoder panic actually reaches
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Correction to the previous entry.** That entry said a hostile chunk size "takes the whole process
+down" and "the daemon's IPFS path takes the process down". That is true for one path and false for
+the others, and I stated it without measuring. Measured now, by deliberately panicking in
+`decode_chunked` and running the real release binary against a stand-in node:
+
+- **Startup mirror pass -- process fatal.** With a store holding one item and
+  `--ipfs-api 127.0.0.1:7399`, the daemon exited **101** with `thread 'main' panicked`. The startup
+  mirror runs on the main task (`main` awaits `store.mirror_existing(...)` directly), so a panic
+  there unwinds out of `main`. This needs no client at all: a hostile node plus a non-empty store
+  kills the daemon at boot. This is the severe path, and the original claim holds for it.
+- **Publish-triggered mirror -- connection fatal only.** Same node, empty store, then a publish:
+  `curl` got no response (connection closed), the process stayed alive, and `GET /` still answered
+  `200`. The mirror runs inside the session task (`handle` → `accept_and_mirror`), and a task panic
+  is caught at the task boundary.
+
+So the honest statement is: a hostile node kills the daemon **at startup**, and kills whichever
+connection or carrier task triggers a mirror. Not "the whole process" in general.
+
+**Pinned at the level that matters.** `a_hostile_node_at_startup_does_not_kill_the_daemon`
+(`binary.rs`) stands up a node that answers every add with a chunk size near `usize::MAX`, seeds a
+store with one item, starts the real binary with `--ipfs-api`, and asserts it announces, serves a
+Hello, and is still alive. Verified to fail against the deliberately-panicking decoder (the daemon
+exits before announcing) and to pass with the fix.
+
+**Tests executed.** `cargo test -p oag-listend`: **81 unit + 82 end-to-end = 163**, all green (was
+81 + 81); **87 + 86 = 173** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 163 /
+163 / 173.
+
+**Commit identifiers.** `oag-listend` `c6cd5a1`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — a network-reachable panic in the IPFS chunked-reply decoder
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

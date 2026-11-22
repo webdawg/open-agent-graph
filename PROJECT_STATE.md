@@ -459,10 +459,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   with `pos + size` and `out.len() + size`; a chunk size near `usize::MAX` wraps both sums to small
   numbers, so both checks pass and the slice panics (debug: "attempt to add with overflow"; release:
   the wrapped slice). The mirror is cleartext HTTP, so a hostile or compromised Kubo node -- or an
-  on-path attacker -- sends one chunk size and the daemon dies. Both halves (`add` and `cat`) go
-  through it. Fixed with `checked_add`/`saturating_add`; pinned twice, at the parser and over a stub
-  node through the carrier entry point, and the rest of the crate audited for the same shape.
-  `oag-listend` 81 unit + 81 end-to-end (was 80 + 80).
+  on-path attacker -- only has to send one chunk size. Both halves (`add` and `cat`) go through it.
+  Fixed with `checked_add`/`saturating_add`; pinned three times, at the parser, over a stub node
+  through the carrier entry point, and at the binary's startup mirror; and the rest of the crate
+  audited for the same shape. **Blast radius, measured:** the startup mirror pass runs on the main
+  task, so that panic exited the process (101) -- a remote kill at startup with no client involved;
+  a publish-triggered mirror runs in a session task and only killed that connection, with the daemon
+  still serving. `oag-listend` 81 unit + 82 end-to-end (was 80 + 80).
 - **Two false claims about the store lock, and a stale 413 quote, corrected.** SPEC said the
   eviction unlink "is taken off the lock" and that "a slow disk or a large item delays the answer
   that caused it, not every other client". `accept` runs with the lock taken and awaits both the
@@ -658,7 +661,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   81 unit + 81 end-to-end tests, 0 failed; 172 with the opt-in Reticulum carrier.
+   81 unit + 82 end-to-end tests, 0 failed; 173 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
