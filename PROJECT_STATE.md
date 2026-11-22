@@ -455,6 +455,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The shipped client cannot be made to reserve 4 GiB, and the suite cannot test a stale binary.**
+  `push_pull` allocated `vec![0u8; len]` from a wire length prefix before checking it, on the TCP and
+  Unix branches, so a broken or hostile daemon declaring `u32::MAX` could make the operator's client
+  reserve 4 GiB. A shared `read_frame` now checks `MAX_FRAME_BYTES` first, as the daemon's own reader
+  does. The test that pins this exposed a second defect: `push_pull()` built the example only when
+  missing, and `cargo test` does not rebuild an example whose source changed -- so the test silently
+  ran against the pre-fix client. The helper now always asks cargo to bring it up to date.
+  `oag-listend` 79 unit + 79 end-to-end (was 79 + 78).
 - **A 413 names the bound that actually refused the item, and the suite no longer races for test
   ports.** The HTTP POST handler rebuilt the `TooLarge` error from the body length and the store
   bound, so an item refused by the frame cap was reported as "larger than the 1073741824 byte store
@@ -615,7 +623,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   79 unit + 78 end-to-end tests, 0 failed; 167 with the opt-in Reticulum carrier.
+   79 unit + 79 end-to-end tests, 0 failed; 168 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

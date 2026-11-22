@@ -6,6 +6,59 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the client cannot be made to reserve 4 GiB, and cannot test a stale binary
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding 1: an unbounded allocation in the shipped client.** `push_pull` read a 4-byte length
+prefix and did `vec![0u8; len]` before checking it, on the TCP and Unix branches:
+
+    let len = u32::from_be_bytes(prefix) as usize;
+    let mut body = vec![0u8; len];
+
+The daemon's own reader checks `len > max_frame` *before* allocating, and says so in a comment. The
+client did not. A broken or hostile daemon could declare `u32::MAX` and make the operator's client
+reserve 4 GiB. The UDP branch was already safe, because it decodes the whole datagram and
+`decode_frame` enforces the cap.
+
+**Fix 1.** A shared `read_frame(stream)` checks `MAX_FRAME_BYTES` before allocating, on all three
+branches, with the same per-read timeout the code already used.
+
+**Finding 2, exposed by the test for fix 1.** `push_pull()` built the example only when the binary
+was *missing*. `cargo test` does not rebuild an example whose source changed -- measured: after
+editing `examples/push_pull.rs` at 09:08, `target/debug/examples/push_pull` still carried 08:34 and
+the new test ran against it, reporting "early eof" (the old code's 16 MiB allocation then EOF)
+rather than the cap refusal. The test was silently exercising code that no longer existed, which is
+the same class as a gate that does not test what it claims.
+
+**Fix 2.** The helper now always runs `cargo build -p oag-listend --example push_pull` and then
+resolves the path. A no-op build was measured at 0.065-0.073 s, so this is not a tax.
+
+**Tests executed.** `cargo test -p oag-listend`: **79 unit + 79 end-to-end = 158**, all green (was
+79 + 78); **85 + 83 = 168** with `--features reticulum`.
+
+- `the_client_refuses_a_frame_over_the_cap` -- a stand-in daemon declares `MAX_FRAME_BYTES + 1` and
+  closes; the real client must refuse with the cap named. It uses `tokio::process::Command`, because
+  this test's runtime is single-threaded and a blocking `std::process` wait would starve the
+  stand-in task (that mistake produced a 10 s timeout first, then "early eof").
+
+**Discrimination.** With the length check removed and the example rebuilt, the test fails with
+"push_pull: early eof"; with the check it passes.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 158 /
+158 / 168 tests.
+
+**Records.** SPEC's "Next" claimed both IPFS halves were still to validate against a real Kubo node;
+that was done in `aad2d9b`. Corrected.
+
+**Commit identifiers.** `oag-listend` `5e5552b`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — an honest 413, and test ports that cannot be taken
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
