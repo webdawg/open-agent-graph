@@ -455,6 +455,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The shipped CI service job now runs the acceptance test.** It started the unit, fetched
+  `/ping` and `/`, and stopped -- which proves the unit serves HTTP but never exercises the frame
+  protocol. It now also builds the shipped `push_pull` client and runs it against the running
+  service over TCP and UDP, so a regression that left the native listener unable to publish or
+  fetch fails the job instead of passing it. Verified by hand against a running systemd unit with
+  the unit's own flags: `verified=true` on both carriers, hashes unchanged, non-audio refused; the
+  exact CI shell snippet was run as written.
 - **A sidecar cannot hang or exhaust the startup load.** `read_cid_sidecar` read the whole
   `<hash>.cid` file before rejecting it if it was over 128 bytes, so a hand-placed sidecar of
   arbitrary size was pulled fully into memory -- the exact pattern the audio path already refuses.
@@ -563,7 +570,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
 
    The service unit and clean SIGTERM stop are done, so "turn this thing on" is
    `systemctl enable --now oag-listend`; CI installs and starts that unit on every push
-   (`check-service`) and fetches audio from the running service.
+   (`check-service`), fetches the musical ping and the index over HTTP, **and runs the shipped
+   `push_pull` client against the running service over both the TCP and UDP carriers** -- so the
+   acceptance sentence (a second process pushes audio in, pulls it back, proves the bytes) is
+   executed against the installed binary under systemd, not only against a test harness. The Unix
+   socket is not probed there (the unit runs as `oag`, the socket is mode 0755); `unix_carrier.rs`
+   covers it.
    Since the last update the operator surface has been closed out and every documented bound made
    observable: the binary itself (`--version`, `--help`, usage exit codes, start/serve/stop) and
    `--check` (load a content-addressed store, report loaded/skipped, skip a corrupted file) are

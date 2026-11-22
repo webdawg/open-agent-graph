@@ -6,6 +6,50 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the shipped CI service job now runs the acceptance test
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** The `check-service` job is the only place the shipped unit file is run rather than
+linted. It installs the unit, starts it, fetches `/ping` and `/` over HTTP, and stops it. That
+proves the unit turns the daemon on and serves bytes to a browser. It never exercises the frame
+protocol the daemon exists for: a regression that left the native listener unable to publish or
+fetch, or that broke the UDP carrier, would pass the job.
+
+**Change.** The job now also builds the shipped `push_pull` client and runs it against the running
+service over both the TCP and UDP carriers. That is the acceptance sentence -- a second process
+pushes audio in, pulls it back, and both sides prove the bytes are the bytes -- executed against
+the installed binary under systemd rather than against a test harness. `push_pull` exits non-zero
+when a fetch does not verify or comes back different, so a silent mismatch fails the job. A failure
+prints the unit status and the journal, exactly as the HTTP step already does.
+
+The Unix socket is deliberately not probed: the unit runs as `oag` and the socket is mode 0755, so
+a non-root client cannot connect. That carrier is covered by `unix_carrier.rs`.
+
+**Verification (run here, not assumed).** A user-level systemd unit with the shipped unit's own
+flags (`--listen`, `--http`, `--udp`, `--unix`, `--dir`) was installed, started, and probed:
+
+- `push_pull --addr 127.0.0.1:7100` -- hello, ping `verified=true`, tone and noise published and
+  fetched `same-hash ... verified=true`, non-audio `Rejected`, exit 0.
+- `push_pull --udp --addr 127.0.0.1:7120` -- the same, exit 0.
+- `push_pull --unix /tmp/.../audio.sock` -- the same, exit 0 (recorded here; not added to CI, see
+  the permission note above).
+- `curl http://127.0.0.1:7101/ping` -- `200 audio/wav`.
+
+The exact shell snippet the CI step runs (`for args in ...`) was then executed as written and
+passes. The workflow YAML parses, and the job's step list is as intended.
+
+**Tests executed.** `./scripts/check.sh` in `oag-listend`: 152 tests (75 unit + 77 end-to-end), all
+green, `all gates passed`.
+
+**Commit identifiers.** `oag-listend` `aedfe03`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — a sidecar cannot hang the startup load, or be read before it is measured
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
