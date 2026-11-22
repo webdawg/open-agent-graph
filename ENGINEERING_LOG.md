@@ -6,6 +6,56 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — a kept media type counts toward --max-bytes
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** `bytes_held` counted only audio:
+
+    self.bytes_held += item.bytes.len();
+
+while `persist` also writes the declared media type to `<hash>.json`. `accept` checked
+`bytes.len() > servable_bound(max_bytes)` -- audio only -- so a publisher could send a 12-byte WAV
+carrying a 4 KiB declared type: the audio is small, so it was admitted, and the sidecar was written
+uncounted. The store could then hold an unbounded number of such items while `bytes_held` (and
+`GET /`) reported it within `--max-bytes`, and the directory grew far past the bound. SPEC claimed
+"the `--max-bytes` bound is a bound on disk too"; it was not.
+
+**Change.** `AudioItem::footprint()` is the audio plus its declared type, and that is what
+`bytes_held` sums and eviction subtracts. `accept` now enforces two distinct checks on the way in:
+
+- the *audio* must fit a fetch reply (`servable_bound`) -- the reply also carries the hash, a
+  length prefix and an optional CID, and the media type is not in it, so the metadata must not
+  shrink this bound;
+- the *footprint* must fit `--max-bytes` -- that is what is actually written to disk.
+
+`GET /` now says what it counts: `bytes: N / M (audio + declared types)`.
+
+**Tests executed.** `cargo test -p oag-listend`: **77 unit + 77 end-to-end = 154**, all green (was
+75 + 77); **83 + 81 = 164** with `--features reticulum`.
+
+- `the_store_bound_counts_the_declared_media_type` -- a 12-byte WAV with a 32-byte type is refused
+  at a 20-byte bound (reporting the footprint, 44), and accepted at exactly 44.
+- `a_loaded_sidecar_counts_toward_the_bound` -- a maximal 4 KiB sidecar on a 52-byte file is evicted
+  and unlinked at a 100-byte bound, and the load report says `evicted: 1`.
+- Two existing tests were sized for audio alone and now size the whole footprint: the eviction
+  test's bound is `larger.len() + DECLARED.len()`, and `http_root_reports_store_usage` asserts the
+  footprint in the root output.
+
+**Discrimination.** Reverting the footprint accounting (back to `bytes.len()` in `publish` and
+`accept`) makes both new tests fail -- 2 failed, 75 passed -- and restoring it gives 77 passed.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 154 /
+154 / 164 tests.
+
+**Commit identifiers.** `oag-listend` `8aa1431`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — the shipped CI service job now runs the acceptance test
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

@@ -455,6 +455,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **A kept media type now counts toward `--max-bytes`.** `bytes_held` counted only audio while
+  `persist` also wrote the declared type to `<hash>.json`, so a 12-byte WAV with a 4 KiB type was
+  accepted and the sidecar grew uncounted -- the directory could far exceed the bound while `GET /`
+  reported the store within it. `AudioItem::footprint()` (audio + declared type) is what
+  `bytes_held` sums and eviction subtracts, and `accept` enforces two distinct checks: the *audio*
+  must fit a fetch reply (the media type is not in the reply, so it does not shrink that bound) and
+  the *footprint* must fit the store bound. `GET /` says what it counts. `oag-listend` 77 unit + 77
+  end-to-end (was 75 + 77).
 - **The shipped CI service job now runs the acceptance test.** It started the unit, fetched
   `/ping` and `/`, and stopped -- which proves the unit serves HTTP but never exercises the frame
   protocol. It now also builds the shipped `push_pull` client and runs it against the running
@@ -590,7 +598,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   75 unit + 77 end-to-end tests, 0 failed; 162 with the opt-in Reticulum carrier.
+   77 unit + 77 end-to-end tests, 0 failed; 164 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
