@@ -49,6 +49,11 @@ and a body that stops early. `./scripts/check.sh` **146 tests**; `--release` **1
 
 **Push status:** `oag-listend` pushed to `master` (`5cbec03..aad2d9b`); this entry's commit pending.
 
+**Post-commit: the release gate is flaky.** Re-running `--release` after the commit gave
+exit 101, exit 0 with 147 tests. The failure is the known pruner/cargo race: a prune
+step removes a fingerprint directory while cargo is still writing into it. It is in the prune
+hook, which the directive puts out of scope, so it is escalated rather than worked around.
+
 ---
 
 ## 2026-11-20 — CI now installs and starts the shipped unit
