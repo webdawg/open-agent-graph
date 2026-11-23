@@ -6,6 +6,50 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the startup IPFS mirror pass no longer delays serving
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** SPEC says of the mirror: "It is best-effort: the bytes are written locally first, and a
+mirror failure is **recorded, never propagated**." The startup pass ran before the carriers bound,
+so a slow node propagated its slowness as a serving delay. Measured with the release binary, a store
+of four items, and a stand-in node that answers three seconds per add:
+
+    served=1 after 12.274 s
+
+A stalled node would have held the daemon back for the whole `STARTUP_MIRROR_BUDGET` (30 s), and the
+daemon was not accepting at all during it.
+
+**Change.** The pass runs *after* the carriers are serving, and takes the store lock only for the
+snapshot and the recording -- never across the network call -- so live traffic is unaffected.
+`mirror_existing_shared` snapshots the held items under one short lock, then offers each through
+`offer_shared`, which locks per item for the skip check and the recording.
+
+`offer_to_ipfs` (the owned-store pass that tests and direct users have) and `offer_shared` now share
+one outcome constructor, `add_to_ipfs`, so the two passes cannot drift in how they classify a reply.
+
+**Measured after the change.** Same store, same node: the daemon answers in **0.011 s**.
+
+**Test.** `the_startup_mirror_pass_does_not_delay_serving` stands up a node that answers 1.5 s per
+add, seeds a two-item store, starts the real binary with `--ipfs-api`, and asserts the daemon
+announced before the pass reported -- then that the pass still offers both items. Verified to fail
+with the pass put back before the bind.
+
+**Tests executed.** `cargo test -p oag-listend`: **83 unit + 84 end-to-end = 167**, all green (was
+83 + 83); **89 + 88 = 177** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 167 /
+167 / 177.
+
+**Commit identifiers.** `oag-listend` `25afd93`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the startup load
+still using blocking `std::fs` with no time bound.
+
+---
+
 ## 2026-11-21 — README's headline command works, and an unusable --dir says why
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

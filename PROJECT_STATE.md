@@ -455,6 +455,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The startup IPFS mirror pass no longer delays serving.** The mirror is documented as
+  best-effort, but the startup pass ran before the carriers bound, so a slow node propagated its
+  slowness: measured 12.3 s before the daemon would answer anything with a node at three seconds per
+  add, and a stalled node would have held it for the whole 30 s budget. The pass now runs after the
+  carriers serve and takes the lock only for the snapshot and the recording; the same store and node
+  answer in 0.011 s. `oag-listend` 83 unit + 84 end-to-end (was 83 + 83).
 - **README's headline command works, and an unusable `--dir` says why.** The first command the
   README gives an operator used `--dir /var/lib/oag-listend`, which a bare `cargo run` as an
   ordinary user cannot write -- verified to fail with `Permission denied`. Both README and SPEC now
@@ -683,7 +689,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   83 unit + 83 end-to-end tests, 0 failed; 176 with the opt-in Reticulum carrier.
+   83 unit + 84 end-to-end tests, 0 failed; 177 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
