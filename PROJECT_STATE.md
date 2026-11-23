@@ -455,6 +455,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The accept path's filesystem operations are bounded.** Every network read and write had a
+  timeout; the disk had none. `accept` awaits the durable write before the item is answerable, so a
+  filesystem that stalls -- an SMB share whose server has stopped answering -- would hold a publish
+  open indefinitely; the eviction unlink, the `.cid` sidecar write and the duplicate-path `stat`
+  shared the hole. `STORAGE_TIMEOUT` (60 s) now bounds all four, turning a stall into the same typed
+  refusal as any other write failure. Far above what the largest item needs: 16 MiB at the measured
+  9.8 MB/s of the operator's share is about two seconds. `oag-listend` 83 unit + 82 end-to-end (was
+  82 + 82).
 - **A panicking session releases its slot during the unwind.** All four carriers counted sessions
   with a hand-written `fetch_sub` after the awaited session, which a panic skips -- the counter stays
   raised and every later shutdown waits the whole `SHUTDOWN_GRACE` for a session that no longer
@@ -668,7 +676,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   82 unit + 82 end-to-end tests, 0 failed; 174 with the opt-in Reticulum carrier.
+   83 unit + 82 end-to-end tests, 0 failed; 175 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

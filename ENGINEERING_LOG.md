@@ -6,6 +6,63 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the accept path's filesystem operations are bounded
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** Every network read and write in the daemon has a timeout. The disk had none:
+
+- `persist` awaited `create_dir_all` and `tokio::fs::write` with no bound.
+- `drain_evicted` awaited `remove_file` with no bound.
+- the duplicate-publish path awaited `try_exists` with no bound.
+- `persist_cid` awaited the `.cid` sidecar write with no bound.
+
+`accept` awaits the durable write before the item is answerable, so a filesystem that stalls -- an
+SMB share whose server has stopped answering, which is the operator's setup (`/media/blackhole0`) --
+would hold a publish open indefinitely. That contradicts the standing constraint that every
+blocking network *and storage* operation has a bound.
+
+**Change.** `STORAGE_TIMEOUT` (60 s) bounds all four, through one helper
+(`with_storage_bound`) that turns a stall into the same typed refusal as any other write failure:
+`ListendError::Persist("the filesystem did not answer in time")`. The audio is not answered as
+stored. The duplicate-path stat treats a timeout as absent, so the bounded write re-persists.
+
+The value is deliberately generous: the largest item the store accepts is 16 MiB, which at the
+measured 9.8 MB/s of the operator's share takes about two seconds.
+
+**Test.** `a_durable_write_that_never_completes_is_refused` points the write at a FIFO with no
+reader, which blocks in `open()` indefinitely -- a deterministic stand-in for the stalled share.
+Two wall-clock approaches were tried and rejected, and the rejection is recorded rather than
+quietly shipped:
+
+- `Duration::ZERO` does **not** win the race: the deadline is not yet due when the first poll
+  happens, and the write completes first (measured -- the test returned `Ok(())`).
+- tokio's paused clock does not help either, because the blocking write finishes in real time
+  before the runtime advances (measured -- also `Ok(())`).
+
+The FIFO test passes in 0.70 s, stable over four runs. **Discrimination:** removing the bound from
+`with_storage_bound` makes the test hang (killed at 30 s, exit 124); restoring it passes. Cleanup
+opens the FIFO read-write to release the cancelled blocking `open` -- cancelling the timed-out
+future does not cancel the blocking work behind it, so without that the runtime would wait for the
+thread on the way out.
+
+**Tests executed.** `cargo test -p oag-listend`: **83 unit + 82 end-to-end = 165**, all green (was
+82 + 82); **89 + 86 = 175** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 165 /
+165 / 175.
+
+**Commit identifiers.** `oag-listend` `ac19aed`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance). The startup load
+(`load_dir`) still uses blocking `std::fs` and so is not time-bounded; bounding it means running it
+on the blocking pool with a timeout, which is a larger change and is recorded here rather than
+quietly omitted.
+
+---
+
 ## 2026-11-21 — a panicking session releases its slot during the unwind
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
