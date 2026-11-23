@@ -6,6 +6,51 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the load's FIFO safety pinned, and a SPEC sentence corrected
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding 1: a documented safety property with no test behind the dangerous half.** SPEC said of
+the load: "Only regular files are read -- a FIFO or device named like a hash would block forever".
+The existing test (`a_non_regular_file_named_like_a_hash_is_skipped_not_read`) built a
+*directory*. A directory errors; a **FIFO blocks**. So the case that would actually hang startup
+was the one nothing checked, and the load uses blocking `std::fs`, so it would hang for real.
+
+Verified by hand first: a store directory containing a FIFO named `0` * 64, `--check` reports
+`loaded 0 skipped 1` and exits 0 -- the regularity check does hold. Then pinned:
+`a_fifo_named_like_a_hash_is_skipped_not_read`, which runs the load on a thread with a 10 s bound so
+that dropping the check *fails* rather than stalling the suite. Verified both ways: with
+`metadata.is_file()` removed the test fails with "a FIFO named like a hash hung the load" at ten
+seconds; restored it passes in 0.00 s.
+
+**Finding 2: a SPEC sentence that contradicted the code.** SPEC said, of the media-type bound, "The
+audio is never refused because of its metadata." That stopped being true when the footprint work
+landed: `accept` refuses an item whose audio *plus declared type* exceeds `--max-bytes`. Verified
+against the binary -- a 44-byte WAV carrying a maximal 4 KiB declared type against `--max-bytes 100`
+is answered:
+
+    413  item is 4140 bytes (audio plus its declared media type), larger than the 100 byte bound
+
+The sentence now separates the two cases: an oversized declared type is *dropped* rather than
+refusing the audio, but a kept one counts toward the bound, so an item can be refused because of its
+metadata and that is deliberate. README's startup-report list gains `timed out`, and its
+`--max-bytes` paragraph no longer implies only audio length is measured.
+
+**Tests executed.** `cargo test -p oag-listend`: **85 unit + 87 end-to-end = 172**, all green (was
+84 + 87); **91 + 91 = 182** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 172 /
+172 / 182.
+
+**Commit identifiers.** `oag-listend` `4057b62`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the mirror re-validated against a real node, and one claim pinned
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

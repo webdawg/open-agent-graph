@@ -455,6 +455,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The load's FIFO safety is pinned, and a SPEC sentence that contradicted the code is corrected.**
+  SPEC said only regular files are read, because "a FIFO or device named like a hash would block
+  forever" -- but the test covered a *directory*, not the case that would actually hang. A FIFO test
+  now runs the load on a thread with a bound, so dropping the regularity check fails in ten seconds
+  rather than stalling the suite (verified both ways). Separately, SPEC claimed "the audio is never
+  refused because of its metadata", which stopped being true when the footprint work landed: a
+  44-byte WAV with a 4 KiB type is answered 413 against a 100-byte bound. `oag-listend` 85 unit +
+  87 end-to-end (was 84 + 87).
 - **The IPFS mirror re-validated against a real Kubo node, and one documented property pinned.**
   The startup pass moved since the last real-node run, so it was re-checked against Kubo 0.43.1
   (built offline from the module cache): a four-item store mirrors all four while the daemon answers
@@ -718,7 +726,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   84 unit + 87 end-to-end tests, 0 failed; 181 with the opt-in Reticulum carrier.
+   85 unit + 87 end-to-end tests, 0 failed; 182 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
