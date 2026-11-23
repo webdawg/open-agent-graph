@@ -6,6 +6,48 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — UDP no longer head-of-line-blocks
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** UDP handled a datagram inline in its accept loop. Every other carrier isolates: TCP,
+HTTP and the Unix socket spawn one task per connection, Reticulum one worker per link. So UDP was
+the one carrier with head-of-line blocking -- a single slow request held the whole loop.
+
+Measured with the release binary, a store holding one item, and a node that accepts every add and
+never answers: a UDP publish whose mirror hung, then another peer's liveness probe 0.3 s later,
+
+    the other UDP request was answered after 9.70 s
+
+which is the add timeout, not the work.
+
+**Change.** Each datagram is handled in its own task under a semaphore at the same 64 cap the other
+carriers use, so a flood applies backpressure instead of spawning without bound. In-flight datagrams
+are counted with the same `ActiveGuard` as the other carriers' sessions, and `main`'s shutdown drain
+waits for them.
+
+**Measured after.** Same store, same hung node: **0.000 s**.
+
+**Test.** `a_hung_mirror_does_not_stall_other_udp_clients` binds the carrier against a node that
+never answers, publishes into the hang, then asserts another peer's Hello is answered inside 5 s --
+generous against the 10 s add bound. Verified to fail with inline handling restored (the probe
+timed out at 5 s) and to pass with the tasks.
+
+**Tests executed.** `cargo test -p oag-listend`: **83 unit + 85 end-to-end = 168**, all green (was
+83 + 84); **89 + 89 = 178** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 168 /
+168 / 178.
+
+**Commit identifiers.** `oag-listend` `401583a`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the startup load
+still using blocking `std::fs` with no time bound.
+
+---
+
 ## 2026-11-21 — the startup IPFS mirror pass no longer delays serving
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
