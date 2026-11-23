@@ -6,6 +6,51 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the client proves the acknowledgement of each publish
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** `push_pull` printed the hash the daemon acknowledged a publish with, then used it for
+the fetch that follows:
+
+    println!("published {label}: {} ({} bytes)", &hash[..16], bytes.len());
+
+A daemon that answered with a hash that is not the BLAKE3 of the bytes it was sent would have been
+printed as though it were fine, and the mismatch would only have surfaced later -- if the fetch
+happened to miss. The acceptance sentence is "both sides can prove the bytes are the bytes they
+claim"; the client was proving only the fetch side.
+
+**Change.** After the publish, the client verifies the acknowledgement against the bytes it sent
+and refuses, naming the hash and the byte count, before any fetch. The normal path is unchanged --
+verified by running it against a real daemon.
+
+**Test.** `the_client_refuses_an_acknowledgement_that_does_not_match` stands up a daemon that
+answers the Hello and Ping correctly (the Ping with a real, self-consistent audio item) and
+acknowledges the publish with `"0" * 64`, then asserts the client exits non-zero with "not the
+BLAKE3" in the message. Verified to fail with the check removed and to pass restored.
+
+**Also recorded, not changed.** SPEC implied the Unix socket's permissions "decide who may connect"
+without saying what they are. Measured: the mode is `0755` under the default umask `022`, and
+connecting needs *write* permission, so only the daemon's own user can connect -- which matters
+because the shipped unit runs as `oag`. The daemon deliberately does not override the umask (that
+is a security decision, not a default to pick unilaterally); SPEC now states the fact and points at
+`UMask=` in the unit.
+
+**Tests executed.** `cargo test -p oag-listend`: **84 unit + 87 end-to-end = 171**, all green (was
+84 + 86); **90 + 91 = 181** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 171 /
+171 / 181.
+
+**Commit identifiers.** `oag-listend` `e03b532`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the client refuses a daemon on another frame protocol version
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

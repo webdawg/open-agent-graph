@@ -455,6 +455,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The client proves the acknowledgement of each publish.** It printed the hash the daemon
+  acknowledged with and trusted it for the fetch that follows; a daemon answering with a hash that
+  is not the BLAKE3 of the bytes it was sent would have been printed as fine. It now verifies the
+  acknowledgement against the bytes it sent and refuses, naming both, before any fetch -- the
+  acceptance sentence says both sides prove the bytes, and the client was proving only one side.
+  `oag-listend` 84 unit + 87 end-to-end (was 84 + 86).
 - **The client refuses a daemon on another frame protocol version.** `push_pull` printed the
   daemon's Hello, version included, and went ahead regardless; a daemon on a different protocol
   answers in a shape the client does not understand. It now refuses, naming both versions, before
@@ -705,7 +711,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   84 unit + 86 end-to-end tests, 0 failed; 180 with the opt-in Reticulum carrier.
+   84 unit + 87 end-to-end tests, 0 failed; 181 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
