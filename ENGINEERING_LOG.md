@@ -6,6 +6,39 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — carrier counts in the docs say what is true
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** Two counts in the docs were wrong as written.
+
+- SPEC: "IPv6: all four carriers serve over `[::1]`". Three of them are network carriers -- native
+  TCP, HTTP, UDP. The fourth, the Unix socket, has no address at all.
+- The crate's own front page: "The daemon is live on four carriers", listing only the sockets, while
+  the IPFS mirror and Reticulum are also ways in -- README and SPEC both say six.
+
+**Checked before rewriting, not assumed.** With all three network carriers bound to `[::1]` and the
+current release binary: `push_pull` publishes, fetches and verifies over native TCP and UDP, and
+`GET /` and `GET /audio/{hash}` answer 200 over HTTP. The stream and HTTP tests already connect to
+the literal `[::1]` address rather than the one the carrier reported; UDP has its own.
+
+**Change.** SPEC names the three network carriers and says why the socket is not one. The crate doc
+lists all six ways in and says which four bind an address. "All four carriers bind around one shared
+store" (SPEC) and "All four carriers share one store" (README) become "every carrier", which is what
+the code does -- including the IPFS read path and Reticulum.
+
+**Tests executed.** No test changes; 87 unit + 87 end-to-end = 174, all green; 93 + 91 = 184 with
+`--features reticulum`. `./scripts/check.sh`, `--release`, `--features reticulum`: all green.
+
+**Commit identifiers.** `oag-listend` `9af8208`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the two total session bounds are pinned
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

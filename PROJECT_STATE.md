@@ -455,6 +455,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **Carrier counts in the docs say what is true.** SPEC claimed "all four carriers serve over
+  `[::1]`" -- three of them are network carriers (native TCP, HTTP, UDP) and the fourth, the Unix
+  socket, has no address -- and the crate's front page said "four carriers" while omitting the IPFS
+  mirror and Reticulum. Checked first, then rewritten: all three network carriers verified over
+  `[::1]` with `push_pull` and `curl`, the crate doc now lists all six ways in, and "all four
+  carriers bind around one shared store" is now "every carrier", which is what the code does.
 - **The two total session bounds are pinned.** `SESSION_TIMEOUT` (TCP, Unix) and `REQUEST_TIMEOUT`
   (HTTP) are 30-minute totals meant to stop a client that dribbles bytes from holding one of the 64
   slots, and neither had any evidence behind it -- only the per-read and per-write timeouts did, and
