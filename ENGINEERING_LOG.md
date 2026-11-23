@@ -6,6 +6,56 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — README's headline command works, and an unusable --dir says why
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** The first command README tells an operator to run was:
+
+    cargo run -p oag-listend -- --listen 127.0.0.1:7100 --http 127.0.0.1:7101 --udp 127.0.0.1:7120 \
+        --unix /tmp/oag-listend.sock --dir /var/lib/oag-listend --seed 20261112
+
+A bare `cargo run` as an ordinary user cannot write `/var/lib`. Verified against the release binary:
+
+    oag-listend: cannot open store /var/lib/oag-listend: Permission denied (os error 13)
+
+The SPEC already warned that a bare `cargo run` should use a socket path it can create, but said
+nothing about the store path, and README repeated the unusable one. The documented first command
+failed.
+
+**Change.** README and SPEC now use `/tmp/oag-listend-store` and both say why: the systemd unit uses
+`/var/lib/oag-listend` and `/run/oag-listend/audio.sock`, which its `StateDirectory=` and
+`RuntimeDirectory=` create for the `oag` user.
+
+The refusal also names the requirement instead of only the errno, which on its own reads like a
+broken binary:
+
+    oag-listend: cannot open store /var/lib/oag-listend: Permission denied (os error 13); the daemon
+    must be able to create and write --dir
+
+**Test.** `an_unusable_store_is_refused_with_the_reason` starts the real binary with `--dir` pointed
+under a regular file (portable, no permission games) and asserts the refusal both names the store and
+states the requirement. Verified to fail against the old one-line message and to pass with it.
+
+**Recorded, not smoothed over.** `--check` on a missing directory reports `No such file or directory`
+rather than `Permission denied`, because a check deliberately does not create the directory it is
+checking. The SPEC sentence about the refusal is about the startup path, which does create it.
+
+**Tests executed.** `cargo test -p oag-listend`: **83 unit + 83 end-to-end = 166**, all green (was
+83 + 82); **89 + 87 = 176** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 166 /
+166 / 176.
+
+**Commit identifiers.** `oag-listend` `b984c81`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the startup load
+still using blocking `std::fs` with no time bound (recorded in the previous entry).
+
+---
+
 ## 2026-11-21 — the accept path's filesystem operations are bounded
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
