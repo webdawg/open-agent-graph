@@ -6,6 +6,54 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the two total session bounds are pinned
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** Two bounds had no evidence behind them. `SESSION_TIMEOUT` (TCP and Unix, 30 minutes) and
+`REQUEST_TIMEOUT` (HTTP, 30 minutes) exist to stop a client that dribbles bytes from holding one of
+the 64 session slots open indefinitely. No test touched either: the only bounds with evidence were the
+per-read and per-write timeouts, which fire long before the total could matter. A 30-minute constant
+nobody has seen fire is a claim, not a bound.
+
+**Change.** Both totals are now parameters of the function that applies them, exactly like the other
+session limits already were:
+
+- `serve_session(stream, store, read_timeout, write_timeout, max_frame, session_timeout)` -- the
+  carriers pass their own constants.
+- `serve_connection(stream, store, request_timeout)` -- HTTP passes `REQUEST_TIMEOUT`.
+
+The HTTP path is generic over its stream now (`S: AsyncRead + AsyncWrite + Unpin`), the way
+`serve_session` always was, so the bound can be driven without a live socket; http.rs has a test
+module for the first time.
+
+**Tests.** Each new test drives its bound short against a deliberately *longer* per-read bound and
+asserts the short one is what ended it:
+
+- `a_client_that_says_nothing_is_cut_off_at_the_session_bound` -- 50 ms session bound, 8 s read
+  bound, asserts the elapsed time is under 5 s.
+- `a_client_that_says_nothing_is_cut_off_at_the_request_bound` -- 50 ms request bound against HTTP's
+  10 s IO timeout, same assertion.
+
+**Discrimination, measured.** With each parameter ignored (the function reverting to its constant),
+the session test takes **8.00 s** and the request test **10.00 s**, and both fail the elapsed
+assertion. Restored, both finish immediately.
+
+**Tests executed.** `cargo test -p oag-listend`: **87 unit + 87 end-to-end = 174**, all green (was
+85 + 87); **93 + 91 = 184** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 174 /
+174 / 184.
+
+**Commit identifiers.** `oag-listend` `d96e3f5`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the load's FIFO safety pinned, and a SPEC sentence corrected
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

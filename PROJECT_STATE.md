@@ -455,6 +455,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The two total session bounds are pinned.** `SESSION_TIMEOUT` (TCP, Unix) and `REQUEST_TIMEOUT`
+  (HTTP) are 30-minute totals meant to stop a client that dribbles bytes from holding one of the 64
+  slots, and neither had any evidence behind it -- only the per-read and per-write timeouts did, and
+  those fire long before. Both are now parameters of the function that applies them, and each new
+  test drives one short against a deliberately longer per-read bound and asserts the short one won:
+  ignored, they take 8.0 s and 10.0 s. The HTTP path is generic over its stream now, like
+  `serve_session`. `oag-listend` 87 unit + 87 end-to-end (was 85 + 87).
 - **The load's FIFO safety is pinned, and a SPEC sentence that contradicted the code is corrected.**
   SPEC said only regular files are read, because "a FIFO or device named like a hash would block
   forever" -- but the test covered a *directory*, not the case that would actually hang. A FIFO test
@@ -726,7 +733,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   85 unit + 87 end-to-end tests, 0 failed; 182 with the opt-in Reticulum carrier.
+   87 unit + 87 end-to-end tests, 0 failed; 184 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
