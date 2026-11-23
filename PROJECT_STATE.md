@@ -455,6 +455,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The IPFS mirror re-validated against a real Kubo node, and one documented property pinned.**
+  The startup pass moved since the last real-node run, so it was re-checked against Kubo 0.43.1
+  (built offline from the module cache): a four-item store mirrors all four while the daemon answers
+  in 13 ms, every item is pinned and `ipfs cat` returns it byte-identically, `GET /ipfs/{cid}` serves
+  each byte-identically, an object added straight to the node is fetched and served byte-identically,
+  a restart reports `offered 0 of 5`, SIGTERM exits 0. SPEC said fetching by CID stores nothing and
+  nothing checked it; that is now pinned by a test, which fails if the read half stores.
 - **The client proves the acknowledgement of each publish.** It printed the hash the daemon
   acknowledged with and trusted it for the fetch that follows; a daemon answering with a hash that
   is not the BLAKE3 of the bytes it was sent would have been printed as fine. It now verifies the

@@ -6,6 +6,50 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the mirror re-validated against a real node, and one claim pinned
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Why.** The mirror's startup pass moved since the last real-node validation (it now runs after the
+carriers serve instead of before they bind), and the change was verified only against stubs. The
+standing rule is to validate against the real system, not the stand-in -- that is what found the
+chunked-reply bug.
+
+Kubo 0.43.1 was built offline from the machine's Go module cache (`go build ./cmd/ipfs` in a copy
+of `github.com/ipfs/kubo@v0.43.1`), so no network was needed.
+
+**Measured, with a four-item store and `--ipfs-api`:**
+
+- the daemon answers in **13 ms** while the pass mirrors all four (`offered 4 of 4`);
+- every item is pinned by the node (`ipfs pin ls` finds each CID) and `ipfs cat` returns it
+  **byte-identically**;
+- `GET /ipfs/{cid}` serves each byte-identically with `X-Content-Hash`, `Content-Type: audio/wav`
+  and immutable caching;
+- an object added straight to the node and not held locally is fetched and served byte-identically;
+- a restart reports **`offered 0 of 5`**, with the node's object count unchanged;
+- SIGTERM exits 0.
+
+**The finding.** One documented property had no test behind it. SPEC says of `GET /ipfs/{cid}`:
+"Nothing is stored -- this is a way to reach audio, not a new inbound channel." Nothing checked it.
+Verified by hand first (fetching a CID the daemon did not hold left the store at zero files), then
+pinned: `the_daemon_serves_audio_fetched_by_cid` now asserts the store is still empty afterwards.
+Verified to fail when the read half is made to publish what it fetches.
+
+**Tests executed.** `cargo test -p oag-listend`: 84 unit + 87 end-to-end = 171, all green; 90 + 91 =
+181 with `--features reticulum`. Counts unchanged -- the assertion was added to an existing test.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 171 /
+171 / 181.
+
+**Commit identifiers.** `oag-listend` `6fc7579`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the client proves the acknowledgement of each publish
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
