@@ -6,6 +6,46 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the directory load has a wall-clock bound, and reports it
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** The directory load was the last storage path without a bound. It is bounded in *work*
+-- `MAX_LOAD_ENTRIES` entries, each read at most the item bound -- but not in *time*, so a large
+directory on a slow share could take as long as it takes and the operator had nothing to go on.
+
+**Change.** `LOAD_DEADLINE` (5 min), checked between entries. Reaching it stops the load and sets a
+new `LoadReport::timed_out`, which the startup line and `--check` both print. Verified against the
+binary with the deadline forced to nothing:
+
+    store /tmp/lo: loaded 0 skipped 0 evicted 0 -- timed out (the load deadline elapsed with entries unread)
+    store ok: 0 items, 0 bytes (bound 1073741824, item bound 16776960)
+
+**Stated precisely, not oversold.** The deadline cannot interrupt a single read that is already
+blocked in the kernel; bounding that needs asynchronous I/O, which the load does not use. Both the
+constant's doc and SPEC say so. This closes the item recorded in the two previous entries rather
+than quietly dropping it.
+
+**Test.** `a_load_that_cannot_meet_its_deadline_reports_it` -- a four-item directory under a budget
+that has already elapsed (nothing read, `timed_out` set) and then under the real budget (all four
+load).
+
+**Tests executed.** `cargo test -p oag-listend`: **84 unit + 85 end-to-end = 169**, all green (was
+83 + 85); **90 + 89 = 179** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 169 /
+169 / 179.
+
+**Commit identifiers.** `oag-listend` `f6882fa`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance). The load's
+per-syscall bound remains the one thing a wall-clock deadline cannot provide, and it is recorded
+as such.
+
+---
+
 ## 2026-11-21 — UDP no longer head-of-line-blocks
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

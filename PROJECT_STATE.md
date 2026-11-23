@@ -455,6 +455,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **The directory load has a wall-clock bound, and reports it.** The load was bounded in work
+  (`MAX_LOAD_ENTRIES` entries, each at most the item bound) but not in time, so a big directory on a
+  slow share could look like a hang. `LOAD_DEADLINE` (5 min) is checked between entries and sets a
+  new `LoadReport::timed_out`, printed by both the startup line and `--check`. Stated precisely, not
+  oversold: it cannot interrupt a single read already blocked in the kernel. `oag-listend` 84 unit +
+  85 end-to-end (was 83 + 85).
 - **UDP no longer head-of-line-blocks.** It was the one carrier handling a request inline in its
   accept loop, so a publish whose mirror hung held the whole loop and every other peer's datagram
   waited out the add timeout -- measured at **9.70 s**. TCP, HTTP and Unix already isolate per
@@ -695,7 +701,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   83 unit + 85 end-to-end tests, 0 failed; 178 with the opt-in Reticulum carrier.
+   84 unit + 85 end-to-end tests, 0 failed; 179 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
