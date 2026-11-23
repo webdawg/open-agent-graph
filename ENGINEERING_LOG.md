@@ -6,6 +6,51 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — a panicking session releases its slot during the unwind
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** Every carrier counted its sessions like this:
+
+    active.fetch_add(1, Ordering::SeqCst);
+    let _ = serve_session(...).await;
+    active.fetch_sub(1, Ordering::SeqCst);
+
+A panic unwinds past the `fetch_sub`, so the counter stays permanently raised. `main`'s shutdown
+drains on those counters, so every later stop waits the whole `SHUTDOWN_GRACE` for a session that no
+longer exists. The previous two entries found a reachable panic in the IPFS chunked decoder, so
+this is not theoretical: a hostile node could make every subsequent `systemctl stop` take the full
+grace period.
+
+**Measurement.** With a deliberately panicking `decode_chunked`, a stub node answering every add,
+and a publish over HTTP, then SIGTERM:
+
+- hand-written decrement in `http.rs`: **2.02 s** (the full grace period);
+- drop guard: **0.003 s**.
+
+Same binary, same stub, same publish; only the counter discipline differs.
+
+**Change.** `server::ActiveGuard` raises the counter when created and lowers it in `Drop`, so the
+unwind releases the slot. All four carriers (TCP, HTTP, Unix, Reticulum) use it, and no hand-written
+decrement remains -- `grep fetch_sub` now finds only the guard's own `Drop`.
+
+**Tests executed.** `cargo test -p oag-listend`: **82 unit + 82 end-to-end = 164**, all green (was
+81 + 82); **88 + 86 = 174** with `--features reticulum`.
+
+- `a_panicking_session_still_releases_its_slot` -- `catch_unwind` around a guard-holding panic,
+  asserting the counter returns to zero.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 164 /
+164 / 174.
+
+**Commit identifiers.** `oag-listend` `4849c54`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed) and Reticulum interop (needs a real transport instance).
+
+---
+
 ## 2026-11-21 — correction: how far the chunked-decoder panic actually reaches
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

@@ -455,6 +455,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **A panicking session releases its slot during the unwind.** All four carriers counted sessions
+  with a hand-written `fetch_sub` after the awaited session, which a panic skips -- the counter stays
+  raised and every later shutdown waits the whole `SHUTDOWN_GRACE` for a session that no longer
+  exists. Measured with a deliberately panicking decoder and a hostile stub node: publishing over
+  HTTP then SIGTERM took **2.02 s** with the hand-written decrement and **0.003 s** with a drop
+  guard. `server::ActiveGuard` raises on creation and lowers in `Drop`; all four carriers use it.
+  `oag-listend` 82 unit + 82 end-to-end (was 81 + 82).
 - **A network-reachable panic in the IPFS chunked-reply decoder.** `decode_chunked` bounds-checked
   with `pos + size` and `out.len() + size`; a chunk size near `usize::MAX` wraps both sums to small
   numbers, so both checks pass and the slice panics (debug: "attempt to add with overflow"; release:
@@ -661,7 +668,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   81 unit + 82 end-to-end tests, 0 failed; 173 with the opt-in Reticulum carrier.
+   82 unit + 82 end-to-end tests, 0 failed; 174 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
