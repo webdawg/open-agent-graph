@@ -6,6 +6,40 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the client refuses a daemon on another frame protocol version
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** `push_pull` printed the daemon's Hello -- `daemon: Hello { name, protocol_version,
+item_count }` -- and then went ahead regardless of what it said. A daemon speaking a different frame
+protocol answers in a shape this client does not understand, so the ping, both publishes and both
+fetches would all be guesses. The client already refuses an oversized frame declaration; it did not
+refuse a version it cannot speak.
+
+**Change.** After the Hello, the client compares `protocol_version` with its own
+(`oag_listend::protocol::PROTOCOL_VERSION`) and returns an error naming both before any publish or
+fetch. `main` prints it and exits 1, the same path as any other runtime failure.
+
+**Test.** `the_client_refuses_a_daemon_on_another_protocol_version` stands up a daemon that answers
+the Hello with protocol version 999 -- built with the crate's own `encode_response`, so it is a
+well-formed reply -- and asserts the client exits non-zero with "frame protocol 999" in the message.
+Verified to fail with the check removed and to pass restored.
+
+**Tests executed.** `cargo test -p oag-listend`: **84 unit + 86 end-to-end = 170**, all green (was
+84 + 85); **90 + 90 = 180** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 170 /
+170 / 180.
+
+**Commit identifiers.** `oag-listend` `3dd810d`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the directory load has a wall-clock bound, and reports it
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
