@@ -6,6 +6,44 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the "removed out of band" property is pinned in both halves
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** SPEC says: "If a file is removed out of band, a republish of the same bytes restores
+it, so an item cannot silently become one that the next start will lose." The test for it asserted
+the restore but never the premise -- and its own comment claimed the premise without checking it:
+"The same bytes again: the in-memory item is still served, and the durable copy is restored".
+Nothing verified that the held item was servable while its file was gone, and nothing pinned the
+contrast that gives the restore its meaning.
+
+**Change.** Two assertions:
+
+- `a_republish_restores_a_file_deleted_out_of_band` now checks the item is still served after
+  `remove_file`, before the republish.
+- `a_restart_without_the_file_loses_the_item` pins the other side: the same directory reopened with
+  the file gone reports `loaded 0` and no longer serves the hash. Without that, the restore would be
+  restoring something that was never lost.
+
+Both pass; the pair states what the restore is for. Verified by hand against the binary as well: a
+deleted store directory does not make a held item unservable (the bytes are in memory), while the
+next publish recreates the directory.
+
+**Tests executed.** `cargo test -p oag-listend`: **88 unit + 87 end-to-end = 175**, all green (was
+87 + 87); **94 + 91 = 185** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 175 /
+175 / 185.
+
+**Commit identifiers.** `oag-listend` `c227182`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — README's hand-claims re-verified, and one made robust
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

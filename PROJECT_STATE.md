@@ -461,6 +461,11 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   the posted WAV byte-identically. One claim stated a count ("loaded 5 items") that belonged to the
   run it was written in -- re-running the same steps with extra publishes gives a different number,
   so it would have drifted like the carrier counts did. It now states the property.
+- **The "removed out of band" property is pinned in both halves.** SPEC says a republish restores
+  a file deleted behind the daemon's back; the test asserted the restore but never the premise, and
+  its comment claimed the other half -- that the held item is still served while its file is gone.
+  Both are now asserted, plus the contrast: reopened without the file, the item is gone. `oag-listend`
+  88 unit + 87 end-to-end (was 87 + 87).
 - **Carrier counts in the docs say what is true.** SPEC claimed "all four carriers serve over
   `[::1]`" -- three of them are network carriers (native TCP, HTTP, UDP) and the fourth, the Unix
   socket, has no address -- and the crate's front page said "four carriers" while omitting the IPFS
@@ -745,7 +750,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   87 unit + 87 end-to-end tests, 0 failed; 184 with the opt-in Reticulum carrier.
+   88 unit + 87 end-to-end tests, 0 failed; 185 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API
