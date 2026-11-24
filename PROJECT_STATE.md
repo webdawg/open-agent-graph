@@ -461,6 +461,13 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   the posted WAV byte-identically. One claim stated a count ("loaded 5 items") that belonged to the
   run it was written in -- re-running the same steps with extra publishes gives a different number,
   so it would have drifted like the carrier counts did. It now states the property.
+- **The daemon says at boot when the store cannot be written.** With `--no-generate` on a store it
+  may not write, it booted looking healthy and only failed at the first publish. A `--dir` start
+  now probes that it can create a file there -- rather than trusting the mode bits, since a
+  read-only mount and an ACL both look writable -- and prints `note: store X is not writable;
+  every publish will be refused`. It is a note, not a refusal to start: a read-only store can still
+  serve what it holds. `--check` does not probe. Also corrects SPEC's drain claim: the drain is
+  hygiene, not a fix whose effect was observed.
 - **The "removed out of band" property is pinned in both halves.** SPEC says a republish restores
   a file deleted behind the daemon's back; the test asserted the restore but never the premise, and
   its comment claimed the other half -- that the held item is still served while its file is gone.
@@ -750,7 +757,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   88 unit + 87 end-to-end tests, 0 failed; 185 with the opt-in Reticulum carrier.
+   89 unit + 87 end-to-end tests, 0 failed; 186 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

@@ -6,6 +6,55 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the daemon says at boot when the store cannot be written
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** With `--no-generate` on a store this process may not write, the daemon booted looking
+healthy and said nothing; the failure surfaced at the first publish:
+
+    store /tmp/ro2: loaded 0 skipped 0 evicted 0
+    ...
+    could not persist the audio: Permission denied (os error 13)
+
+Generation reports the same cause through the generated sounds, but `--no-generate` is exactly the
+configuration that hides it. An operator who starts the daemon and walks away has one that accepts
+nothing and says nothing.
+
+**Change.** A `--dir` start now probes that it can create a file there and says so:
+
+    note: store /tmp/ro2 is not writable; every publish will be refused
+
+It is a probe rather than a reading of the mode bits, because a read-only mount and an ACL both look
+writable. It is a note, not a refusal to start: a read-only store can still serve what it holds.
+`--check` does not probe -- it is read-only by design.
+
+**Test.** `writability_is_probed_not_inferred_from_mode_bits`. The negative case is a path whose
+parent is a regular file, which no user can write through; a mode-bits test would be silently
+bypassed by root, and CI does not always run as one user.
+
+**Correction carried into the same commit.** SPEC credited the post-refusal drain with keeping a
+refusal from being lost to a TCP reset. That was not demonstrated: with the drain removed, a client
+that declares `Content-Length: 4`, sends 40 bytes and waits 1.5 s before reading still receives the
+refusal, because Linux delivers data the socket already holds through a reset. SPEC now says the
+drain is hygiene -- leaving data in a socket is what turns closing it into a reset -- and is not
+credited with an effect that was not observed. The drain stays.
+
+**Tests executed.** `cargo test -p oag-listend`: **89 unit + 87 end-to-end = 176**, all green (was
+88 + 87); **95 + 91 = 186** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 176 /
+176 / 186.
+
+**Commit identifiers.** `oag-listend` `fc601a4`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the "removed out of band" property is pinned in both halves
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
