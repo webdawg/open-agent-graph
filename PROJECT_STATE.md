@@ -461,6 +461,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   the posted WAV byte-identically. One claim stated a count ("loaded 5 items") that belonged to the
   run it was written in -- re-running the same steps with extra publishes gives a different number,
   so it would have drifted like the carrier counts did. It now states the property.
+- **The churn property is pinned, and it was measured against the running binary first.**
+  Nothing said what happens to a store that runs indefinitely. With the release binary, 98,363
+  publish-and-fetch cycles through HTTP and the native carrier under a 200,000-byte bound: zero
+  mismatched fetches, RSS flat at 5,804 kB across all 82 seconds, 234 files on disk where the bound
+  allows about 237. `a_long_churn_holds_the_bound_and_serves_what_was_published` pins it. Two of my
+  earlier attempts at this test were wrong -- one compared a fetch frame against the bare audio,
+  forgetting both the frame prefix and the reply's own header; the other declared two more bytes than
+  the body so every request hung. `oag-listend` 90 unit + 87 end-to-end (was 89 + 87).
 - **The daemon says at boot when the store cannot be written.** With `--no-generate` on a store it
   may not write, it booted looking healthy and only failed at the first publish. A `--dir` start
   now probes that it can create a file there -- rather than trusting the mode bits, since a
@@ -757,7 +765,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   89 unit + 87 end-to-end tests, 0 failed; 186 with the opt-in Reticulum carrier.
+   90 unit + 87 end-to-end tests, 0 failed; 187 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

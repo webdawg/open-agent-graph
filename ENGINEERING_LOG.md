@@ -6,6 +6,46 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the churn property is pinned, measured against the running binary first
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Why.** Nothing anywhere said what happens to a store built to run indefinitely. Every bound had
+been checked once, statically; none had been watched over a long run with eviction firing on nearly
+every write.
+
+**Measured, release binary, loopback, `--max-bytes 200000` so almost every publish evicts:**
+
+- **98,363 publish-and-fetch cycles**, each posting a distinct 844-byte WAV to HTTP and fetching it
+  back over the native frame protocol;
+- **zero mismatched fetches** -- every reply's declared byte range compared equal to the bytes sent;
+- **RSS flat at 5,804 kB** from the first sample to the last, across 82 seconds;
+- **234 files on disk** against a bound that allows about 237 (200,000 / 844).
+
+**Pinned.** `a_long_churn_holds_the_bound_and_serves_what_was_published`: 5,000 distinct items, each
+served back byte for byte, `bytes_held()` within the bound, and the directory within the bound
+divided by the smallest fixture (844 bytes). Verified both ways: with eviction's unlink removed the
+test fails reporting 5000 files; restored, it passes in under two seconds.
+
+**Two earlier versions of this test were wrong, and the mistakes are worth recording.** The first
+compared the whole fetch *frame* against the bare audio, forgetting both the 4-byte frame prefix and
+the reply's own header (op + hash length + hash + byte length). The second declared a frame length
+two bytes longer than the body it sent, so every request hung until the read timeout. The assertion
+now slices the reply's declared byte range. A third attempt reported "bad fetches" for every cycle for
+the same reason as the first.
+
+**Tests executed.** `cargo test -p oag-listend`: **90 unit + 87 end-to-end = 177**, all green (was
+89 + 87); **96 + 91 = 187** with `--features reticulum`. `./scripts/check.sh`: green.
+
+**Commit identifiers.** `oag-listend` `646860d`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the daemon says at boot when the store cannot be written
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
