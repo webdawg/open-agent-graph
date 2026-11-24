@@ -461,14 +461,19 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   the posted WAV byte-identically. One claim stated a count ("loaded 5 items") that belonged to the
   run it was written in -- re-running the same steps with extra publishes gives a different number,
   so it would have drifted like the carrier counts did. It now states the property.
-- **The churn property is pinned, and it was measured against the running binary first.**
-  Nothing said what happens to a store that runs indefinitely. With the release binary, 98,363
-  publish-and-fetch cycles through HTTP and the native carrier under a 200,000-byte bound: zero
-  mismatched fetches, RSS flat at 5,804 kB across all 82 seconds, 234 files on disk where the bound
-  allows about 237. `a_long_churn_holds_the_bound_and_serves_what_was_published` pins it. Two of my
-  earlier attempts at this test were wrong -- one compared a fetch frame against the bare audio,
-  forgetting both the frame prefix and the reply's own header; the other declared two more bytes than
-  the body so every request hung. `oag-listend` 90 unit + 87 end-to-end (was 89 + 87).
+- **Stability under load, measured two ways.** Nothing said what happens to a store that runs
+  indefinitely, so the running binary was measured first: 98,363 publish-and-fetch cycles, zero mismatched fetches, RSS flat at 5,804 kB
+  for 82 seconds, 234 files on disk against a 200,000-byte bound. Then 41,608 complete `push_pull`
+  runs -- hello, a verified musical ping, two publishes, two verified fetches, a refused body --
+  driven concurrently over TCP, UDP and Unix, zero failures. `oag-listend` 90 unit + 87 end-to-end
+  (was 89 + 87).
+- **The churn test itself.** Nothing said what happens to a store that runs indefinitely.
+  `a_long_churn_holds_the_bound_and_serves_what_was_published` pins it: 5,000 distinct items, each
+  served back exactly as published, the byte bound held, and the directory held to the bound divided
+  by the smallest fixture. Two of my earlier attempts at this test were wrong -- one compared a
+  fetch frame against the bare audio, forgetting both the frame prefix and the reply's own header;
+  the other declared two more bytes than the body so every request hung. A third reported "bad
+  fetches" for every cycle for the same reason as the first.
 - **The daemon says at boot when the store cannot be written.** With `--no-generate` on a store it
   may not write, it booted looking healthy and only failed at the first publish. A `--dir` start
   now probes that it can create a file there -- rather than trusting the mode bits, since a
