@@ -6,6 +6,44 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — CI proves the restart, not just the start
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** The `check-service` job installs the shipped unit, starts it, fetches `/ping` and `/`,
+and runs `push_pull` over TCP and UDP. Every one of those is about *starting*. None of them says
+anything about the claim the daemon makes about itself -- that it survives a restart -- and a unit
+restarted in place is an operator's normal path (`systemctl restart`).
+
+**Change.** A new step captures a hash from the running unit, stops it, starts it again, fetches the
+same hash and compares:
+
+    curl -fsS -o /tmp/oag-hashes.txt http://127.0.0.1:7101/audio
+    hash=$(head -1 /tmp/oag-hashes.txt)
+    curl -fsS -o /tmp/oag-before-restart.wav "http://127.0.0.1:7101/audio/$hash"
+    sudo systemctl disable --now oag-listend
+    sudo systemctl enable --now oag-listend
+    # wait on /ping, then
+    cmp /tmp/oag-before-restart.wav /tmp/oag-after-restart.wav
+
+The readiness loop waits on `/ping` rather than sleeping, so a slow start fails instead of racing.
+
+**Verified locally first**, against a real user-level systemd unit with a persistent store: publish,
+fetch before, stop, start, fetch after, `cmp` clean, and the listing still has the item. The exact
+commands the CI step runs were exercised as written.
+
+**Tests executed.** No library change; 90 unit + 87 end-to-end = 177, all green; 96 + 91 = 187 with
+`--features reticulum`. `./scripts/check.sh`, `--release`, `--features reticulum`: all green.
+
+**Commit identifiers.** `oag-listend` `e40541a`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the churn property is pinned, measured against the running binary first
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
