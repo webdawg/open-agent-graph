@@ -6,6 +6,31 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the release gate re-checked on a busy machine
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+The pruner race was a *load*-dependent flake: it needed a port to be taken between the reserve
+and the bind, so it only showed up when something else was running. An isolated repeat of the gate
+would not have found it the first time, so after the fix the check that matters is the one that
+reproduces those conditions.
+
+Measured: three rounds of a full debug `cargo test -p oag-listend` immediately followed by
+`./scripts/check.sh --release`, with the fingerprint directories cleared before each half:
+
+    round 1: debug exit=0  release exit=0  tests=180
+    round 2: debug exit=0  release exit=0  tests=180
+    round 3: debug exit=0  release exit=0  tests=180
+
+Before the fix the same shape of run failed intermittently (the original signature was
+`failed to write .../invoked.timestamp`). The earlier "6/6" in this log was an isolated repeat; this
+is the measurement that reproduces the condition.
+
+No code change accompanies this entry; it is evidence for the previous two.
+
+---
+
+
 ## 2026-11-21 — two documented behaviours pinned, and the reset that hid one
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
@@ -112,30 +137,6 @@ makes it fail, restoring passes.
 **Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
 escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
 per-syscall bound, which a wall-clock deadline cannot provide.
-
----
-
-## 2026-11-21 — the release gate re-checked on a busy machine
-
-**Invocation.** The standing perpetual directive. `oag-listend`.
-
-The pruner race was a *load*-dependent flake: it needed a port to be taken between the reserve
-and the bind, so it only showed up when something else was running. An isolated repeat of the gate
-would not have found it the first time, so after the fix the check that matters is the one that
-reproduces those conditions.
-
-Measured: three rounds of a full debug `cargo test -p oag-listend` immediately followed by
-`./scripts/check.sh --release`, with the fingerprint directories cleared before each half:
-
-    round 1: debug exit=0  release exit=0  tests=180
-    round 2: debug exit=0  release exit=0  tests=180
-    round 3: debug exit=0  release exit=0  tests=180
-
-Before the fix the same shape of run failed intermittently (the original signature was
-`failed to write .../invoked.timestamp`). The earlier "6/6" in this log was an isolated repeat; this
-is the measurement that reproduces the condition.
-
-No code change accompanies this entry; it is evidence for the previous two.
 
 ---
 
