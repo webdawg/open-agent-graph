@@ -6,6 +6,40 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — two daemons on the same seed hold the same sounds
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** Directive step 5 asks for a seeded generator "so tests are reproducible". The generator
+function is pinned (`generation_is_reproducible_from_the_seed`), but nothing checked the path from
+the `--seed` flag through the CLI to what the store actually holds -- so a change that made the
+per-item seed depend on anything but `--seed` would have shipped unnoticed.
+
+**Test.** `two_daemons_on_the_same_seed_hold_the_same_sounds` starts the real binary twice with
+`--seed 20261123`, waits for each to announce, compares the sorted content hashes and their order,
+and asserts the four documented sounds (silence, tone, noise, ping). Verified both ways: making
+the per-item seed XOR in the process id makes it fail; restoring passes.
+
+**Also checked while in here**, since it is the same neighbourhood: a hostile store directory.
+Zero-length hash-named file, 63- and 65-char names, an uppercase name, a *directory* named like a
+hash, a symlink loop, a symlink to a device, a FIFO, junk bytes, and 100 kB `.json`/`.cid`
+sidecars -- the load completes in about 5 ms, reports 9 skipped and nothing loaded, and the daemon
+then serves normally over every carrier. And the churn test reported above (98,363 cycles, flat RSS)
+was re-run separately rather than folded into this one.
+
+**Tests executed.** `cargo test -p oag-listend`: **92 unit + 87 end-to-end = 179**, all green (was
+91 + 87); **98 + 91 = 189** with `--features reticulum`. `./scripts/check.sh`, `--release`,
+`--features reticulum`: all green.
+
+**Commit identifiers.** `oag-listend` `a1cd62f`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the load deadline applies to the entries it skips too
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
