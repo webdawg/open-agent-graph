@@ -6,6 +6,41 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — README's hand-claims re-verified, and one made robust
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**What was done.** Every claim in README introduced by "verified by hand" was re-run against the
+current release binary:
+
+- audio posted to HTTP came back byte-identical (`cmp` clean), with five items held after four
+  generated plus one posted;
+- `push_pull` verified over TCP and UDP (`verified=true`, `same-hash`);
+- HTML labelled `audio/wav` refused on all four socket carriers -- HTTP 400, native `Rejected`,
+  UDP `Rejected`, Unix `Rejected`;
+- a restart with `--dir` served the posted WAV byte-identically.
+
+All of it holds.
+
+**The correction.** One of those claims stated a count -- "a daemon restarted with `--dir` loaded
+5 items". That number belonged to the run it was written in, not to the property; repeating the same
+steps after extra publishes gives 7. It is exactly the class of drift as the carrier counts
+corrected in the previous entry: a true statement at the time that becomes false without anyone
+changing the code. It now says the daemon reloaded exactly the item count it had written, which is
+the property.
+
+**Tests executed.** No test changes; 87 unit + 87 end-to-end = 174, all green; 93 + 91 = 184 with
+`--features reticulum`. `./scripts/check.sh`: green.
+
+**Commit identifiers.** `oag-listend` `3cc86a0`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — carrier counts in the docs say what is true
 
 **Invocation.** The standing perpetual directive. `oag-listend`.

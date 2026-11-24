@@ -455,6 +455,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   `MAX_SIDECAR_BYTES` and trims, so the write bound equals the read bound; an absurd type is
   dropped, not refused, so the audio is never lost because of its metadata. `oag-listend` 73 unit
   + 77 end-to-end (was 70 + 77).
+- **README's "verified by hand" claims re-verified against the current binary, and one made
+  robust.** Every one was re-run: HTTP post→get byte-identical, `push_pull` verified over TCP and
+  UDP, HTML labelled `audio/wav` refused on all four socket carriers, restart with `--dir` serving
+  the posted WAV byte-identically. One claim stated a count ("loaded 5 items") that belonged to the
+  run it was written in -- re-running the same steps with extra publishes gives a different number,
+  so it would have drifted like the carrier counts did. It now states the property.
 - **Carrier counts in the docs say what is true.** SPEC claimed "all four carriers serve over
   `[::1]`" -- three of them are network carriers (native TCP, HTTP, UDP) and the fourth, the Unix
   socket, has no address -- and the crate's front page said "four carriers" while omitting the IPFS
