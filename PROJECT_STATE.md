@@ -472,6 +472,14 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   were wrong -- one compared a fetch frame against the bare audio, forgetting both the frame prefix
   and the reply's own header; one declared two more bytes than the body so every request hung; and
   one reported "bad fetches" for every cycle for the same reason as the first.
+- **Two documented behaviours pinned, and the reset that hid one of them.** The release gate failed
+  `an_unwritable_stdout_does_not_stop_the_audio` with `prefix: ConnectionReset`. That test reserves a
+  port with `free_port`, then treats a successful connect as proof the daemon is listening -- but a
+  reserved port can still be taken before the daemon binds it, and `connect` reaches whoever took it,
+  so the test attached to the wrong listener. Readiness is now a Hello round trip checked against the
+  daemon's own name, polling until the bind lands, with a bad attempt killed and retried. Separately,
+  `a_stale_socket_file_is_replaced_not_refused` pins the other half of SPEC's socket sentence: a
+  socket whose listener is gone must be replaced, not refused. Both verified by reverting the fix.
 - **Two daemons on the same seed hold the same sounds.** Directive step 5 asks for a seeded
   generator "so tests are reproducible", and the generator is pinned -- but nothing checked the path
   from the `--seed` flag to the store. `two_daemons_on_the_same_seed_hold_the_same_sounds` starts
@@ -783,7 +791,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   92 unit + 87 end-to-end tests, 0 failed; 189 with the opt-in Reticulum carrier.
+   91 unit + 89 end-to-end tests, 0 failed; 190 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

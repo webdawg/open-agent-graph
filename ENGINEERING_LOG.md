@@ -6,6 +6,45 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — two documented behaviours pinned, and the reset that hid one
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** `./scripts/check.sh --release` failed (exit 101) with
+
+    ---- an_unwritable_stdout_does_not_stop_the_audio stdout ----
+    thread panicked at crates/oag-listend/tests/binary.rs:1311:46:
+    prefix: Os { code: 104, kind: ConnectionReset, message: "Connection reset by peer" }
+
+The test reserves a port with `free_port` (bind to 0, read the number, drop), then treats a successful
+`TcpStream::connect(addr)` as proof *this* daemon is listening. A reserved port can still be taken in
+the window before the daemon binds it, and `connect` reaches whatever took it. The default gate passed
+and the release gate did not, because the port had to be free at exactly the moment of connect.
+
+**Fix.** Readiness is now a full Hello round trip checked against the daemon's own name, with polling
+until the bind lands (`ConnectionRefused` retried every 25 ms, up to 5 s) and an attempt that dies,
+misbehaves, or answers as something else killed and retried on a fresh port. Helper
+`start_with_unwritable_stdout`. Measured after the change: **6/6 consecutive release gates green** --
+it had been failing intermittently, and the failure was real.
+
+**Second pin.** `a_stale_socket_file_is_replaced_not_refused` covers the other half of SPEC's socket
+sentence ("a stale socket file from a killed daemon is removed on bind"). A socket whose listener is
+gone must be replaced, not refused -- leaving the path unusable is the bug the sentence describes.
+Verified both ways: making `bind_shared` refuse any existing socket fails it; restoring passes.
+
+**Tests executed.** `cargo test -p oag-listend`: **91 unit + 89 end-to-end = 180**, all green (was
+90 + 87); **97 + 93 = 190** with `--features reticulum`. `./scripts/check.sh`, `--release`,
+`--features reticulum`: all green.
+
+**Commit identifiers.** `oag-listend` `2c36145`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — two daemons on the same seed hold the same sounds
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
