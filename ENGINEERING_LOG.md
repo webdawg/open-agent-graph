@@ -6,6 +6,20 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — correction: one push of `a1cd62f` reported success without advancing
+
+While finishing, `git status -sb` showed `master...origin/master [ahead 1]` and `@{u}` resolving to
+`2c36145`, even though the `git push origin master` for `a1cd62f` had returned exit 0 and been
+recorded here as pushed. Re-pushing advanced `origin/master` to `eb40cce`. All five repositories now
+report `dirty=0`, `unpushed=0`.
+
+The lesson recorded rather than glossed: a push command's exit status was treated as proof the remote
+moved. It is not -- the remote-tracking ref is the evidence, and this entry exists because the first
+claim of "pushed" did not hold. Nothing was lost (nothing was force-pushed or rewritten); the ref was
+simply stale.
+
+---
+
 ## 2026-11-21 — the release gate re-checked on a busy machine
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
