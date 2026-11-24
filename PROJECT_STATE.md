@@ -472,6 +472,10 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   were wrong -- one compared a fetch frame against the bare audio, forgetting both the frame prefix
   and the reply's own header; one declared two more bytes than the body so every request hung; and
   one reported "bad fetches" for every cycle for the same reason as the first.
+- **The load deadline applies to the entries it skips too.** `load_dir_impl` checked its deadline
+  *after* the sidecar filter, so a directory holding nothing but sidecars was walked without limit --
+  every entry took the `continue` path. The deadline bounds time spent on the directory, not just on
+  audio. `oag-listend` 91 unit + 87 end-to-end (was 90 + 87).
 - **CI proves the restart, not just the start.** The service job started the shipped unit, fetched
   `/ping` and `/`, and ran `push_pull` over TCP and UDP -- none of which says anything about the
   claim the daemon makes about itself. It now captures a hash from the running unit, stops it,
@@ -773,7 +777,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   90 unit + 87 end-to-end tests, 0 failed; 187 with the opt-in Reticulum carrier.
+   91 unit + 87 end-to-end tests, 0 failed; 188 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

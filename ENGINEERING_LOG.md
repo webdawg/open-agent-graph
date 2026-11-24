@@ -6,6 +6,42 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the load deadline applies to the entries it skips too
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+**Finding.** `load_dir_impl` checked its wall-clock deadline *after* the sidecar filter:
+
+    let path = entry.path();
+    if path.extension().is_some() { continue; }   // sidecar
+    if Instant::now() >= deadline { report.timed_out = true; break; }
+
+An entry about to be skipped never reached the check, so a directory holding nothing but sidecars --
+or enough of them on a slow share -- was walked without limit. The deadline bounds how long a load may
+spend on the directory, not just how long it spends on audio.
+
+**Fix.** The check moved above the filter, with the reason recorded. Verified by hand first: four
+sidecars under a budget that has already elapsed now report `timed_out` and load nothing; with the old
+order they were all skipped and the flag never set.
+
+**Test.** `the_load_deadline_applies_to_entries_it_skips`. Verified both ways -- reverting the order
+makes it fail, restoring passes.
+
+**Tests executed.** `cargo test -p oag-listend`: **91 unit + 87 end-to-end = 178**, all green (was
+90 + 87); **97 + 91 = 188** with `--features reticulum`.
+
+**Gates executed.** `./scripts/check.sh`, `--release`, `--features reticulum`: all green, 178 /
+178 / 188.
+
+**Commit identifiers.** `oag-listend` `d7e0b6b`; this entry follows.
+**Push status:** `oag-listend` pushed; `open-agent-graph` pushed with this entry.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's
+per-syscall bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — CI proves the restart, not just the start
 
 **Invocation.** The standing perpetual directive. `oag-listend`.
