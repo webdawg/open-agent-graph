@@ -52,6 +52,10 @@ misbehaves, or answers as something else killed and retried on a fresh port. Hel
 `start_with_unwritable_stdout`. Measured after the change: **6/6 consecutive release gates green** --
 it had been failing intermittently, and the failure was real.
 
+**Accuracy note.** The stale-socket test in `HEAD~1` (`2c36145`) is the rewritten form of this test; the
+earlier version called `round_trip_test` on an already-bound path and did not compile, and was never in a
+commit. Nothing in the tree was overwritten; the test was rewritten in place before that commit.
+
 **Second pin.** `a_stale_socket_file_is_replaced_not_refused` covers the other half of SPEC's socket
 sentence ("a stale socket file from a killed daemon is removed on bind"). A socket whose listener is
 gone must be replaced, not refused -- leaving the path unusable is the bug the sentence describes.
