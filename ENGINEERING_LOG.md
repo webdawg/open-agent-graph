@@ -6,6 +6,29 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the acceptance matrix re-run end to end under systemd
+
+**Invocation.** The standing perpetual directive. `oag-listend`, verification only.
+
+After the last three slices (session/request bounds, malformed-hash behaviour, seeded reproducibility),
+the whole acceptance sentence was re-run against the real binary under a real user-level systemd unit rather
+than through a test harness:
+
+    systemctl --user start oag-final     # --listen/--http/--udp/--unix/--dir, --seed
+    curl http://127.0.0.1:7288/ping     # 200 audio/wav
+    push_pull --addr   127.0.0.1:7289   # hello, musical ping verified, 2 publishes, 2 verified fetches,
+                                        # non-audio Rejected
+    push_pull --udp    127.0.0.1:7287   # same, 3 verified markers
+    push_pull --unix   /tmp/oag-final.sock  # same, 3 verified markers
+    systemctl --user restart oag-final
+    GET /audio/<hash>                   # cmp clean against what was posted
+
+Result: HTTP reported 4 items / 48,532 bytes; TCP, UDP and Unix all round-tripped and verified; HTML
+labelled `audio/wav` was refused on every carrier; and the item posted before the restart came back
+byte-identically after it. No code changed; this entry is the evidence.
+
+---
+
 ## 2026-11-21 — correction: one push of `a1cd62f` reported success without advancing
 
 While finishing, `git status -sb` showed `master...origin/master [ahead 1]` and `@{u}` resolving to
