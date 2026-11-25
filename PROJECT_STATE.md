@@ -480,6 +480,12 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
   daemon's own name, polling until the bind lands, with a bad attempt killed and retried. Separately,
   `a_stale_socket_file_is_replaced_not_refused` pins the other half of SPEC's socket sentence: a
   socket whose listener is gone must be replaced, not refused. Both verified by reverting the fix.
+- **Two more documented behaviours pinned: the stale socket, and a malformed hash.** The live-socket
+  and non-socket refusals were already pinned; the *stale* socket (a killed daemon's leftovers) was
+  not, and `a_stale_socket_file_is_replaced_not_refused` now covers it -- verified by making bind refuse
+  any existing socket. `a_malformed_hash_is_answered_and_the_session_survives` pins SPEC's "answer it
+  rather than dropping the connection", verified by making the session drop on a bad hash.
+  `oag-listend` 91 unit + 91 end-to-end (was 91 + 90).
 - **Two daemons on the same seed hold the same sounds.** Directive step 5 asks for a seeded
   generator "so tests are reproducible", and the generator is pinned -- but nothing checked the path
   from the `--seed` flag to the store. `two_daemons_on_the_same_seed_hold_the_same_sounds` starts
@@ -791,7 +797,7 @@ See `OPEN_QUESTIONS.md` in `rust-ai` and `oag-mesh`, and the spec files in all t
    audio survives a node outage). The build-generation pruner is now wired in `oag-listend` too:
    its `.cargo/` directory existed but was empty, so the wrapper never ran in the repository whose
    `target/` is most likely to grow; the config is now sha256-identical across all five. Current bar:
-   91 unit + 90 end-to-end tests, 0 failed; 191 with the opt-in Reticulum carrier.
+   91 unit + 91 end-to-end tests, 0 failed; 192 with the opt-in Reticulum carrier.
 2. **Collisions: choose the default probe budget.** EXP-025 and EXP-027 together show the
    1-flip and 2-flip schemes are a stated trade -- 8 probes / 3.1% unrelated / 67-100% recall
    versus 36 probes / 13.8% unrelated / 92-100% recall with a standard deviation of 0.7. The API

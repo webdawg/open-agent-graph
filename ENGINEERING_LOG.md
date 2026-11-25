@@ -6,6 +6,47 @@ performance measurements, commit identifiers, push status, and remaining defects
 
 ---
 
+## 2026-11-21 — the stale socket, and a malformed hash
+
+**Invocation.** The standing perpetual directive. `oag-listend`.
+
+Two more claims that had no test behind them.
+
+**The stale socket.** SPEC: "A stale socket file from a killed daemon is removed on bind." The
+live-socket refusal and the non-socket refusal were both pinned; this half was not.
+`a_stale_socket_file_is_replaced_not_refused` binds a path, drops the listener so nothing is listening,
+then binds a carrier to that path and asserts it succeeds and serves -- verified by making `bind_shared`
+refuse any existing socket.
+
+**The malformed hash.** SPEC: "A hash-shaped field with the wrong shape is still a protocol error;
+answer it rather than dropping the connection, so a buggy client can be fixed." `serve_session_inner` has
+the special case; nothing checked what it does. `a_malformed_hash_is_answered_and_the_session_survives`
+sends a three-character hash over the Unix carrier, asserts the reply is a rejection naming 64 hex
+characters, then sends a well-formed Hello on the same connection and asserts it is answered -- verified
+by making the session drop on a malformed hash.
+
+While fixing these I rewrote `an_unwritable_stdout_does_not_stop_the_audio`. It reserved a port, then
+treated a successful connect as proof the daemon was listening. A reserved port can still be taken in the
+window before the daemon binds, and `connect` reaches whoever took it, so the first version of the
+stale-socket test attached to the wrong listener and failed intermittently with
+`prefix: ConnectionReset`. Readiness is now a Hello round trip checked against the daemon's own name,
+polling until the bind lands (`ConnectionRefused` retried every 25 ms), with a bad attempt killed and
+retried on a fresh port.
+
+**Tests executed.** `cargo test -p oag-listend`: **91 unit + 91 end-to-end = 182**, all green (was
+91 + 90); **97 + 95 = 192** with `--features reticulum`. `./scripts/check.sh`, `--release`,
+`--features reticulum`: all green.
+
+**Commit identifiers.** `oag-listend` `eb40cce` (stale socket, stdout rewrite) and `b87dcac`
+(malformed hash); this entry follows.
+**Push status:** both pushed; this record pushed with it.
+
+**Remaining defects.** Unchanged: the prune hook's residual cold-generation case (recorded and
+escalated, not fixed), Reticulum interop (needs a real transport instance), and the load's per-syscall
+bound, which a wall-clock deadline cannot provide.
+
+---
+
 ## 2026-11-21 — the acceptance matrix re-run end to end under systemd
 
 **Invocation.** The standing perpetual directive. `oag-listend`, verification only.
